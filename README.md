@@ -54,9 +54,15 @@ You can also turn on GitHub Pages (Settings → Pages → Deploy from branch →
 ## Hands and weapons
 
 - Firing the grapple throws the hook with an open hand; the fist then closes around the cord, the arm points along the line, and the latch yanks it forward. The rope leaves from the fist, with a short cord back to the launcher on the forearm.
-- The sword sits in a real fist: thumb up, all four fingers wrapped around a grip that runs diagonally through the hand.
-- While swinging on the grapple with the sword, the hand does forward twirls and a flip-toss it catches again, blending smoothly in and out.
+- Each hand has four fingers with three separately jointed phalanges plus a two-joint thumb. The sword's grip runs straight through the closed fingers, so every finger wraps it, and fingers ripple open and closed one after another.
+- While swinging on the grapple with the sword, the hand plays one of six tricks at random: forward twirl, backward twirl, flip toss, wheel spin, reverse-grip flip, and a high double toss.
 - F inspects: the blade is turned in the light with an edge glow, or with fists the launcher is shown off with a finger roll and clench.
+
+## Destruction
+
+- Drywall partitions in the hall and east wing break into rubble when ragdolls are slammed into them, or when you thrust or breach through them.
+- Explosive barrels: punch or slash one and it blinks, then goes off; bolts and flying bodies set them off at once. Explosions kill or stun enemies nearby, hurt you, throw bodies and debris, shatter glass, break partitions, and chain into other barrels.
+- Enemies, ragdolls and debris are interpolated between physics steps for smooth motion at any frame rate.
 
 ## Look and feel
 
