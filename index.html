@@ -57,6 +57,14 @@ body { background: var(--void); color: var(--ink); font-family: var(--mono); ove
 #cross.grap { border-color: var(--cyan); transform: scale(1.25); }
 #cross.hit { border-color: var(--threat); transform: scale(0.8); }
 #flash { left: 50%; top: 38%; transform: translateX(-50%); font-family: var(--display); font-size: 30px; letter-spacing: 0.12em; color: var(--cyan); text-shadow: 0 0 18px currentColor; text-transform: uppercase; }
+#flash.glitch { animation: glitchText 0.42s steps(1) 1; }
+@keyframes glitchText {
+  0% { text-shadow: -4px 0 #ff2a4a, 4px 0 #4ff0ff; clip-path: inset(0 0 55% 0); transform: translateX(calc(-50% - 6px)); }
+  14% { text-shadow: 3px 0 #ff2a4a, -3px 0 #4ff0ff; clip-path: inset(40% 0 0 0); transform: translateX(calc(-50% + 5px)); }
+  28% { text-shadow: -2px 0 #ff2a4a, 2px 0 #4ff0ff; clip-path: inset(10% 0 30% 0); transform: translateX(calc(-50% - 2px)) skewX(-8deg); }
+  42% { text-shadow: 5px 0 #ff2a4a, -5px 0 #4ff0ff; clip-path: none; transform: translateX(-50%); opacity: 0.6; }
+  56%, 100% { text-shadow: 0 0 18px currentColor; clip-path: none; transform: translateX(-50%); opacity: 1; }
+}
 #prompt { left: 50%; top: 60%; transform: translateX(-50%); color: var(--cyan); background: var(--panel); padding: 4px 10px; }
 #damage { position: fixed; inset: 0; pointer-events: none; box-shadow: inset 0 0 160px rgba(255, 40, 60, 0.0); transition: box-shadow 0.15s; }
 #impact { position: fixed; inset: 0; pointer-events: none; background: #fff; mix-blend-mode: difference; opacity: 0; }
@@ -114,7 +122,7 @@ h1 { font-family: var(--display); font-weight: 700; font-size: clamp(44px, 10vw,
       <span><kbd>Shift</kbd>Dash</span>
       <span><kbd>LMB</kbd>Attack · slide + LMB to thrust</span>
       <span><kbd>RMB</kbd>Block · tap just before a hit to parry</span>
-      <span><kbd>E</kbd>Grapple (needs the sword)</span>
+      <span><kbd>E</kbd>Hold to grapple, let go to fling (needs the sword)</span>
       <span><kbd>C</kbd> while grappling: breach a window</span>
       <span><kbd>Q</kbd>Slow time (2 bars)</span>
       <span><kbd>X</kbd>Stop time (3 bars)</span>
@@ -128,12 +136,14 @@ h1 { font-family: var(--display); font-weight: 700; font-size: clamp(44px, 10vw,
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
   "rapier": "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.12.0/rapier.es.js"
 } }
 </script>
 <script type="module">
 import * as THREE from "three";
 import RAPIER from "rapier";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 
 await RAPIER.init();
 
@@ -154,7 +164,7 @@ const P = {
   radius: 0.4, half: 0.5, eye: 0.62, slideEye: 0.0,
   speed: 9.5, accel: 75, airAccel: 30, friction: 9, slideFriction: 0.6,
   jump: 9.2, gravity: -26, dashSpeed: 24, dashCharges: 2, dashRecharge: 1.4,
-  grappleRange: 42, grapplePull: 70, grappleCooldown: 0.9,
+  grappleRange: 42, grapplePull: 70, grappleCooldown: 0.45,
   parryFists: 0.18, parrySword: 0.38,
 };
 const DT = 1 / 60;
@@ -185,8 +195,54 @@ vmScene.add(vmCamera);
 vmScene.add(new THREE.HemisphereLight(0xffd8c8, 0x3a2048, 1.5));
 const vmKey = new THREE.DirectionalLight(0xffb08a, 2.4); vmKey.position.set(-1, 2, 1.5); vmScene.add(vmKey);
 const vmRim = new THREE.DirectionalLight(0x7fe8ff, 1.2); vmRim.position.set(1.5, 0.5, -1); vmScene.add(vmRim);
+// everything renders into this target, then a glitch pass draws it to the screen
+const rtSize = () => renderer.getDrawingBufferSize(new THREE.Vector2());
+const rt = new THREE.WebGLRenderTarget(rtSize().x, rtSize().y, { type: THREE.HalfFloatType, samples: 4 });
+const postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const postMat = new THREE.ShaderMaterial({
+  depthTest: false, depthWrite: false,
+  uniforms: { tDiffuse: { value: rt.texture }, uTime: { value: 0 }, uAmt: { value: 0 }, uRes: { value: rtSize() } },
+  vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float uTime, uAmt; uniform vec2 uRes; varying vec2 vUv;
+    float h1(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
+    float h2(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+    void main() {
+      vec2 uv = vUv; float a = uAmt; float t = floor(uTime * 20.0);
+      // horizontal bands slip sideways
+      float rows = mix(14.0, 70.0, h1(t + 1.7));
+      float band = floor(uv.y * rows);
+      float bn = h1(band * 1.31 + t * 7.0);
+      uv.x += step(1.0 - a * 0.4, bn) * (h1(band * 3.1 + t) - 0.5) * 0.14 * a;
+      // block tears
+      vec2 blk = floor(uv * vec2(9.0, 24.0)); float bk = h2(blk + t * 0.37);
+      float tear = step(1.0 - a * 0.14, bk);
+      uv += tear * vec2(h2(blk * 1.7 + t) - 0.5, (h2(blk + 3.0 + t) - 0.5) * 0.2) * 0.09 * a;
+      // rgb split, stronger toward the edges
+      vec2 q = vUv - 0.5;
+      vec2 off = vec2(0.0012 + 0.016 * a, 0.0) * (0.5 + length(q) * 1.6);
+      vec3 c;
+      c.r = texture2D(tDiffuse, uv + off).r;
+      c.g = texture2D(tDiffuse, uv).g;
+      c.b = texture2D(tDiffuse, uv - off).b;
+      c = mix(c, c.brg * 1.6, tear * step(0.6, h2(blk * 2.3 + t)) * a);
+      // scanlines, grain and a dark vignette
+      float scan = 0.5 + 0.5 * sin(gl_FragCoord.y * 3.14159 * 0.5);
+      c *= 1.0 - (0.035 + 0.22 * a) * scan;
+      c += (h2(gl_FragCoord.xy + fract(uTime) * 91.0) - 0.5) * (0.012 + 0.08 * a);
+      c *= 1.0 - dot(q, q) * 0.55;
+      gl_FragColor = vec4(max(c, 0.0), 1.0);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`,
+});
+const postQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), postMat); postQuad.frustumCulled = false;
+const postScene = new THREE.Scene(); postScene.add(postQuad);
+// glitch: a base level from low health or time powers, plus decaying spikes from big moments
+const GL = { spike: 0, base: 0, blip: 0 };
+function glitch(a) { GL.spike = Math.max(GL.spike, a); }
 addEventListener("resize", () => {
   renderer.setSize(innerWidth, innerHeight);
+  const sz = rtSize(); rt.setSize(sz.x, sz.y); postMat.uniforms.uRes.value.copy(sz);
   camera.aspect = vmCamera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix(); vmCamera.updateProjectionMatrix();
 });
@@ -202,7 +258,7 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(800, 32, 16), new THREE.Shad
       c = mix(c, ember, exp(-abs(h - 0.03) * 12.0) * 0.85);
       float sun = smoothstep(0.995, 0.999, dot(vP, normalize(vec3(-0.8, 0.12, -0.55))));
       c = mix(c, vec3(1.0, 0.85, 0.6), sun);
-      gl_FragColor = vec4(c, 1.0);
+      gl_FragColor = vec4(pow(c, vec3(2.2)) * 1.25, 1.0);
     }`,
 }));
 scene.add(sky);
@@ -244,7 +300,33 @@ const toonRamp = (() => { const t = new THREE.DataTexture(new Uint8Array([70, 14
 const toon = (color, o = {}) => new THREE.MeshToonMaterial({ color, gradientMap: toonRamp, ...o });
 const INK = new THREE.LineBasicMaterial({ color: 0x0b0612 });
 const GLASS_INK = new THREE.LineBasicMaterial({ color: 0xe6f8ff, transparent: true, opacity: 0.55 });
-function ink(mesh, mat = INK) { const l = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry, 30), mat); l.raycast = () => {}; mesh.add(l); return mesh; }
+// Rounded boxes are cached and shared, so they are never disposed.
+const geoCache = new Map();
+function rbox(w, h, d, round = 0.3, maxR = 0.12) {
+  const mn = Math.min(w, h, d); const r = Math.min(maxR, mn * round);
+  const key = `${w.toFixed(4)},${h.toFixed(4)},${d.toFixed(4)},${r.toFixed(4)}`;
+  let g = geoCache.get(key);
+  if (!g) { g = new RoundedBoxGeometry(w, h, d, mn < 0.1 ? 2 : 3, r); g.userData.rounded = true; g.userData.cached = true; g.userData.min = mn; geoCache.set(key, g); }
+  return g;
+}
+function dispGeo(g) { if (g && !g.userData.cached) g.dispose(); }
+// Ink: hard-edged shapes get edge lines; rounded ones get an inverted hull pushed out along the normals.
+const hullMats = new Map();
+function hullMat(th) {
+  const key = th.toFixed(4); let m = hullMats.get(key); if (m) return m;
+  m = new THREE.MeshBasicMaterial({ color: 0x0b0612, side: THREE.BackSide });
+  m.onBeforeCompile = (sh) => { sh.vertexShader = sh.vertexShader.replace("#include <begin_vertex>", `#include <begin_vertex>\n transformed += normal * ${th.toFixed(4)};`); };
+  m.customProgramCacheKey = () => "hull" + key;
+  hullMats.set(key, m); return m;
+}
+function ink(mesh, mat = INK) {
+  const g = mesh.geometry;
+  if (g.userData.rounded && mat === INK) {
+    const th = THREE.MathUtils.clamp(g.userData.min * 0.07, 0.0022, 0.035);
+    const h = new THREE.Mesh(g, hullMat(th)); h.raycast = () => {}; h.castShadow = false; h.receiveShadow = false; mesh.add(h); return mesh;
+  }
+  const l = new THREE.LineSegments(new THREE.EdgesGeometry(g, 30), mat); l.raycast = () => {}; mesh.add(l); return mesh;
+}
 const M = {
   floor: toon(0xffffff, { map: gridTexture("#4b4f66", "rgba(20,10,30,0.55)") }),
   concrete: toon(0x8a90a8),
@@ -260,6 +342,7 @@ const M = {
   light: new THREE.MeshBasicMaterial({ color: 0xfff1d6 }),
   amber: new THREE.MeshBasicMaterial({ color: 0xff8a3d }),
   cyan: new THREE.MeshBasicMaterial({ color: 0x4ff0ff }),
+  glove: new THREE.MeshBasicMaterial({ color: 0x4ff0ff }),
   red: new THREE.MeshBasicMaterial({ color: 0xff3d5a }),
   rackLed: new THREE.MeshBasicMaterial({ color: 0x48ff9a }),
   screen: new THREE.MeshBasicMaterial({ color: 0x6fe0ff }),
@@ -342,7 +425,7 @@ function log(text, cls = "") {
   while ($("log").children.length > 6) $("log").firstChild.remove();
 }
 let flashT = 0;
-function flash(text, color = "var(--cyan)") { const f = $("flash"); f.textContent = text; f.style.color = color; f.hidden = false; flashT = 0.7; }
+function flash(text, color = "var(--cyan)") { const f = $("flash"); f.textContent = text; f.style.color = color; f.hidden = false; flashT = 0.7; f.classList.remove("glitch"); void f.offsetWidth; f.classList.add("glitch"); }
 let crossTimer = 0;
 
 // ---------- input ----------
@@ -385,7 +468,9 @@ let panes = [], enemies = [], ragdolls = [], shards = [], fx = [], bolts = [];
 let player, door, sword;
 
 function fixedBox(x, y, z, sx, sy, sz, mat, opts = {}) {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
+  const mn = Math.min(sx, sy, sz), mx = Math.max(sx, sy, sz);
+  const round = !opts.uv && opts.round !== false && mat !== M.glass && mat !== M.tower && mx <= 16 && mn >= 0.06;
+  const mesh = new THREE.Mesh(round ? rbox(sx, sy, sz, 0.3, 0.09) : new THREE.BoxGeometry(sx, sy, sz), mat);
   mesh.position.set(x, y, z);
   if (opts.rot) mesh.rotation.set(...opts.rot);
   mesh.castShadow = opts.shadow !== false; mesh.receiveShadow = true;
@@ -526,15 +611,15 @@ function buildHumanoidMesh(type) {
     // arms and legs pivot at the joint so swings look right
     const top = name.startsWith("arm") || name.startsWith("leg");
     pivot.position.set(x, top ? y + hy : y, z);
-    const m = new THREE.Mesh(new THREE.BoxGeometry(hx * 2 * s, hy * 2, hz * 2 * s), partMaterial(type, name));
+    const m = new THREE.Mesh(rbox(hx * 2 * s, hy * 2, hz * 2 * s, 0.45, 0.2), partMaterial(type, name));
     m.position.y = top ? -hy : 0; m.castShadow = true; ink(m); pivot.add(m); g.add(pivot); meshes[name] = pivot;
   }
-  const visor = new THREE.Mesh(new THREE.BoxGeometry(type === "bot" ? 0.3 : 0.22, 0.06, 0.02), M.visor);
+  const visor = new THREE.Mesh(rbox(type === "bot" ? 0.3 : 0.22, 0.06, 0.03, 0.45), M.visor);
   visor.position.set(0, 0.04, 0.18); meshes.head.add(visor); meshes.visor = visor;
   const glow = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), M.red);
   glow.visible = false; meshes.glow = glow;
   if (TYPES[type].ranged) {
-    const gun = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.55), M.gun);
+    const gun = ink(new THREE.Mesh(rbox(0.08, 0.1, 0.55, 0.4), M.gun));
     gun.position.set(0, -0.6, 0.2); meshes.armR.add(gun);
     glow.position.set(0, 0, 0.3); gun.add(glow);
     meshes.armR.rotation.x = -1.4;
@@ -545,11 +630,23 @@ function buildHumanoidMesh(type) {
 }
 function buildSwordMesh() {
   const g = new THREE.Group();
-  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.1, 0.012), M.blade); blade.position.y = 0.62; g.add(blade);
-  const edge = new THREE.Mesh(new THREE.BoxGeometry(0.012, 1.08, 0.016), M.cyan); edge.position.set(0.026, 0.62, 0); g.add(edge);
-  const guard = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.04, 0.05), M.mullion); guard.position.y = 0.06; g.add(guard);
-  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.24, 0.04), M.gun); grip.position.y = -0.07; g.add(grip);
-  for (const m of [blade, guard, grip]) ink(m);
+  // blade outline: a slight curve that tapers to a point, extruded thin with a soft bevel
+  const sh = new THREE.Shape();
+  sh.moveTo(-0.024, 0.07); sh.lineTo(0.022, 0.07);
+  sh.quadraticCurveTo(0.03, 0.75, 0.012, 1.1); sh.quadraticCurveTo(0.004, 1.15, -0.004, 1.19);
+  sh.quadraticCurveTo(-0.014, 0.75, -0.024, 0.07);
+  const bladeGeo = new THREE.ExtrudeGeometry(sh, { depth: 0.006, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.004, bevelSegments: 2, curveSegments: 10 });
+  bladeGeo.translate(0, 0, -0.003);
+  const blade = new THREE.Mesh(bladeGeo, M.blade); g.add(blade);
+  const es = new THREE.Shape();
+  es.moveTo(0.014, 0.1); es.lineTo(0.025, 0.1); es.quadraticCurveTo(0.032, 0.75, 0.013, 1.1); es.quadraticCurveTo(0.006, 1.15, -0.003, 1.185); es.quadraticCurveTo(0.004, 1.12, 0.006, 1.08); es.quadraticCurveTo(0.022, 0.75, 0.014, 0.1);
+  const edgeGeo = new THREE.ExtrudeGeometry(es, { depth: 0.016, bevelEnabled: false, curveSegments: 10 }); edgeGeo.translate(0, 0, -0.008);
+  const edge = new THREE.Mesh(edgeGeo, M.cyan); g.add(edge);
+  const guard = new THREE.Mesh(rbox(0.19, 0.045, 0.06, 0.45), M.mullion); guard.position.y = 0.06; g.add(guard);
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.021, 0.24, 10), M.gun); grip.position.y = -0.07; g.add(grip);
+  const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.027, 12, 8), M.mullion); pommel.position.y = -0.2; g.add(pommel);
+  ink(blade); ink(guard);
+  g.userData.tipLocal = new THREE.Vector3(-0.004, 1.19, 0); g.userData.baseLocal = new THREE.Vector3(0, 0.1, 0);
   return g;
 }
 
@@ -674,7 +771,7 @@ function resolveMelee(e, dist) {
   damagePlayer(e.T.dmg, e);
 }
 function parry(e) {
-  sfx.parry(); flash("Parry"); impactFrame(45);
+  sfx.parry(); flash("Parry"); impactFrame(45); glitch(0.35);
   stun(e, 1.8, 7);
   hitstop(0.12);
   if (player.hasSword) addLust(0.25);
@@ -771,9 +868,9 @@ function spawnRagdoll(e, hitPoint, dir, force) {
       .setLinearDamping(0.15).setAngularDamping(1.6).setCcdEnabled(name === "torso"));
     const col = world.createCollider(RAPIER.ColliderDesc.cuboid(hx * s, hy, hz * s).setDensity(e.type === "bot" ? 3 : 1).setFriction(0.8).setRestitution(0.1).setCollisionGroups(GROUPS.ragdoll), body);
     body.setLinvel({ x: e.vel.x, y: 0, z: e.vel.z }, true);
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(hx * 2 * s, hy * 2, hz * 2 * s), partMaterial(e.type, name));
+    const mesh = new THREE.Mesh(rbox(hx * 2 * s, hy * 2, hz * 2 * s, 0.45, 0.2), partMaterial(e.type, name));
     mesh.castShadow = true; ink(mesh); levelGroup.add(mesh);
-    if (name === "head") { const v = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.06, 0.02), M.pants); v.position.set(0, 0.04, 0.18); mesh.add(v); }
+    if (name === "head") { const v = new THREE.Mesh(rbox(0.22, 0.06, 0.03, 0.45), M.pants); v.position.set(0, 0.04, 0.18); mesh.add(v); }
     parts[name] = { body, col, mesh };
   }
   const rd = { parts: Object.values(parts), torso: parts.torso.body, born: state.time };
@@ -795,7 +892,7 @@ function spawnRagdoll(e, hitPoint, dir, force) {
   while (ragdolls.length > 14) removeRagdoll(ragdolls[0]);
 }
 function removeRagdoll(rd) {
-  for (const p of rd.parts) { ragByHandle.delete(p.col.handle); world.removeRigidBody(p.body); levelGroup.remove(p.mesh); p.mesh.geometry.dispose(); }
+  for (const p of rd.parts) { ragByHandle.delete(p.col.handle); world.removeRigidBody(p.body); levelGroup.remove(p.mesh); dispGeo(p.mesh.geometry); }
   ragdolls.splice(ragdolls.indexOf(rd), 1);
 }
 
@@ -849,7 +946,7 @@ function crashCheck(pos, vel, radius, minSpeed, onCrash) {
 function addLust(n) {
   const before = Math.floor(player.lust);
   player.lust = Math.min(5, player.lust + n);
-  if (Math.floor(player.lust) > before) sfx.lust();
+  if (Math.floor(player.lust) > before) { sfx.lust(); glitch(0.45); }
 }
 function setTime(mode, seconds) {
   state.tsMode = mode; state.tsTimer = seconds; state.ts = TS[mode];
@@ -862,10 +959,10 @@ function hitstop(t) { if (state.tsMode === "normal") hitstopT = t; }
 function useAbility(code) {
   if (code === "KeyQ") {
     if (player.lust < 2) return flash("Need 2 bars", "var(--dim)");
-    player.lust -= 1; setTime("slow", 4); sfx.slow(); flash("Slow", "var(--blood)");
+    player.lust -= 1; setTime("slow", 4); sfx.slow(); flash("Slow", "var(--blood)"); glitch(0.5);
   } else if (code === "KeyX") {
     if (player.lust < 3) return flash("Need 3 bars", "var(--dim)");
-    player.lust -= 1; setTime("stop", 3); sfx.stop(); flash("Time stopped", "var(--blood)");
+    player.lust -= 1; setTime("stop", 3); sfx.stop(); flash("Time stopped", "var(--blood)"); glitch(0.9);
   } else if (code === "KeyV") {
     if (player.lust < 4) return flash("Need 4 bars", "var(--dim)");
     const target = finisherTarget();
@@ -877,7 +974,7 @@ function useAbility(code) {
     player.body.setTranslation(land, true); player.body.setLinvel({ x: dir.x * 6, y: 0, z: dir.z * 6 }, true);
     yaw = Math.atan2(-dir.x, -dir.z);
     sfx.execute(); flash("Finisher", "var(--blood)"); fovKick = 22; shake = 0.4; playAttackAnim(true); impactFrame(90); speedLines(1);
-    damageEnemy(target, 999, ep.clone().setY(ep.y + 0.3), dir.clone().setY(0.3).normalize(), "finisher");
+    damageEnemy(target, 999, ep.clone().setY(ep.y + 0.3), dir.clone().setY(0.3).normalize(), "finisher"); glitch(0.85);
   }
 }
 function finisherTarget() {
@@ -966,7 +1063,7 @@ function stepPlayer(dt) {
 
   // jump, or jump off the grapple
   if (keys.has("Space") && !player.jumpHeld) {
-    if (player.grapple) { releaseGrapple(); vel.y = Math.max(vel.y, 0) + 7; vel.addScaledVector(fwd, 4); player.jumpHeld = true; }
+    if (player.grapple) { releaseGrapple(); vel.y = Math.max(vel.y, 0) + 7.5; vel.addScaledVector(fwd, 5); player.jumpHeld = true; player.grapLock = true; }
     else if (player.coyote > 0) {
       vel.y = P.jump; player.coyote = 0; player.jumpHeld = true;
       if (player.sliding) { vel.x *= 1.08; vel.z *= 1.08; player.sliding = false; }
@@ -983,15 +1080,24 @@ function stepPlayer(dt) {
     player.dash--; player.dashT = 0.3; sfx.dash(); fovKick = 14; speedLines(0.6);
   }
 
-  // grapple: E fires the hook, which flies out and latches; E again or Space lets go.
-  // Firing again while attached swaps anchors. The line is a reeling spring, so you swing in arcs.
+  // grapple: hold E to fire and stay on the line, let go to release and keep your momentum.
+  // The line is a reeling spring, so you swing in arcs. A press is buffered briefly so it still fires
+  // if the cooldown finishes or an anchor comes into view a moment later.
   player.grappleCd -= dt;
-  if (pressed.has("KeyE")) {
-    if (!player.hasSword) flash("Grapple needs the sword", "var(--dim)");
-    else if (player.grapple || player.grappleCd <= 0) {
-      const hit = grappleRay();
-      if (hit) fireGrapple(hit);
-      else if (player.grapple) releaseGrapple();
+  const eDown = keys.has("KeyE");
+  if (pressed.has("KeyE")) { if (!player.hasSword) flash("Grapple needs the sword", "var(--dim)"); else player.grapBuf = 0.2; }
+  player.grapBuf = eDown ? (player.grapBuf || 0) - dt : 0;
+  if (eDown && player.hasSword && !player.grapple && player.grappleCd <= 0 && player.grapBuf > 0) {
+    const hit = grappleRay(); if (hit) { fireGrapple(hit); player.grapBuf = 0; }
+  }
+  if (player.grapple && !eDown) {
+    const attached = player.grapple.phase === "attached"; releaseGrapple();
+    if (attached) {
+      // fling: keep the swing's speed, add a little more, and pop off the anchor if you were hanging still
+      const sp = vel.length();
+      if (sp < 7) { vel.addScaledVector(lookDir(), 9 - sp * 0.5); vel.y = Math.max(vel.y, 6); }
+      else { vel.multiplyScalar(1.12); vel.y += 2.5; }
+      fovKick = Math.max(fovKick, 7); speedLines(0.45); sfx.dash();
     }
   }
   if (player.grapple) {
@@ -1015,8 +1121,6 @@ function stepPlayer(dt) {
         if (along < 0) vel.addScaledVector(to, -along * Math.min(1, 10 * dt));
         vel.y += -P.gravity * 0.35 * dt;
         if (wish.lengthSq()) vel.addScaledVector(wish, 14 * dt);
-        const lateral = vel.clone().addScaledVector(to, -vel.dot(to));
-        vel.addScaledVector(lateral, -Math.min(1, 1.2 * dt));
       }
     }
   }
@@ -1064,10 +1168,9 @@ function accelerate(h, wish, maxSpeed, accel, dt) {
   h.addScaledVector(wish, Math.min(accel * dt * maxSpeed, add));
 }
 function fireGrapple(hit) {
-  if (player.grapple) { hookFx.from.copy(hookHead()); }
   const dist = hit.toi;
   player.grapple = { point: hit.point, phase: "fly", t: 0, dur: Math.min(0.32, Math.max(0.06, dist / 95)), L: dist, ramp: 0 };
-  hookFx.state = "idle"; VM.grapFire = 1; sfx.grapple();
+  hookFx.state = "out"; VM.grapFire = 1; sfx.grapple();
 }
 function releaseGrapple() {
   if (player.grapple) { hookFx.from.copy(hookHead()); hookFx.state = "retract"; hookFx.t = 0; sfx.grappleRetract(); }
@@ -1087,7 +1190,7 @@ function grappleRay() {
 function breachThrough(pane, at, vel) {
   const dir = vel.clone().normalize();
   shatter(pane, at, dir, Math.max(vel.length() * 1.6, 26), true);
-  shake = 0.5; fovKick = 18; player.breach = false; impactFrame(70); speedLines(1);
+  shake = 0.5; fovKick = 18; player.breach = false; impactFrame(70); speedLines(1); glitch(0.8);
   // execute everyone caught in the burst of glass
   let n = 0;
   for (const e of alive()) {
@@ -1167,14 +1270,14 @@ function slideSweep(vel) {
 }
 function damagePlayer(n, src, blocked = false) {
   if (player.dead || state.tsMode === "stop") return;
-  player.hp -= n; player.lastHurt = state.time; sfx.hurt(); shake = Math.max(shake, blocked ? 0.12 : 0.25);
+  player.hp -= n; player.lastHurt = state.time; sfx.hurt(); shake = Math.max(shake, blocked ? 0.12 : 0.25); glitch(blocked ? 0.2 : 0.55 + n / 60);
   if (!blocked && player.lust > 0) player.lust = Math.max(0, player.lust - 1);
   $("damage").style.boxShadow = `inset 0 0 160px rgba(255,40,60,${0.25 + (1 - player.hp / 100) * 0.5})`;
   setTimeout(() => ($("damage").style.boxShadow = "inset 0 0 160px rgba(255,40,60,0)"), 180);
   if (player.hp <= 0) killPlayer(`Chassis destroyed by a ${src.T.label.toLowerCase()}.`);
 }
 function killPlayer(msg) {
-  player.dead = true; player.grapple = null; state.over = true; setTime("normal", 0);
+  player.dead = true; player.grapple = null; state.over = true; setTime("normal", 0); glitch(1);
   document.exitPointerLock?.();
   const cp = state.checkpoint === 2 ? "Restoring from the armory checkpoint." : "Reloading UNIT-7 from backup.";
   showScreen("Offline", "OFFLINE", msg, `ARBITER: Disappointing. ${cp}`, "Reboot", true);
@@ -1202,11 +1305,11 @@ function openDoor() { door.opening = true; world.removeRigidBody(door.body); sfx
 function pickupSword() {
   player.hasSword = true; state.phase = 2; state.checkpoint = 2;
   levelGroup.remove(sword); levelGroup.remove(sword.userData.light);
-  sfx.pickup(); flash("Sword acquired", "var(--cyan)");
+  sfx.pickup(); flash("Sword acquired", "var(--cyan)"); glitch(0.7);
   setObjective("Breach the sealed wings through the windows");
   setViewModel();
   log("OKAFOR-REYES: The east wing and the server room are sealed from inside. Go out the window.", "okafor");
-  setTimeout(() => log("Tip: slash the window, then press E on the amber rails outside. Hang, then E onto a window and press C to breach.", "tip"), 2500);
+  setTimeout(() => log("Tip: slash the window, then press E on the amber rails outside. Hold E to hang, let go to fling. Hold E on a window and press C to breach.", "tip"), 2500);
   setTimeout(() => log("Tip: parry is easier with the blade. Block right as a bolt reaches you to send it back.", "tip"), 7000);
   spawnPhase(2); updateCount();
 }
@@ -1220,7 +1323,7 @@ function spark(p, color = 0xffd27a) {
 
 // ---------- first-person rig: robot arms (own pass) ----------
 const VM = { attack: null, combo: 0, lastAttack: -9, grapFire: 0, lagX: 0, lagY: 0, lastYaw: 0, lastPitch: 0 };
-function vbox(w, h, d, mat, x = 0, y = 0, z = 0) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); ink(m); return m; }
+function vbox(w, h, d, mat, x = 0, y = 0, z = 0) { const m = new THREE.Mesh(rbox(w, h, d, 0.42, 0.05), mat); m.position.set(x, y, z); ink(m); return m; }
 function buildArm(side) {
   const shoulder = new THREE.Group();
   shoulder.add(vbox(0.14, 0.14, 0.14, M.roboDark));
@@ -1228,15 +1331,18 @@ function buildArm(side) {
   shoulder.add(vbox(0.112, 0.03, 0.17, M.roboAccent, 0, 0.058, -0.15));
   shoulder.add(vbox(0.03, 0.11, 0.12, M.roboDark, side * 0.055, 0, -0.12));
   const elbow = new THREE.Group(); elbow.position.z = -0.3; shoulder.add(elbow);
-  elbow.add(new THREE.Mesh(new THREE.SphereGeometry(0.055, 12, 8), M.cyan));
+  elbow.add(new THREE.Mesh(new THREE.SphereGeometry(0.055, 16, 12), M.cyan));
   elbow.add(vbox(0.095, 0.095, 0.26, M.robo, 0, 0, -0.14));
   elbow.add(vbox(0.122, 0.05, 0.2, M.roboDark, 0, -0.055, -0.15));
   for (let i = 0; i < 3; i++) elbow.add(vbox(0.1, 0.012, 0.012, M.roboAccent, 0, 0.05, -0.08 - i * 0.05));
   if (side < 0) {
     // grapple launcher on the left forearm
     elbow.add(vbox(0.075, 0.07, 0.22, M.roboDark, 0, 0.085, -0.13));
-    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.03, 0.08, 10), M.cyan);
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.03, 0.08, 14), M.glove);
     barrel.rotation.x = Math.PI / 2; barrel.position.set(0, 0.085, -0.26); elbow.add(barrel);
+    // the hook sits docked in the barrel when it is home
+    const dock = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.07, 12), M.glove);
+    dock.rotation.x = -Math.PI / 2; dock.position.set(0, 0.085, -0.33); elbow.add(dock); VM.dock = dock;
   }
   const wrist = new THREE.Group(); wrist.position.z = -0.28; elbow.add(wrist);
   wrist.add(vbox(0.1, 0.045, 0.11, M.roboDark, 0, 0, -0.05));
@@ -1371,7 +1477,7 @@ function updateRig(dt) {
   } else if (hookFx.state === "retract") {
     L.p[2] += 0.06; L.r[0] += 0.3; L.curl = 0.1;
   }
-  const kR = 1 - Math.exp(-dt * (snapR ? 70 : 16)), kL = 1 - Math.exp(-dt * (snapL ? 70 : 16));
+  const kR = 1 - Math.exp(-dt * (snapR ? 60 : 13)), kL = 1 - Math.exp(-dt * (snapL ? 60 : 13));
   lerpPose(cur.R, R, kR); lerpPose(cur.L, L, kL);
   applyPose(armR, cur.R); applyPose(armL, cur.L);
   // the arms lag a little behind fast mouse turns
@@ -1383,51 +1489,75 @@ function updateRig(dt) {
   rig.rotation.set(VM.lagY, VM.lagX, 0);
 }
 
-// ---------- anime slash arcs, speed lines, impact stars ----------
-const SLASH_LEN = 2.6;
-const slashGeo = new THREE.RingGeometry(0.8, 1.3, 72, 6, 0, SLASH_LEN);
-function slashMaterial(core, edge, width, additive) {
-  return new THREE.ShaderMaterial({
-    transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide,
-    blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
-    uniforms: { uProg: { value: 0 }, uFade: { value: 0 }, uWidth: { value: width }, uCore: { value: new THREE.Color(core) }, uEdge: { value: new THREE.Color(edge) } },
-    vertexShader: `varying vec2 vP; void main() { vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-    fragmentShader: `uniform float uProg, uFade, uWidth; uniform vec3 uCore, uEdge; varying vec2 vP;
-      void main() {
-        float a = atan(vP.y, vP.x) / ${SLASH_LEN.toFixed(3)};
-        if (a < 0.0 || a > 1.0 || a > uProg) discard;
-        float r = (length(vP) - 0.8) / 0.5;
-        float w = uWidth * pow(sin(3.14159 * a), 0.8) * smoothstep(0.0, 0.3, a);
-        float d = abs(r - 0.5);
-        if (d > w) discard;
-        float core = 1.0 - d / max(w, 0.001);
-        vec3 c = mix(uEdge, uCore, smoothstep(0.25, 0.75, core));
-        float alpha = mix(0.1, 1.0, smoothstep(uProg - 0.85, uProg, a)) * (1.0 - uFade);
-        gl_FragColor = vec4(c, alpha);
-      }`,
-  });
-}
-const SLASH_FX = [{ rot: 0.6, mirror: false }, { rot: -0.6, mirror: true }, { rot: 0.05, mirror: false }, { rot: 0.7, mirror: true }];
+// ---------- sword trail (a brush stroke that follows the blade), speed lines, impact stars ----------
+// The stroke is precomputed when the swing starts: the swing pose is sampled at small steps and the blade's
+// base and tip are recorded in the arm camera's space, then a ribbon is drawn through them and revealed in step
+// with the swing. The shader paints it like a dry brush: solid at the head, breaking into bristle streaks behind.
+const TRAIL_N = 44, TRAIL_K0 = 0.12, TRAIL_K1 = 0.42;
+const brushVS = `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+const brushFS = `uniform float uHead, uFade, uSeed; uniform vec3 uCore, uEdge, uInk; varying vec2 vUv;
+  float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float vnoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y); }
+  void main() {
+    float u = vUv.x, v = vUv.y;
+    if (u > uHead) discard;
+    float rel = clamp((uHead - u) / 0.75, 0.0, 1.0);          // 0 at the brush head, 1 at the oldest part
+    // pressure: the brush lands, swells, then lifts off
+    float press = pow(sin(3.14159 * clamp(u, 0.0, 1.0)), 0.55) * (1.0 - rel * 0.55);
+    float wob = (vnoise(vec2(u * 9.0 + uSeed, 1.0)) - 0.5) * 0.25;
+    float inner = 1.0 - press * (0.92 + wob);                  // the stroke spans v in [inner, 1]
+    float outer = 0.97 + (vnoise(vec2(u * 30.0 + uSeed, 4.0)) - 0.5) * 0.06;
+    if (v < inner || v > outer) discard;
+    float across = (v - inner) / max(outer - inner, 0.001);
+    // bristles: long streaks along the stroke; more of them drop out as the paint runs dry
+    float bristle = vnoise(vec2(u * 3.0 + uSeed, v * 46.0)) * 0.7 + vnoise(vec2(u * 11.0, v * 120.0 + uSeed)) * 0.3;
+    float dry = rel * 0.85 + (1.0 - across) * 0.35 + uFade * 0.6 - 0.2;
+    if (bristle < dry) discard;
+    float edgeSoft = smoothstep(0.0, 0.18, across) * smoothstep(1.0, 0.9, across);
+    vec3 c = mix(uEdge, uCore, smoothstep(0.35, 0.85, across));
+    c = mix(uInk, c, smoothstep(0.0, 0.12, across));           // a thin dark lip on the inside edge
+    float alpha = (0.55 + 0.45 * edgeSoft) * (1.0 - uFade) * smoothstep(0.0, 0.04, u);
+    gl_FragColor = vec4(c, alpha);
+  }`;
 const slashes = [];
+const _tv = new THREE.Vector3(), _bv = new THREE.Vector3();
 function spawnSlash(v) {
-  const f = SLASH_FX[v]; const g = new THREE.Group();
-  g.position.set(0, -0.02, -1); g.rotation.z = f.rot + (Math.random() - 0.5) * 0.2;
-  const inner = new THREE.Group(); inner.scale.setScalar(0.52);
-  inner.position.set(-Math.cos(1.3) * 1.05 * 0.52, -Math.sin(1.3) * 1.05 * 0.52, 0);
+  // sample the swing on the real arm, then put the arm back where it was
+  vmCamera.updateMatrixWorld(true);
+  const tips = [], bases = [];
+  for (let i = 0; i < TRAIL_N; i++) {
+    const k = TRAIL_K0 + (TRAIL_K1 - TRAIL_K0) * (i / (TRAIL_N - 1));
+    applyPose(armR, slashPose(clonePose(SWORD_REST), v, k)); rig.updateMatrixWorld(true);
+    _tv.copy(vmSword.userData.tipLocal); _tv.y *= 1.04; vmSword.localToWorld(_tv); vmCamera.worldToLocal(_tv); tips.push(_tv.clone());
+    _bv.copy(vmSword.userData.baseLocal).lerp(vmSword.userData.tipLocal, 0.42); vmSword.localToWorld(_bv); vmCamera.worldToLocal(_bv); bases.push(_bv.clone());
+  }
+  applyPose(armR, cur.R); rig.updateMatrixWorld(true);
+  const ROWS = 7; const pos = new Float32Array(TRAIL_N * ROWS * 3), uv = new Float32Array(TRAIL_N * ROWS * 2), idx = [];
+  for (let i = 0; i < TRAIL_N; i++) for (let r = 0; r < ROWS; r++) {
+    const q = r / (ROWS - 1); const p = bases[i].clone().lerp(tips[i], q);
+    const o = (i * ROWS + r); pos.set([p.x, p.y, p.z], o * 3); uv.set([i / (TRAIL_N - 1), q], o * 2);
+    if (i < TRAIL_N - 1 && r < ROWS - 1) { const a = o, b = o + ROWS; idx.push(a, b, a + 1, b, b + 1, a + 1); }
+  }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(pos, 3)); geo.setAttribute("uv", new THREE.BufferAttribute(uv, 2)); geo.setIndex(idx);
   const edge = player.lust >= 2 ? 0xff2a4a : 0x4ff0ff;
-  const inkM = new THREE.Mesh(slashGeo, slashMaterial(0x07040c, 0x07040c, 0.6, false)); inkM.renderOrder = 20;
-  const glowM = new THREE.Mesh(slashGeo, slashMaterial(0xffffff, edge, 0.46, true)); glowM.renderOrder = 21;
-  inner.add(inkM, glowM); g.add(inner); vmCamera.add(g);
-  slashes.push({ g, mirror: f.mirror ? -1 : 1, mats: [inkM.material, glowM.material], age: -0.06 });
+  const mat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    uniforms: { uHead: { value: 0 }, uFade: { value: 0 }, uSeed: { value: Math.random() * 50 }, uCore: { value: new THREE.Color(0xf4fbff) }, uEdge: { value: new THREE.Color(edge) }, uInk: { value: new THREE.Color(0x140a1e) } },
+    vertexShader: brushVS, fragmentShader: brushFS,
+  });
+  const mesh = new THREE.Mesh(geo, mat); mesh.renderOrder = 20; mesh.frustumCulled = false; vmCamera.add(mesh);
+  slashes.push({ g: mesh, mats: [mat], age: 0, dur: 0.38 });
 }
 function updateSlashes(dt) {
   for (let i = slashes.length - 1; i >= 0; i--) {
-    const s = slashes[i]; if (!VM.freeze) s.age += dt; const a = Math.max(0, s.age);
-    s.g.visible = s.age >= 0;
-    const prog = Math.min(1, a / 0.075), fade = THREE.MathUtils.smoothstep(a, 0.1, 0.3);
-    for (const m of s.mats) { m.uniforms.uProg.value = prog; m.uniforms.uFade.value = fade; }
-    const sc = 1 + a * 0.5; s.g.scale.set(sc * s.mirror, sc, sc);
-    if (a > 0.32) { vmCamera.remove(s.g); s.mats.forEach((m) => m.dispose()); slashes.splice(i, 1); }
+    const s = slashes[i]; if (!VM.freeze) s.age += dt;
+    const k = s.age / s.dur;
+    const m = s.mats[0];
+    m.uniforms.uHead.value = THREE.MathUtils.clamp((k - TRAIL_K0) / (TRAIL_K1 - TRAIL_K0), 0, 1.0);
+    m.uniforms.uFade.value = THREE.MathUtils.smoothstep(k, TRAIL_K1 + 0.05, 0.85);
+    s.g.visible = k > TRAIL_K0;
+    if (k > 0.85) { vmCamera.remove(s.g); s.g.geometry.dispose(); m.dispose(); slashes.splice(i, 1); }
   }
 }
 const speedGroup = new THREE.Group(); speedGroup.position.z = -1.2; vmCamera.add(speedGroup);
@@ -1472,7 +1602,7 @@ function impactFrame(ms) { const el = $("impact"); el.style.opacity = 1; setTime
 
 // ---------- self body (world space, so you see yourself and cast a shadow) ----------
 const selfBody = new THREE.Group(); scene.add(selfBody);
-function sbox(parent, w, h, d, mat, x, y, z) { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); m.castShadow = true; ink(m); parent.add(m); return m; }
+function sbox(parent, w, h, d, mat, x, y, z) { const m = new THREE.Mesh(rbox(w, h, d, 0.42, 0.08), mat); m.position.set(x, y, z); m.castShadow = true; ink(m); parent.add(m); return m; }
 const selfTorso = new THREE.Group(); selfBody.add(selfTorso);
 sbox(selfTorso, 0.46, 0.46, 0.26, M.robo, 0, -0.06, 0.26);
 sbox(selfTorso, 0.36, 0.18, 0.04, M.roboAccent, 0, 0.04, 0.12);
@@ -1490,7 +1620,7 @@ for (const side of [-1, 1]) {
   selfLegs.push({ hip, knee, side });
 }
 function updateSelfBody(dt) {
-  const p = playerPos(); selfBody.position.copy(p); selfBody.rotation.y = yaw;
+  const p = renderPos(); selfBody.position.copy(p); selfBody.rotation.y = yaw;
   const hs = Math.hypot(player.vel.x, player.vel.z); const move = Math.min(1, hs / 9);
   selfTorso.visible = !player.sliding;
   for (const L of selfLegs) {
@@ -1504,11 +1634,11 @@ function updateSelfBody(dt) {
 }
 
 // ---------- grapple line + hook ----------
-const hookFx = { state: "idle", t: 0, dur: 0.22, from: new THREE.Vector3() };
+const hookFx = { state: "idle", t: 0, dur: 0.26, from: new THREE.Vector3() };
 const hookMesh = new THREE.Group(); scene.add(hookMesh); hookMesh.visible = false;
 {
   const tip = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.16, 8), M.cyan); tip.rotation.x = Math.PI / 2; tip.position.z = 0.06; hookMesh.add(tip);
-  for (let i = 0; i < 3; i++) { const prong = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.14), M.roboDark); const a = (i / 3) * Math.PI * 2; prong.position.set(Math.cos(a) * 0.06, Math.sin(a) * 0.06, -0.02); prong.rotation.set(Math.sin(a) * 0.6, -Math.cos(a) * 0.6, 0); ink(prong); hookMesh.add(prong); }
+  for (let i = 0; i < 3; i++) { const prong = new THREE.Mesh(rbox(0.022, 0.022, 0.14, 0.45), M.roboDark); const a = (i / 3) * Math.PI * 2; prong.position.set(Math.cos(a) * 0.06, Math.sin(a) * 0.06, -0.02); prong.rotation.set(Math.sin(a) * 0.6, -Math.cos(a) * 0.6, 0); ink(prong); hookMesh.add(prong); }
 }
 const ropeMat = toon(0x4ff0ff, { emissive: 0x1a6070 });
 const ropeMesh = new THREE.Mesh(new THREE.BufferGeometry(), ropeMat); ropeMesh.visible = false; ropeMesh.frustumCulled = false; scene.add(ropeMesh);
@@ -1516,8 +1646,17 @@ function wristWorld() { return new THREE.Vector3(-0.2, -0.2, -0.42).applyMatrix4
 function hookHead() {
   const w = wristWorld(); const g = player.grapple;
   if (g) return g.phase === "fly" ? w.lerp(g.point, easeOut(g.t / g.dur)) : g.point.clone();
-  if (hookFx.state === "retract") { const q = Math.min(1, hookFx.t / hookFx.dur); return hookFx.from.clone().lerp(w, q * q); }
+  if (hookFx.state === "retract") { const q = Math.min(1, hookFx.t / hookFx.dur); return hookFx.from.clone().lerp(w, q * q * (3 - 2 * q)); }
   return w;
+}
+const GLOVE_HOME = new THREE.Color(0x4ff0ff), GLOVE_OUT = new THREE.Color(0x6b7080), GLOVE_FLASH = new THREE.Color(0xe8fdff);
+function updateGlove(dt) {
+  const out = !!player.grapple || hookFx.state === "retract";
+  VM.gloveBlink = Math.max(0, (VM.gloveBlink || 0) - dt * 3.5);
+  const target = out ? GLOVE_OUT : GLOVE_HOME;
+  M.glove.color.lerp(target, 1 - Math.exp(-dt * (out ? 30 : 14)));
+  if (!out && VM.gloveBlink > 0) M.glove.color.lerp(GLOVE_FLASH, VM.gloveBlink * 0.8);
+  if (VM.dock) VM.dock.visible = !out;
 }
 function updateRope(dt) {
   const w = wristWorld(); const g = player.grapple;
@@ -1528,7 +1667,7 @@ function updateRope(dt) {
   ropeMesh.visible = hookMesh.visible = show;
   if (!show) return;
   const head = hookHead();
-  if (!g && hookFx.t >= hookFx.dur) { hookFx.state = "idle"; ropeMesh.visible = hookMesh.visible = false; return; }
+  if (!g && hookFx.t >= hookFx.dur) { hookFx.state = "idle"; VM.gloveBlink = 1; ropeMesh.visible = hookMesh.visible = false; return; }
   const span = head.clone().sub(w); const len = span.length(); const n = span.clone().normalize();
   let side = new THREE.Vector3().crossVectors(n, new THREE.Vector3(0, 1, 0)); if (side.lengthSq() < 1e-4) side.set(1, 0, 0); side.normalize();
   const up = new THREE.Vector3().crossVectors(side, n);
@@ -1542,29 +1681,46 @@ function updateRope(dt) {
   hookMesh.position.copy(head); hookMesh.lookAt(head.clone().add(n));
 }
 
+// smoothed camera state: bob strength, landing spring, fall speed tracking
+const CAM = { bobAmt: 0, landX: 0, landV: 0, fallV: 0, wasGrounded: true };
+function renderPos() { const c = playerPos(); return player.prev ? player.prev.clone().lerp(c, state.alpha ?? 1) : c; }
 function updateCamera(dt) {
   const target = player.sliding ? P.slideEye : P.eye;
-  player.eyeH += (target - player.eyeH) * Math.min(1, dt * 12);
-  const p = camOrigin();
+  player.eyeH += (target - player.eyeH) * (1 - Math.exp(-dt * 14));
+  const p = renderPos(); p.y += player.eyeH;
   const hs = Math.hypot(player.vel.x, player.vel.z);
-  if (player.grounded && !player.sliding) bob += hs * dt * 1.6;
-  const bobY = player.grounded && !player.sliding ? Math.sin(bob * 2) * 0.035 * Math.min(1, hs / 9) : 0;
+  const walking = player.grounded && !player.sliding;
+  if (walking) bob += hs * dt * 1.45;
+  CAM.bobAmt += ((walking ? Math.min(1, hs / 9) : 0) - CAM.bobAmt) * (1 - Math.exp(-dt * 8));
+  const bobY = Math.sin(bob * 2) * 0.022 * CAM.bobAmt, bobX = Math.cos(bob) * 0.012 * CAM.bobAmt;
+  // landing: a quick dip on a critically damped spring, scaled by how hard you came down
+  if (!player.grounded) CAM.fallV = Math.min(CAM.fallV, player.vel.y);
+  if (player.grounded && !CAM.wasGrounded) { const hit = THREE.MathUtils.clamp((-CAM.fallV - 4) / 22, 0, 1); CAM.landV -= hit * 2.4; }
+  if (player.grounded) CAM.fallV = 0;
+  CAM.wasGrounded = player.grounded;
+  CAM.landV += (-CAM.landX * 260 - CAM.landV * 30) * dt; CAM.landX += CAM.landV * dt;
   shake *= Math.pow(0.02, dt);
-  camera.position.set(p.x + (Math.random() - 0.5) * shake * 0.3, p.y + bobY + (Math.random() - 0.5) * shake * 0.3, p.z);
+  const st = state.time * 37;
+  const shX = (Math.sin(st) + Math.sin(st * 1.7 + 1.3) * 0.6) * shake * 0.12, shY = (Math.sin(st * 1.3 + 2.1) + Math.sin(st * 2.3) * 0.6) * shake * 0.12;
   const rightV = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+  camera.position.set(p.x + rightV.x * (bobX + shX), p.y + bobY + shY + CAM.landX, p.z + rightV.z * (bobX + shX));
   const strafe = player.vel.dot(rightV);
   // lean into the swing while on the grapple
   let gLean = 0;
   if (player.grapple?.phase === "attached") gLean = THREE.MathUtils.clamp(player.grapple.point.clone().sub(p).dot(rightV) * 0.01, -0.08, 0.08);
-  const rollTarget = -strafe * 0.004 + (player.sliding ? 0.06 : 0) - gLean;
-  roll += (rollTarget - roll) * Math.min(1, dt * 8);
+  const rollTarget = THREE.MathUtils.clamp(-strafe * 0.0024, -0.035, 0.035) + (player.sliding ? 0.05 : 0) - gLean;
+  roll += (rollTarget - roll) * (1 - Math.exp(-dt * 6));
   camera.rotation.set(pitch, yaw, roll, "YXZ");
   fovKick *= Math.pow(0.05, dt);
   const fov = 88 + Math.min(16, Math.max(0, hs - 9) * 0.9) + fovKick;
-  camera.fov += (fov - camera.fov) * Math.min(1, dt * 6); camera.updateProjectionMatrix();
+  camera.fov += (fov - camera.fov) * (1 - Math.exp(-dt * 5)); camera.updateProjectionMatrix();
   camera.updateMatrixWorld();
   vmCamera.rotation.z = roll * 0.6;
-  rig.position.y = bobY * 0.4;
+  // the arms ride the bob a beat behind, sink on landings, and trail your vertical speed
+  const vy = THREE.MathUtils.clamp(player.vel.y * -0.0025, -0.03, 0.03);
+  rig.position.y += (bobY * 0.5 + CAM.landX * 0.55 + vy - rig.position.y) * (1 - Math.exp(-dt * 18));
+  rig.position.x += (-bobX * 0.6 - rig.position.x) * (1 - Math.exp(-dt * 18));
+  updateGlove(dt);
   updateRig(dt);
   updateSlashes(dt);
   updateSpeedLines(dt, hs);
@@ -1602,14 +1758,14 @@ function updateHud(dt) {
 function restart(fromScratch) {
   if (fromScratch) state.checkpoint = 1;
   if (world) world.free();
-  if (levelGroup) { levelGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); scene.remove(levelGroup); }
+  if (levelGroup) { levelGroup.traverse((o) => dispGeo(o.geometry)); scene.remove(levelGroup); }
   panes = []; enemies = []; ragdolls = []; shards = []; fx = []; bolts = [];
   glassByHandle.clear(); enemyByHandle.clear(); ragByHandle.clear();
   world = new RAPIER.World({ x: 0, y: -9.81 * 2.2, z: 0 });
   world.timestep = DT;
   buildLevel();
   Object.assign(state, { over: false, time: 0, runStart: 0 });
-  setTime("normal", 0); hitstopT = 0; hookFx.state = "idle"; VM.attack = null;
+  setTime("normal", 0); hitstopT = 0; hookFx.state = "idle"; VM.attack = null; GL.spike = 0;
   $("log").innerHTML = "";
   if (state.checkpoint === 2) {
     player = createPlayer(new THREE.Vector3(0, 1.2, -24), 0);
@@ -1649,6 +1805,7 @@ function simStep() {
   let ts = state.ts;
   if (hitstopT > 0) { hitstopT -= DT; ts = Math.min(ts, 0.08); }
   state.time += DT;
+  (player.prev ||= new THREE.Vector3()).copy(playerPos());
   stepPlayer(DT);
   pressed.clear();
   if (player.dead) return;
@@ -1672,6 +1829,7 @@ function frame(now) {
   if (running) {
     acc += dt;
     while (acc >= DT) { simStep(); acc -= DT; }
+    state.alpha = acc / DT;
     for (const rd of ragdolls) for (const p of rd.parts) { const t = p.body.translation(), r = p.body.rotation(); p.mesh.position.set(t.x, t.y, t.z); p.mesh.quaternion.set(r.x, r.y, r.z, r.w); }
     for (let i = ragdolls.length - 1; i >= 0; i--) if (ragdolls[i].torso.translation().y < -70) removeRagdoll(ragdolls[i]);
     for (let i = shards.length - 1; i >= 0; i--) {
@@ -1694,10 +1852,22 @@ function frame(now) {
     const t = now * 0.00004; camera.position.set(Math.cos(t) * 70, 22, Math.sin(t) * 70); camera.lookAt(0, 2, 0);
   }
   sky.position.copy(camera.position);
+  renderer.setRenderTarget(rt);
   renderer.clear();
   renderer.render(scene, camera);
   rig.visible = selfBody.visible = !!running;
   if (running) { renderer.clearDepth(); renderer.render(vmScene, vmCamera); }
+  renderer.setRenderTarget(null);
+  // glitch level: low health and time powers hold it up, events spike it, and now and then the feed blips on its own
+  const gdt = Math.min(0.1, dt);
+  GL.spike *= Math.pow(0.015, gdt);
+  GL.blip = Math.max(0, GL.blip - gdt);
+  if (running && Math.random() < gdt * 0.12) GL.blip = 0.06 + Math.random() * 0.1;
+  const hpLow = running ? THREE.MathUtils.clamp((40 - player.hp) / 40, 0, 1) * 0.35 : 0;
+  GL.base = hpLow + (state.tsMode === "stop" ? 0.22 : state.tsMode === "slow" ? 0.08 : 0);
+  postMat.uniforms.uAmt.value = Math.min(1, GL.base + GL.spike + (GL.blip > 0 ? 0.18 : 0) + (state.started ? 0 : 0.04));
+  postMat.uniforms.uTime.value = now / 1000;
+  renderer.render(postScene, postCam);
 }
 restart(true); player.dead = true;
 requestAnimationFrame(frame);
@@ -1708,7 +1878,8 @@ window.__res = {
   get player() { return player; }, get enemies() { return enemies; }, get panes() { return panes; }, get bolts() { return bolts; }, state, keys, mouse, pressed,
   setLook(y, p) { yaw = y; pitch = p; }, teleport(x, y, z) { player.body.setTranslation({ x, y, z }, true); player.body.setLinvel({ x: 0, y: 0, z: 0 }, true); },
   begin() { if (state.pendingRestart) { restart(state.pendingFresh); state.pendingRestart = false; } state.started = true; $("screen").hidden = true; },
-  VM, get slashes() { return slashes; }, playAttackAnim, spawnSlash,
+  VM, get slashes() { return slashes; }, playAttackAnim, spawnSlash, GL, glitch, M,
+  step(n) { for (let i = 0; i < n && !player.dead; i++) simStep(); },
   killPhase() { for (const e of alive()) damageEnemy(e, 999, enemyPos(e), new THREE.Vector3(1, 0, 0), "punch"); },
 };
 </script>

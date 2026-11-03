@@ -22,7 +22,7 @@ You can also turn on GitHub Pages (Settings → Pages → Deploy from branch →
 | Shift | Dash (2 charges) |
 | Left mouse | Punch or slash. Slide + attack with the sword is a thrust |
 | Right mouse | Block. Press it just before a hit lands to parry |
-| E | Fire the grapple hook (unlocked by the sword). Press again to switch anchors or let go |
+| E | Hold to grapple (unlocked by the sword). Let go to release and keep your momentum |
 | C while grappling | Breach: crash through the window and execute enemies behind it |
 | Q | Slow time (needs 2 bloodlust bars, costs 1) |
 | X | Stop time (needs 3 bars, costs 1) |
@@ -39,11 +39,13 @@ You can also turn on GitHub Pages (Settings → Pages → Deploy from branch →
 
 ## Look and feel
 
-- Cel-shaded dusk art style: toon shading in flat bands, black ink edges on geometry and characters, and a violet-to-ember sky.
+- Cel-shaded dusk art style: toon shading in flat bands, rounded shapes with ink outlines, and a violet-to-ember sky.
+- Glitch post-processing: RGB split, slipping scanline bands, and block tears that spike on damage, parries, breaches, bloodlust gains, and time powers, and hold steady at low health.
 - Robot arms with idle breathing, walk sway, sprint and air poses, and lag behind fast mouse turns. They render in their own pass so they never clip into walls.
 - A four-hit fist combo (jab, cross, hook, uppercut) with impact stars and shockwave rings.
-- Anime-style sword slashes with four arc variants. The edge turns red at 2+ bloodlust. Thrusts, dashes, and breaches add speed lines and a one-frame impact flash.
-- The grapple hook flies out, latches, and reels you in on a spring line, so you swing in arcs. On release the hook snaps back to the wrist with a slack, wavy rope.
+- Sword swings leave a dry-brush stroke that follows the blade's actual path, solid at the head and breaking into bristle streaks behind. The edge turns red at 2+ bloodlust. Thrusts, dashes, and breaches add speed lines and a one-frame impact flash.
+- The grapple hook flies out, latches, and reels you in on a spring line, so you swing in arcs. Letting go flings you with your swing speed, and the hook reels back to the wrist. The launcher glows blue when the hook is docked and turns gray while it is out.
+- Smoothed camera: interpolated physics, a landing dip, and a softer head bob and lean.
 - Your robot body and legs are visible when you look down, and they cast a shadow.
 
 ## Tech stack
