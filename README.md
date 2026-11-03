@@ -61,7 +61,7 @@ You can also turn on GitHub Pages (Settings → Pages → Deploy from branch →
 ## Destruction
 
 - Drywall partitions in the hall and east wing break into rubble when ragdolls are slammed into them, or when you thrust or breach through them.
-- Explosive barrels (five on Floor 1): punch or slash one and it blinks, then goes off; bolts and flying bodies set them off at once. Explosions kill or stun enemies nearby, hurt you, throw bodies and debris, shatter glass, break partitions, and chain into other barrels.
+- Explosive barrels (switched off for now; the code stays in for later): punch or slash one and it blinks, then goes off; bolts and flying bodies set them off at once. Explosions kill or stun enemies nearby, hurt you, throw bodies and debris, shatter glass, break partitions, and chain into other barrels.
 - Enemies, ragdolls and debris are interpolated between physics steps for smooth motion at any frame rate.
 
 ## Look and feel
@@ -86,5 +86,12 @@ See [docs/story-and-plan.md](docs/story-and-plan.md).
 ## Performance
 
 - Fixed the explosion freeze: stunning an enemy the blast had already killed touched a removed physics body and crashed the physics engine.
-- Floor 1 has five barrels. Explosions, glass and wall debris use shared geometry, pooled sparks and one pooled blast light, with caps on shards (140), effects and simulated ragdolls (7 newest; older bodies settle as corpses).
+- Barrels are off for now. Explosions, glass and wall debris use shared geometry, pooled sparks and one pooled blast light, with caps on shards (140), effects and simulated ragdolls (7 newest; older bodies settle as corpses).
 - Render resolution adapts to frame time, and the simulation catches up at most 4 steps per frame so a slow frame never snowballs.
+- Picking up the sword no longer removes a light from the scene, which used to force every shader to recompile. The scene renders with 2x MSAA, plain PCF shadows at 1024, and at most 1.25x resolution.
+
+## Look
+
+- Night: a black sky with a blood moon and a red horizon, thick dark fog, cold work lights, and red emergency lights that slowly breathe.
+- The arms, bots, guns, racks and window frames are polished metal with brushed texture, reflecting a baked map of neon strips.
+- The sword edge pulses neon with a sharp flicker, and every slash throws small sparks off the blade.
