@@ -17,26 +17,26 @@ You can also turn on GitHub Pages (Settings → Pages → Deploy from branch →
 | Key | Action |
 | --- | --- |
 | WASD | Move |
-| Space | Jump, or let go of the grapple |
+| Space | Jump, or let go of the swing grapple. On the sling line, hold to focus |
 | Ctrl / C | Slide. Sliding into an enemy staggers them |
 | Shift | Dash (2 charges) |
-| Left mouse | Punch or slash. Slide + attack with the sword is a thrust |
-| Right mouse | Block. Press it just before a hit lands to parry |
+| 1 / 2 / 3, wheel | Fists, sword, steam pistol |
+| Left mouse | Punch, slash or fire. Slide + attack with the sword is a thrust |
+| Right mouse | Block (press it just before a hit lands to parry). With the pistol: aim down the sights |
 | E | Hold to grapple (unlocked by the sword). Let go to release and keep your momentum |
 | C while grappling | Breach: crash through the window and execute enemies behind it |
-| Q | Slow time (needs 2 bloodlust bars, costs 1) |
-| X | Stop time (needs 3 bars, costs 1) |
-| V | Finisher on the enemy under your crosshair (needs 4+ bars, costs 1) |
+| G | Grapple mode: swing or sling |
+| R | Pistol: vent and reload |
 | F | Inspect your weapon |
-| R | Restart from the last checkpoint |
+| Backspace | Restart from the last checkpoint |
 
 ## Floor 01: Activation
 
 1. **Fists.** You boot in the chassis lab with no weapons. Six brawlers in the hall telegraph punches with a glowing fist. Block to take chip damage, parry (block in the last 0.18 s) to stagger them, or slide into them. A staggered enemy takes triple damage.
 2. **The sword.** Clearing the hall opens the armory. The sword widens the parry window to 0.38 s, lets you deflect bolts back at the shooter, and unlocks the grappling wrist. The grapple line passes through glass.
-3. **The windows.** The east wing and server room are sealed from inside. Break out of the armory window, grapple to the amber window-washer rails, hang, then grapple onto a window and press C to breach. The glass bursts inward as shrapnel and executes anyone near the impact, each kill adding a bloodlust bar.
+3. **The windows.** The east wing and server room are sealed from inside. Break out of the armory window, grapple to the amber window-washer rails, hang, then grapple onto a window and press C to breach. The glass bursts inward as shrapnel and executes anyone near the impact.
 
-**Bloodlust** (max 5 bars) raises your speed and damage and drops a bar whenever you take a clean hit. You gain bars from breach executions, from thrust kills on enemies that are nearly dead or staggered, and in small amounts from sword parries and deflects.
+4. **The finisher.** The killing blow on the last enemy of the floor becomes a third-person finisher (see below).
 
 ## Start and boot sequence
 
@@ -67,10 +67,10 @@ You can also turn on GitHub Pages (Settings → Pages → Deploy from branch →
 ## Look and feel
 
 - Cel-shaded dusk art style: toon shading in flat bands, rounded shapes with ink outlines, and a violet-to-ember sky.
-- Glitch post-processing: RGB split, slipping scanline bands, and block tears that spike on damage, parries, breaches, bloodlust gains, and time powers, and hold steady at low health.
+- Glitch post-processing: RGB split, slipping scanline bands, and block tears that spike on damage, parries, breaches and time effects, and hold steady at low health.
 - Robot arms with idle breathing, walk sway, sprint and air poses, and lag behind fast mouse turns. They render in their own pass so they never clip into walls.
 - A four-hit fist combo (jab, cross, hook, uppercut) with impact stars and shockwave rings.
-- Sword swings leave a dry-brush stroke that follows the blade's actual path, solid at the head and breaking into bristle streaks behind. The edge turns red at 2+ bloodlust. Thrusts, dashes, and breaches add speed lines and a one-frame impact flash.
+- Sword swings leave a dry-brush stroke that follows the blade's actual path, solid at the head and breaking into bristle streaks behind. Thrusts, dashes, and breaches add speed lines and a one-frame impact flash.
 - The grapple hook flies out, latches, and reels you in on a spring line, so you swing in arcs. Letting go flings you with your swing speed, and the hook reels back to the wrist. The launcher glows blue when the hook is docked and turns gray while it is out.
 - Smoothed camera: interpolated physics, a landing dip, and a softer head bob and lean.
 - Your robot body and legs are visible when you look down, and they cast a shadow.
@@ -99,7 +99,7 @@ See [docs/story-and-plan.md](docs/story-and-plan.md).
 ## Movement and weapons
 
 - Hold Shift after the dash to sprint (about 38% faster). The arms pump in time with the stride, the body leans, and the camera bobs harder and widens.
-- 1 / 2 or the mouse wheel switches between fists and the sword once you own it. The grapple works with either.
+- 1 / 2 / 3 or the mouse wheel switches between fists, the sword and the pistol once you own them (both come from the armory). The grapple works with any of them.
 - G switches the grapple between swing and sling. Sling locks onto an enemy in your aim cone (a red marker shows it), holding E charges the shot, and letting go fires you at the target. The shot homes in on a locked enemy and hits it, killing weaker ones outright.
 
 ## City and lighting
@@ -118,11 +118,27 @@ The testing ground is a 120 m grid inside the city with:
 - A glass gallery, and a glass cube with a dummy inside for breach tests.
 - Drywall partitions to slam bodies through, grapple towers with beams to swing from, and parkour steps and a ramp.
 
-Keys: K fills bloodlust, J spawns three live hostiles, L respawns dummies now, H toggles god mode, R resets the level.
+You start with the sword and the pistol. Keys: N plays the finisher on the dummy you are facing, J spawns three live hostiles, L respawns dummies now, H toggles god mode, Backspace resets the level.
 
 Every new weapon or feature gets added to the testing ground too.
 
-## Bloodlust
+## Steam pistol
 
-- Kill streaks fill it. Each kill within 4 s of the last is worth more (0.4, 0.7, 1.0 and up to 1.5 bars), and the HUD shows the streak.
-- At a full meter, hold B to charge a Frenzy. For 8 s the world runs at half speed, hits do 2.6x damage, the sword reaches further, the finisher is free, and each kill adds 1.2 s.
+- A long-barrelled steampunk pistol: walnut grip, brass receiver, cooling fins, a glowing coil, a pressure gauge whose needle shows the rounds left, and a hammer that cocks on every shot.
+- Under the riveted top cover are the works: a glowing core vial, meshed gears, twin pistons, a hydraulic ram, and live wires. They always run, faster while venting.
+- 8 rounds, hitscan. 1.5 damage to the body, 4 to the head. Shots go through glass, push bodies around and alert enemies nearby. RMB aims down the sights.
+- Reload (R, or firing on empty): the left hand lifts the top off, the chamber vents steam and sparks, then the top goes back on and latches.
+- Inspect (F): turn the gun over to look at the side, take the top off and hold the works up while the mechanisms run, then put it back.
+- On the grapple, the gun spins on your trigger finger, in view and side-on so the spin reads clearly, then drops back into your grip.
+
+## Sling focus
+
+- On a taut sling line, hold Space. The world slows to almost a stop, the view drains to black and white, and you hang still in the air. A bar under the crosshair counts down from 4 s.
+- Let go of Space (or run out of time) and the colour comes back as you are fired at the target at full charge.
+
+## Finisher
+
+- The killing blow on the last enemy of the floor starts a third-person cinematic, about 3.5 s, with letterbox bars.
+- Your robot body draws the sword low, the blade charges until it crackles and throws sparks, then you dash through the enemy and cut them in half at the waist. Both halves fall apart in slow motion with glowing cut faces, wires hanging out and sparks pouring from the cut. The view drops back into first person where the dash ended, looking back at the halves.
+
+Bloodlust (the meter, streaks, Frenzy and the Q / X / V / B powers) has been removed.
