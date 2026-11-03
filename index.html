@@ -44,27 +44,15 @@ body { background: var(--void); color: var(--ink); font-family: var(--mono); ove
 #targets b { display: block; font-family: var(--display); font-size: 32px; color: var(--threat); font-variant-numeric: tabular-nums; }
 #speed { bottom: calc(16px + env(safe-area-inset-bottom, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); text-align: right; color: var(--dim); text-transform: uppercase; }
 #speed b { display: block; font-family: var(--display); font-size: 28px; color: var(--ink); font-variant-numeric: tabular-nums; }
-#lust { bottom: calc(16px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); display: grid; gap: 5px; justify-items: center; }
-#lust .segs { display: grid; grid-template-columns: repeat(5, 52px); gap: 4px; }
-#lust .seg { height: 8px; background: rgba(255,255,255,0.1); position: relative; overflow: hidden; }
-#lust .seg i { position: absolute; inset: 0; background: var(--blood); transform-origin: left; transform: scaleX(0); }
-#lust .seg.full i { box-shadow: 0 0 10px var(--blood); }
-#lust .labels { display: grid; white-space: nowrap; grid-template-columns: repeat(5, 52px); gap: 4px; font-size: 9px; color: var(--dim); text-align: center; text-transform: uppercase; }
-#lust .labels span.on { color: var(--blood); }
-#lust .streak { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 6px; font-family: var(--display); font-size: 18px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--blood); text-shadow: 0 0 12px rgba(255,42,74,0.7); opacity: 0; white-space: nowrap; }
-#lust .streak.pop { animation: streak 2.2s ease-out; }
-@keyframes streak { 0% { opacity: 0; transform: translateX(-50%) scale(1.6); } 10% { opacity: 1; transform: translateX(-50%) scale(1); } 70% { opacity: 1; } 100% { opacity: 0; } }
-body.frenzy #lust .seg i { background: #ff2a4a; box-shadow: 0 0 16px #ff2a4a; animation: fz 0.35s infinite alternate; }
-@keyframes fz { to { filter: brightness(1.8); } }
-body.frenzy #tint { background: radial-gradient(ellipse at center, transparent 40%, rgba(255, 30, 60, 0.32)); }
 .dmgpop { position: fixed; pointer-events: none; font-family: var(--display); font-weight: 700; font-size: 18px; color: #fff; text-shadow: 0 0 8px rgba(0,0,0,0.9), 0 0 2px #000; transform: translate(-50%, -50%); animation: dmgpop 0.9s ease-out forwards; z-index: 5; }
 .dmgpop.kill { color: var(--blood); font-size: 22px; }
 @keyframes dmgpop { 0% { opacity: 0; margin-top: 0; } 12% { opacity: 1; } 100% { opacity: 0; margin-top: -46px; } }
-#lust .name { font-size: 10px; letter-spacing: 0.2em; color: var(--blood); text-transform: uppercase; }
 #cross { left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border: 1.5px solid rgba(217,226,234,0.8); border-radius: 50%; transition: border-color 0.1s, transform 0.1s; }
 #cross::after { content: ""; position: absolute; left: 50%; top: 50%; width: 3px; height: 3px; margin: -1.5px; background: var(--ink); border-radius: 50%; }
 #cross.grap { border-color: var(--cyan); transform: scale(1.25); }
 #lock { left: 0; top: 0; width: 34px; height: 34px; margin: -17px 0 0 -17px; border: 2px solid var(--blood); box-shadow: 0 0 12px rgba(255,42,74,0.6); pointer-events: none; }
+#focusbar { left: 50%; top: 50%; width: 120px; height: 3px; margin: 34px 0 0 -60px; background: rgba(255,255,255,0.15); }
+#focusbar i { display: block; height: 100%; background: #f2f2f2; box-shadow: 0 0 8px rgba(255,255,255,0.6); transform-origin: left; }
 #lock.held { border-style: dashed; border-width: 3px; }
 #cross.hit { border-color: var(--threat); transform: scale(0.8); }
 #flash { left: 50%; top: 38%; transform: translateX(-50%); font-family: var(--display); font-size: 30px; letter-spacing: 0.12em; color: var(--cyan); text-shadow: 0 0 18px currentColor; text-transform: uppercase; }
@@ -102,6 +90,10 @@ h1 { font-family: var(--display); font-weight: 700; font-size: clamp(44px, 10vw,
 #cross.hit.heavy::before { width: 48px; height: 48px; margin: -24px; filter: drop-shadow(0 0 6px var(--blood)); }
 .hud { transition: opacity 0.6s; }
 body.cine .hud { opacity: 0 !important; }
+body.fin .hud { opacity: 0 !important; transition: opacity 0.15s; }
+#bars::before, #bars::after { content: ""; position: fixed; left: 0; right: 0; height: 0; background: #000; transition: height 0.35s ease; z-index: 4; pointer-events: none; }
+#bars::before { top: 0; } #bars::after { bottom: 0; }
+body.fin #bars::before, body.fin #bars::after { height: 11vh; }
 
 /* ---------- start menu: an internal asset file, not a landing page ---------- */
 #menu { position: fixed; inset: 0; display: grid; grid-template-rows: auto 1fr auto; color: var(--ink);
@@ -193,23 +185,20 @@ body.cine .hud { opacity: 0 !important; }
 <div id="damage"></div>
 <div id="impact"></div>
 <div class="hud" id="cross"></div>
+<div id="bars"></div>
 <div class="hud" id="lock" hidden></div>
+<div class="hud" id="focusbar" hidden><i></i></div>
 <div class="hud" id="flash" hidden></div>
 <div class="hud" id="prompt" hidden></div>
 <div class="hud" id="log"></div>
 <div class="hud" id="objective">Objective<b id="objv">—</b></div>
 <div class="hud" id="targets">Hostiles<b id="tcount">0</b></div>
 <div class="hud" id="speed">m/s<b id="spd">0.0</b></div>
-<div class="hud" id="lust">
-  <div class="name">Bloodlust</div>
-  <div class="segs" id="segs"></div>
-  <div class="labels" id="lustlabels"><span>·</span><span>Q slow</span><span>X stop</span><span>V kill</span><span>B frenzy</span></div>
-  <div class="streak" id="streak"></div>
-</div>
 <div class="hud" id="stats">
   <div class="row">Chassis integrity <b id="hpv">100</b></div>
   <div class="bar"><i id="hpbar" style="width:100%"></i></div>
   <div class="row">Dash <b id="dashv">2</b></div>
+  <div class="row" id="ammorow" hidden>Pistol <b id="ammov">8 / 8</b></div>
   <div class="row">Grapple <b id="grapv">LOCKED</b></div>
   <div class="bar" id="grapbar"><i style="width:0%"></i></div>
 </div>
@@ -260,18 +249,16 @@ body.cine .hud { opacity: 0 !important; }
       <span><kbd>Space</kbd>Jump · let go of grapple</span>
       <span><kbd>Ctrl</kbd>/<kbd>C</kbd>Slide (slide into enemies to stagger)</span>
       <span><kbd>Shift</kbd>Dash · hold to sprint</span>
-      <span><kbd>1</kbd>/<kbd>2</kbd> or wheel: fists or sword</span>
+      <span><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> or wheel: fists, sword or pistol</span>
+      <span><kbd>LMB</kbd> with the pistol: fire · <kbd>RMB</kbd> aim · <kbd>R</kbd> vent and reload</span>
       <span><kbd>LMB</kbd>Attack · slide + LMB to thrust</span>
       <span><kbd>RMB</kbd>Block · tap just before a hit to parry</span>
       <span><kbd>E</kbd>Hold to grapple, let go to fling (needs the sword)</span>
       <span><kbd>G</kbd>Grapple mode: swing or sling (locks onto enemies; let go to be shot at them)</span>
+      <span><kbd>Space</kbd> on the sling line: hold to slow time and hang in the air (4 s max), let go to fire</span>
       <span><kbd>C</kbd> while grappling: breach a window</span>
-      <span><kbd>Q</kbd>Slow time (2 bars)</span>
-      <span><kbd>X</kbd>Stop time (3 bars)</span>
-      <span><kbd>V</kbd>Finisher (4+ bars)</span>
-      <span><kbd>B</kbd>Hold at a full meter: Frenzy (kill streaks fill it fast)</span>
       <span><kbd>F</kbd>Inspect your weapon</span>
-      <span><kbd>R</kbd>Restart from checkpoint</span>
+      <span><kbd>Backspace</kbd>Restart from checkpoint</span>
     </div>
     <button class="go" id="go" type="button">Loading physics…</button>
   </div>
@@ -312,7 +299,7 @@ const P = {
   parryFists: 0.18, parrySword: 0.38,
 };
 const DT = 1 / 60;
-const TS = { normal: 1, slow: 0.3, stop: 0.02, frenzy: 0.5 };
+const TS = { normal: 1, slow: 0.3, stop: 0.02, focus: 0.18 };
 
 // ---------- renderer ----------
 const host = document.getElementById("game");
@@ -348,9 +335,9 @@ const rt = new THREE.WebGLRenderTarget(rtSize().x, rtSize().y, { type: THREE.Hal
 const postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 const postMat = new THREE.ShaderMaterial({
   depthTest: false, depthWrite: false,
-  uniforms: { tDiffuse: { value: rt.texture }, uTime: { value: 0 }, uAmt: { value: 0 }, uRes: { value: rtSize() } },
+  uniforms: { tDiffuse: { value: rt.texture }, uTime: { value: 0 }, uAmt: { value: 0 }, uGray: { value: 0 }, uRes: { value: rtSize() } },
   vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
-  fragmentShader: `uniform sampler2D tDiffuse; uniform float uTime, uAmt; uniform vec2 uRes; varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float uTime, uAmt, uGray; uniform vec2 uRes; varying vec2 vUv;
     float h1(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
     float h2(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     void main() {
@@ -372,6 +359,9 @@ const postMat = new THREE.ShaderMaterial({
       c.g = texture2D(tDiffuse, uv).g;
       c.b = texture2D(tDiffuse, uv - off).b;
       c = mix(c, c.brg * 1.6, tear * step(0.6, h2(blk * 2.3 + t)) * a);
+      // focus: drain the colour to a cold, slightly crushed black and white
+      float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      c = mix(c, pow(vec3(lum), vec3(1.12)) * vec3(0.98, 1.0, 1.04), uGray);
       // scanlines, grain and a dark vignette
       float scan = 0.5 + 0.5 * sin(gl_FragCoord.y * 3.14159 * 0.5);
       c *= 1.0 - (0.035 + 0.22 * a) * scan;
@@ -641,17 +631,25 @@ const sfx = {
   kill() { tone("triangle", 300, 80, 0.25, 0.18); noise(0.15, "lowpass", 600, 0.3); },
   execute() { tone("sawtooth", 90, 40, 0.5, 0.2); noise(0.3, "lowpass", 900, 0.6); tone("sine", 1800, 900, 0.4, 0.05); },
   hurt() { tone("sawtooth", 140, 60, 0.2, 0.15); },
-  lust() { tone("sine", 220, 440, 0.25, 0.08); tone("sine", 330, 660, 0.25, 0.05, 0.05); },
+  focus() { tone("sine", 520, 60, 0.9, 0.14); noise(0.7, "lowpass", 1400, 0.3, 1, 120); tone("sine", 48, 44, 1.2, 0.18); },
+  heart() { tone("sine", 62, 40, 0.16, 0.32); tone("sine", 58, 38, 0.14, 0.22, 0.17); },
   slow() { tone("sine", 600, 90, 0.7, 0.12); noise(0.6, "lowpass", 2000, 0.25, 1, 200); },
   stop() { tone("sine", 70, 40, 1.0, 0.3); tone("square", 1500, 60, 0.4, 0.04); },
   resume() { tone("sine", 90, 600, 0.5, 0.1); },
   pickup() { for (let i = 0; i < 4; i++) tone("sine", 500 * (i + 1), 520 * (i + 1), 0.4, 0.05, i * 0.08); },
+  gunshot() { noise(0.08, "highpass", 1500, 0.8); noise(0.28, "lowpass", 800, 0.65, 0.8, 110); tone("square", 170, 38, 0.15, 0.22); tone("sine", 3300, 2900, 0.32, 0.022); noise(0.4, "highpass", 5200, 0.1, 0.5); },
+  gunHit(head) { tone("square", head ? 1500 : 900, 320, 0.06, 0.07); noise(0.05, "highpass", 3200, 0.32); },
+  gunEmpty() { tone("square", 1250, 1200, 0.03, 0.06); noise(0.03, "highpass", 4000, 0.2); },
+  steam() { noise(1.3, "highpass", 2400, 0.55, 0.7, 7500); noise(0.7, "bandpass", 900, 0.28, 1.5, 260); tone("sawtooth", 80, 55, 0.5, 0.04); },
+  latch() { tone("square", 2100, 1700, 0.03, 0.06); noise(0.04, "highpass", 4200, 0.3); tone("sine", 150, 70, 0.08, 0.18); },
+  gears() { for (let i = 0; i < 7; i++) tone("square", 2300 + Math.random() * 900, 2100, 0.014, 0.022, i * 0.055); },
+  finCharge() { tone("sawtooth", 70, 900, 1.4, 0.05); tone("sine", 180, 1700, 1.4, 0.06); noise(1.3, "bandpass", 900, 0.22, 3, 6000); tone("sine", 45, 40, 1.6, 0.25); },
+  finSlash() { noise(0.6, "highpass", 2400, 0.85, 0.7, 9000); tone("sine", 2800, 260, 0.7, 0.12); tone("square", 62, 28, 1.0, 0.3); noise(1.2, "lowpass", 420, 0.65); for (let i = 0; i < 10; i++) tone("square", 2600 + Math.random() * 3200, 1400, 0.02, 0.035, 0.05 + i * 0.06); },
   door() { noise(1.4, "lowpass", 200, 0.5); tone("sawtooth", 60, 45, 1.4, 0.06); },
 };
 
 // ---------- HUD ----------
 const $ = (id) => document.getElementById(id);
-for (let i = 0; i < 5; i++) { const s = document.createElement("div"); s.className = "seg"; s.appendChild(document.createElement("i")); $("segs").appendChild(s); }
 function log(text, cls = "") {
   const d = document.createElement("div"); d.textContent = text; if (cls) d.className = cls;
   $("log").appendChild(d); setTimeout(() => d.remove(), 8000);
@@ -669,7 +667,7 @@ let yaw = 0, pitch = 0, locked = false;
 addEventListener("keydown", (e) => {
   if (!e.repeat) pressed.add(e.code);
   keys.add(e.code);
-  if (e.code === "KeyR" && state.started && !state.boot && !e.repeat) restart(false);
+  if (e.code === "Backspace" && state.started && !state.boot && !e.repeat) restart(false);
   if (state.boot && (e.code === "Space" || e.code === "Enter") && !e.repeat) state.boot.t = Math.max(state.boot.t, BOOT_END - 0.6);
   if (!$("intro").hidden && (e.code === "Enter" || e.code === "Space") && !e.repeat) introAdvance();
   if (["Space", "ControlLeft", "ControlRight"].includes(e.code)) e.preventDefault();
@@ -1133,13 +1131,13 @@ M.bladeHalo.map = (() => {
   g.putImageData(img, 0, 0); return new THREE.CanvasTexture(c);
 })();
 // the edge pulses like a live current, with a razor-sharp flicker now and then
-const NEON_BASE = new THREE.Color(0x4ff0ff), NEON_LUST = new THREE.Color(0xff2a4a), _edgeC = new THREE.Color();
+const NEON_BASE = new THREE.Color(0x4ff0ff), _edgeC = new THREE.Color();
 let edgeFlick = 0;
 function updateSwordGlow(t, dt) {
   const pulse = 0.5 + 0.5 * Math.sin(t * 6.5) * Math.sin(t * 2.3 + 1);
   if (Math.random() < dt * 1.4) edgeFlick = 1; edgeFlick = Math.max(0, edgeFlick - dt * 9);
   const swing = slashes.length ? 1 : 0;
-  _edgeC.copy(player && player.lust >= 2 ? NEON_LUST : NEON_BASE).lerp(EDGE_HOT, VM.edgeSweep || 0);
+  _edgeC.copy(NEON_BASE).lerp(EDGE_HOT, VM.edgeSweep || 0);
   M.edgeGlow.color.copy(_edgeC).multiplyScalar(1.8 + pulse * 2.2 + edgeFlick * 3 + swing * 1.5);
   M.bladeHalo.color.copy(_edgeC);
   M.bladeHalo.opacity = Math.min(1, 0.5 + pulse * 0.4 + edgeFlick * 0.35 + swing * 0.3);
@@ -1306,7 +1304,6 @@ function parry(e) {
   sfx.parry(); flash("Parry"); impactFrame(45); glitch(0.35);
   stun(e, 1.8, 7);
   hitstop(0.12);
-  if (player.hasSword) addLust(0.25);
 }
 function stun(e, time, knock) {
   if (e.dead) return; // a dead enemy's physics body is gone; touching it crashes the physics engine
@@ -1360,20 +1357,18 @@ function deflect(b) {
   const target = b.owner && !b.owner.dead ? eyeOf(b.owner).add(new THREE.Vector3(0, -0.4, 0)) : b.pos.clone().addScaledVector(lookDir(), 20);
   b.vel = target.sub(b.pos).normalize().multiplyScalar(60);
   b.pos.addScaledVector(b.vel.clone().normalize(), 0.5);
-  addLust(0.25);
 }
 
 function damageEnemy(e, dmg, point, dir, kind) {
-  if (e.dead) return;
-  const almostDead = e.hp <= Math.ceil(e.T.hp * 0.4) || e.stun > 0;
+  if (e.dead || e.finishing) return;
   e.hp -= dmg; e.alert = !e.dummy;
   if (state.mode === "test") popDamage(point, dmg, e.hp <= 0);
   crossTimer = 0.12; impactFx(point, kind);
-  if (kind !== "punch" && kind !== "heavy" && kind !== "explosion") sfx.slash();
+  if (kind !== "punch" && kind !== "heavy" && kind !== "explosion" && kind !== "shot") sfx.slash();
+  if (e.hp <= 0 && canFinish(e, kind)) { e.hp = 0; startFinisher(e); return; }
   if (e.hp <= 0) {
-    const force = { punch: 18, heavy: 30, slash: 22, thrust: 38, deflect: 26, breach: 55, finisher: 60, explosion: 48 }[kind] ?? 20;
+    const force = { punch: 18, heavy: 30, slash: 22, thrust: 38, deflect: 26, breach: 55, finisher: 60, explosion: 48, shot: 16 }[kind] ?? 20;
     killEnemy(e, point, dir, force * (e.type === "bot" ? 2.2 : 1));
-    if (kind === "thrust" && almostDead) { addLust(1); flash("Bloodlust", "var(--blood)"); }
   } else if (kind === "slash") {
     e.knock.copy(dir.clone().setY(0).normalize().multiplyScalar(3));
   }
@@ -1385,11 +1380,11 @@ function killEnemy(e, hitPoint, dir, force) {
   world.removeRigidBody(e.body);
   levelGroup.remove(e.group);
   spawnRagdoll(e, hitPoint, dir, force);
-  sfx.kill(); onKill(e);
+  sfx.kill();
   if (e.dummy && state.mode === "test") TEST.respawn.push({ type: e.type, x: e.home.x, z: e.home.z, t: 3 });
   for (const b of bolts) if (b.owner === e) b.owner = null;
   updateCount();
-  if (alive().length === 0) phaseCleared();
+  if (alive().length === 0 && !state.fin) phaseCleared();
 }
 function updateCount() { $("tcount").textContent = alive().length; }
 
@@ -1486,71 +1481,15 @@ function crashCheck(pos, vel, radius, minSpeed, onCrash) {
   }
 }
 
-// ---------- bloodlust + time ----------
-function addLust(n) {
-  const before = Math.floor(player.lust);
-  player.lust = Math.min(5, player.lust + n);
-  if (Math.floor(player.lust) > before) { sfx.lust(); glitch(0.45); if (player.lust >= 5 && before < 5 && !frenzyOn()) { flash("Frenzy ready · B", "var(--blood)"); } }
-}
-// Kill streaks: each kill within 4 s of the last one is worth more bloodlust than the one before.
-const STREAK_WINDOW = 4;
-function onKill(e) {
-  if (!player || player.dead) return;
-  player.streak = state.time - (player.lastKill ?? -99) < STREAK_WINDOW ? (player.streak || 0) + 1 : 1;
-  player.lastKill = state.time;
-  addLust(Math.min(1.5, 0.4 + 0.3 * (player.streak - 1)));
-  if (frenzyOn()) state.tsTimer = Math.min(state.tsTimer + 1.2, FRENZY_DUR); // kills feed the frenzy
-  const el = $("streak");
-  if (player.streak >= 2) { el.textContent = `×${player.streak} streak`; el.classList.remove("pop"); void el.offsetWidth; el.classList.add("pop"); }
-}
-// Frenzy: at a full meter, hold B to charge it, then for a few seconds every bloodlust power is live at once:
-// the world slows, every hit does heavy damage, the finisher is free and kills extend it.
-const FRENZY_DUR = 8, FRENZY_CHARGE = 0.45;
-const frenzyOn = () => state.tsMode === "frenzy" && state.tsTimer > 0;
-function updateFrenzy(dt) {
-  const B = keys.has("KeyB");
-  if (frenzyOn()) { player.lust = Math.max(player.lust, 5 * state.tsTimer / FRENZY_DUR); player.fcharge = 0; return; }
-  if (B && player.lust >= 5) {
-    player.fcharge = (player.fcharge || 0) + dt; shake = Math.max(shake, player.fcharge * 0.35); glitch(player.fcharge * 0.6);
-    if (player.fcharge >= FRENZY_CHARGE) {
-      player.fcharge = 0; setTime("frenzy", FRENZY_DUR); sfx.stop(); sfx.lust(); flash("FRENZY", "var(--blood)"); impactFrame(80); speedLines(1); fovKick = 16;
-    }
-  } else { if (pressed.has("KeyB") && player.lust < 5) flash("Frenzy needs a full meter", "var(--dim)"); player.fcharge = 0; }
-}
-const lustMult = () => frenzyOn() ? 2.6 : 1 + player.lust * 0.25;
+// ---------- time ----------
 function setTime(mode, seconds) {
-  // frenzy owns the clock until it ends; short slow-downs (executions) don't cut it off
-  if (state.tsMode === "frenzy" && state.tsTimer > 0 && mode === "slow") return;
   state.tsMode = mode; state.tsTimer = seconds; state.ts = TS[mode];
   const c = renderer.domElement.style;
-  c.filter = mode === "stop" ? "saturate(0.15) contrast(1.15) brightness(1.1)" : mode === "slow" ? "saturate(0.6) hue-rotate(-12deg)" : mode === "frenzy" ? "saturate(1.5) contrast(1.12) hue-rotate(-10deg)" : "";
-  document.body.classList.toggle("frenzy", mode === "frenzy");
-  $("tint").style.opacity = mode === "normal" ? 0 : 1;
+  c.filter = mode === "stop" ? "saturate(0.15) contrast(1.15) brightness(1.1)" : mode === "slow" ? "saturate(0.6) hue-rotate(-12deg)" : "";
+  $("tint").style.opacity = mode === "normal" || mode === "focus" ? 0 : 1;
 }
 let hitstopT = 0;
 function hitstop(t) { if (state.tsMode === "normal") hitstopT = t; }
-function useAbility(code) {
-  if (frenzyOn() && code !== "KeyV") return flash("Frenzy is running", "var(--blood)");
-  if (code === "KeyQ") {
-    if (player.lust < 2) return flash("Need 2 bars", "var(--dim)");
-    player.lust -= 1; setTime("slow", 4); sfx.slow(); flash("Slow", "var(--blood)"); glitch(0.5);
-  } else if (code === "KeyX") {
-    if (player.lust < 3) return flash("Need 3 bars", "var(--dim)");
-    player.lust -= 1; setTime("stop", 3); sfx.stop(); flash("Time stopped", "var(--blood)"); glitch(0.9);
-  } else if (code === "KeyV") {
-    if (player.lust < 4 && !frenzyOn()) return flash("Need 4 bars", "var(--dim)");
-    const target = finisherTarget();
-    if (!target) return flash("No target", "var(--dim)");
-    if (!frenzyOn()) player.lust -= 1; // free during a frenzy
-    const ep = enemyPos(target); const from = playerPos();
-    const dir = ep.clone().sub(from).setY(0).normalize();
-    const land = ep.clone().addScaledVector(dir, -1.3); land.y = target.floorY + 0.95;
-    player.body.setTranslation(land, true); player.body.setLinvel({ x: dir.x * 6, y: 0, z: dir.z * 6 }, true);
-    yaw = Math.atan2(-dir.x, -dir.z);
-    sfx.execute(); flash("Finisher", "var(--blood)"); fovKick = 22; shake = 0.4; playAttackAnim(true); impactFrame(90); speedLines(1);
-    damageEnemy(target, 999, ep.clone().setY(ep.y + 0.3), dir.clone().setY(0.3).normalize(), "finisher"); glitch(0.85);
-  }
-}
 function finisherTarget() {
   const o = camOrigin(); const look = lookDir();
   let best = null, bestScore = -1;
@@ -1573,10 +1512,12 @@ function createPlayer(at, faceYaw) {
   yaw = faceYaw; pitch = 0;
   return { body, col, vel: new THREE.Vector3(), hp: 100, lastHurt: -99, grounded: false, sliding: false, eyeH: P.eye,
     dash: P.dashCharges, dashT: 0, dashRe: 0, grapple: null, grappleCd: 0, lastGrapple: -99, coyote: 0, jumpHeld: false,
-    attackT: 0, blocking: false, blockStart: -99, thrustT: 0, thrustHits: new Set(), slideHits: new Set(), lust: 0, breach: false, dead: false,
+    attackT: 0, blocking: false, blockStart: -99, thrustT: 0, thrustHits: new Set(), slideHits: new Set(), breach: false, dead: false,
     // ownsSword: picked up from the armory. weapon: what is in your hand (1 / 2 / mouse wheel switch).
     ownsSword: false, weapon: "sword", swapTo: null, swapT: 0, grapMode: "swing", sling: null, sprinting: false,
+    ownsPistol: false, ammo: 8, gunCd: 0, aiming: false,
     get hasSword() { return this.ownsSword && this.weapon === "sword"; },
+    get hasPistol() { return this.ownsPistol && this.weapon === "pistol"; },
     set hasSword(v) { this.ownsSword = !!v; if (v) this.weapon = "sword"; } };
 }
 function playerPos() { const t = player.body.translation(); return new THREE.Vector3(t.x, t.y, t.z); }
@@ -1603,7 +1544,6 @@ function stepPlayer(dt) {
   const crouchKey = keys.has("ControlLeft") || keys.has("ControlRight") || keys.has("KeyC");
   const crouchPressed = pressed.has("ControlLeft") || pressed.has("ControlRight") || pressed.has("KeyC");
   const hspeed = Math.hypot(vel.x, vel.z);
-  const lustSpeed = 1 + (frenzyOn() ? 5 : player.lust) * 0.07;
   // sprint: keep Shift held (the press still dashes) while running forward on the ground
   const shiftHeld = keys.has("ShiftLeft") || keys.has("ShiftRight");
   player.sprinting = shiftHeld && keys.has("KeyW") && grounded && !crouchKey && !player.blocking && !player.grapple && player.dashT < 0.1;
@@ -1618,7 +1558,7 @@ function stepPlayer(dt) {
 
   if (crouchKey && grounded && !player.sliding && hspeed > 5) {
     player.sliding = true; player.slideHits = new Set();
-    const boost = Math.min(hspeed * 1.25, 21 * lustSpeed) / Math.max(hspeed, 0.001);
+    const boost = Math.min(hspeed * 1.25, 21) / Math.max(hspeed, 0.001);
     vel.x *= boost; vel.z *= boost; sfx.dash();
   }
   if (!crouchKey || hspeed < 3) player.sliding = false;
@@ -1629,12 +1569,12 @@ function stepPlayer(dt) {
   } else if (grounded && !player.sliding) {
     const sp = horiz.length();
     if (sp > 0) { const drop = sp * P.friction * dt; horiz.multiplyScalar(Math.max(sp - drop, 0) / sp); }
-    accelerate(horiz, wish, P.speed * lustSpeed * (crouchKey ? 0.5 : 1) * (player.blocking ? 0.6 : 1) * (player.sprinting ? P.sprint : 1), P.accel, dt);
+    accelerate(horiz, wish, P.speed * (crouchKey ? 0.5 : 1) * (player.blocking ? 0.6 : 1) * (player.sprinting ? P.sprint : 1), P.accel, dt);
   } else if (player.sliding) {
     const sp = horiz.length(); if (sp > 0) horiz.multiplyScalar(Math.max(sp - sp * P.slideFriction * dt, 0) / sp);
     accelerate(horiz, wish, 3, 10, dt);
   } else {
-    accelerate(horiz, wish, P.speed * lustSpeed, P.airAccel, dt);
+    accelerate(horiz, wish, P.speed, P.airAccel, dt);
   }
   vel.x = horiz.x; vel.z = horiz.z;
 
@@ -1643,8 +1583,9 @@ function stepPlayer(dt) {
   vel.y += P.gravity * gScale * dt;
   if (grounded && vel.y < 0) vel.y = Math.max(vel.y, -2);
 
-  // jump, or jump off the grapple
-  if (keys.has("Space") && !player.jumpHeld) {
+  // jump, or jump off the grapple (the sling line keeps Space for focus instead)
+  if (keys.has("Space") && !player.jumpHeld && player.grapple?.mode === "sling") player.jumpHeld = true;
+  else if (keys.has("Space") && !player.jumpHeld) {
     if (player.grapple) { releaseGrapple(); vel.y = Math.max(vel.y, 0) + 7.5; vel.addScaledVector(fwd, 5); player.jumpHeld = true; player.grapLock = true; }
     else if (player.coyote > 0) {
       vel.y = P.jump; player.coyote = 0; player.jumpHeld = true;
@@ -1658,7 +1599,7 @@ function stepPlayer(dt) {
   if (player.dash < P.dashCharges) { player.dashRe += dt; if (player.dashRe > P.dashRecharge) { player.dash++; player.dashRe = 0; } }
   if ((pressed.has("ShiftLeft") || pressed.has("ShiftRight")) && player.dashT <= 0 && player.dash > 0) {
     const d = wish.lengthSq() ? wish.clone() : fwd.clone();
-    vel.x = d.x * P.dashSpeed * lustSpeed; vel.z = d.z * P.dashSpeed * lustSpeed; vel.y = Math.max(vel.y, lookDir().y * 8, 1.5);
+    vel.x = d.x * P.dashSpeed; vel.z = d.z * P.dashSpeed; vel.y = Math.max(vel.y, lookDir().y * 8, 1.5);
     player.dash--; player.dashT = 0.3; sfx.dash(); fovKick = 14; speedLines(0.6);
     CAM.rollV -= d.dot(right) * 5; CAM.kickV -= 2;
   }
@@ -1679,6 +1620,19 @@ function stepPlayer(dt) {
       const lock = slingTarget(); const hit = lock || grappleRay();
       if (hit) { fireGrapple(hit); player.grapple.mode = "sling"; player.grapple.enemy = lock ? lock.e : null; player.grapple.charge = 0; player.grapBuf = 0; }
     } else { const hit = grappleRay(); if (hit) { fireGrapple(hit); player.grapBuf = 0; } }
+  }
+  // focus: on a taut sling line, hold Space and the world nearly stops and drains of colour while you hang there.
+  // Let go of Space (or run out after FOCUS_MAX seconds) and you are fired at the target at full charge.
+  const fg = player.grapple;
+  if (fg?.mode === "sling" && fg.phase === "attached" && !fg.focused && !player.focus && keys.has("Space")) startFocus(fg);
+  if (player.focus) {
+    const F = player.focus; F.t += dt;
+    if (F.t > F.beat) { F.beat += Math.max(0.42, 0.85 - F.t * 0.1); sfx.heart(); }
+    const g = player.grapple, live = g && g.mode === "sling" && g.phase === "attached";
+    if (!live || !keys.has("Space") || F.t >= FOCUS_MAX) {
+      endFocus();
+      if (live) { g.charge = 1; releaseGrapple(); slingLaunch(vel, g); fovKick = Math.max(fovKick, 24); impactFrame(45); glitch(0.5); shake = Math.max(shake, 0.3); }
+    }
   }
   if (player.grapple && !eDown && player.grapple.mode === "sling") {
     const g = player.grapple; const attached = g.phase === "attached"; releaseGrapple();
@@ -1703,7 +1657,8 @@ function stepPlayer(dt) {
     if (g.phase === "fly") { g.t += dt; if (g.t >= g.dur) { g.phase = "attached"; g.latchAt = state.time; g.ramp = 1; sfx.grappleLatch(); shake = Math.max(shake, 0.12); if (g.enemy) flash("Locked", "var(--blood)"); } }
     else {
       g.charge = Math.min(1, g.charge + dt / 0.55);
-      vel.multiplyScalar(Math.pow(0.06, dt)); vel.y += -P.gravity * 0.9 * dt; // braced on the taut line
+      if (player.focus) { vel.multiplyScalar(Math.pow(0.0003, dt)); vel.y -= P.gravity * gScale * dt; } // hanging still in the air
+      else { vel.multiplyScalar(Math.pow(0.06, dt)); vel.y += -P.gravity * 0.9 * dt; } // braced on the taut line
     }
   } else if (player.grapple) {
     const g = player.grapple; const pp = playerPos();
@@ -1738,19 +1693,24 @@ function stepPlayer(dt) {
 
   // block
   if (pressed.has("Block")) player.blockStart = state.time;
-  player.blocking = mouse.right && player.thrustT <= 0;
+  player.blocking = mouse.right && player.thrustT <= 0 && !player.hasPistol;
+  player.aiming = mouse.right && player.hasPistol && !player.swapTo;
+  player.gunCd -= dt;
+  if (player.hasPistol && pressed.has("KeyR")) startGunAnim("reload");
 
   // attack / thrust
   player.attackT -= dt;
   if (player.punch) { player.punch.t -= dt; if (player.punch.t <= 0) { const pk = player.punch; player.punch = null; landPunch(pk); } }
-  if (pressed.has("Attack") && player.attackT <= 0 && !player.blocking) {
+  if (player.hasPistol) {
+    if (pressed.has("Attack") && !player.swapTo) { if (VM.gunAnim?.kind === "reload") sfx.gunEmpty(); else if (player.gunCd <= 0) fireGun(); }
+  } else if (pressed.has("Attack") && player.attackT <= 0 && !player.blocking) {
     if (player.hasSword && (player.sliding || (crouchKey && grounded))) {
       const d = lookDir().setY(0).normalize();
       // light aim assist: bend the thrust toward an enemy close to the crosshair
       const pp = playerPos(); let best = null, bestDot = Math.cos(0.45);
       for (const e of alive()) { const to = enemyPos(e).sub(pp).setY(0); if (to.length() > 10) continue; const dt2 = to.normalize().dot(d); if (dt2 > bestDot) { bestDot = dt2; best = to; } }
       if (best) d.copy(best);
-      vel.x = d.x * 28 * lustSpeed; vel.z = d.z * 28 * lustSpeed; vel.y = Math.max(vel.y, 1);
+      vel.x = d.x * 28; vel.z = d.z * 28; vel.y = Math.max(vel.y, 1);
       player.thrustT = 0.24; player.sliding = false; player.thrustHits = new Set();
       player.attackT = 0.7; sfx.thrust(); fovKick = 16; VM.attack = { kind: "thrust", t: 0, dur: 0.4, arm: "R" }; speedLines(1);
     } else {
@@ -1761,8 +1721,7 @@ function stepPlayer(dt) {
   if (player.thrustT > 0) thrustSweep(vel);
   if (player.sliding) slideSweep(vel);
 
-  for (const code of ["KeyQ", "KeyX", "KeyV"]) if (pressed.has(code)) useAbility(code);
-  updateFrenzy(dt); updateTest(dt);
+  updateTest(dt);
   if (pressed.has("KeyF")) startInspect();
 
   player.body.setLinvel(vel, true);
@@ -1781,6 +1740,15 @@ function fireGrapple(hit) {
   player.grapple = { point: hit.point, phase: "fly", t: 0, dur: Math.min(0.32, Math.max(0.06, dist / 95)), L: dist, ramp: 0 };
   hookFx.state = "out"; VM.grapFire = 1; sfx.grapple();
 }
+const FOCUS_MAX = 4;
+function startFocus(g) {
+  g.focused = true; player.focus = { t: 0, beat: 0.25 };
+  setTime("focus", FOCUS_MAX + 1); sfx.focus(); glitch(0.3); flash("Focus", "#e6e6e6"); fovKick -= 4;
+}
+function endFocus() {
+  if (!player.focus) return;
+  player.focus = null; if (state.tsMode === "focus") setTime("normal", 0); sfx.resume();
+}
 function releaseGrapple() {
   if (player.grapple) { hookFx.from.copy(hookHead()); hookFx.state = "retract"; hookFx.t = 0; sfx.grappleRetract(); }
   player.grapple = null; player.grappleCd = P.grappleCooldown; player.lastGrapple = state.time;
@@ -1788,15 +1756,16 @@ function releaseGrapple() {
 // ---------- weapon switch ----------
 function updateSwap(dt) {
   let want = null;
-  if (pressed.has("Digit1")) want = "fists"; else if (pressed.has("Digit2")) want = "sword";
-  else if (pressed.has("Swap")) want = (player.swapTo || player.weapon) === "sword" ? "fists" : "sword";
+  const owned = ["fists"]; if (player.ownsSword) owned.push("sword"); if (player.ownsPistol) owned.push("pistol");
+  if (pressed.has("Digit1")) want = "fists"; else if (pressed.has("Digit2")) want = "sword"; else if (pressed.has("Digit3")) want = "pistol";
+  else if (pressed.has("Swap")) { const now = player.swapTo || player.weapon; want = owned[(owned.indexOf(now) + 1) % owned.length]; }
   if (want) {
-    if (!player.ownsSword) { if (want === "sword") flash("No sword yet", "var(--dim)"); }
-    else if (want !== (player.swapTo || player.weapon) && !VM.attack) { player.swapTo = want; player.swapT = 0; VM.inspect = null; sfx.servo(); }
+    if (!owned.includes(want)) flash(want === "sword" ? "No sword yet" : "No pistol yet", "var(--dim)");
+    else if (want !== (player.swapTo || player.weapon) && !VM.attack) { player.swapTo = want; player.swapT = 0; VM.inspect = null; cancelGunAnim(); VM.gunSpin = null; sfx.servo(); }
   }
   if (!player.swapTo) return;
   player.swapT += dt; player.attackT = Math.max(player.attackT, 0.04);
-  if (player.swapT >= 0.17 && player.weapon !== player.swapTo) { player.weapon = player.swapTo; setViewModel(); sfx.clunk(); if (player.weapon === "sword") tone("sine", 2600, 2550, 0.5, 0.03); }
+  if (player.swapT >= 0.17 && player.weapon !== player.swapTo) { player.weapon = player.swapTo; setViewModel(); sfx.clunk(); if (player.weapon === "sword") tone("sine", 2600, 2550, 0.5, 0.03); if (player.weapon === "pistol") { sfx.latch(); tone("sine", 220, 330, 0.3, 0.04); } }
   if (player.swapT >= 0.36) player.swapTo = null;
 }
 function swapDip() { return player?.swapTo ? Math.sin(Math.PI * Math.min(1, player.swapT / 0.36)) : 0; }
@@ -1833,12 +1802,11 @@ function slingFlight(vel, dt) {
   for (const e of alive()) {
     const ep = enemyPos(e); if (ep.distanceTo(pp) > 1.9) continue;
     const dir = vel.clone().normalize();
-    const mult = lustMult() * (e === S.e ? 1 : 0.6);
+    const mult = e === S.e ? 1 : 0.6;
     damageEnemy(e, S.dmg * mult, ep, dir.clone().setY(0.35).normalize(), S.dmg >= 4 ? "heavy" : "punch");
     if (!e.dead) stun(e, 1.1, 10);
     sfx.punchHit(true); impactFrame(50); shake = Math.max(shake, 0.45); hitstop(0.07); CAM.kickV += 4;
     flash(e.dead ? "Sling kill" : "Sling strike", "var(--blood)");
-    if (e.dead) addLust(0.5);
     vel.copy(dir).multiplyScalar(-4); vel.y = 6.5; // bounce off the body
     player.sling = null; return;
   }
@@ -1865,7 +1833,7 @@ function breachThrough(pane, at, vel) {
     const ep = enemyPos(e);
     if (ep.distanceTo(at) < 8 && ep.clone().sub(at).dot(dir) > -1) { damageEnemy(e, 999, ep, ep.clone().sub(at).setY(0.3).normalize(), "breach"); n++; }
   }
-  if (n) { addLust(n); sfx.execute(); flash(n > 1 ? `Execution ×${n}` : "Execution", "var(--blood)"); setTime("slow", 0.8); }
+  if (n) { sfx.execute(); flash(n > 1 ? `Execution ×${n}` : "Execution", "var(--blood)"); setTime("slow", 0.8); }
   // neighbouring panes go too
   for (const p of panes) if (!p.broken && p.center.distanceTo(pane.center) < 4.2 && p.center.distanceTo(at) < 4.5) shatter(p, at, dir, 18, true);
 }
@@ -1900,8 +1868,8 @@ function meleeAttack(vel) {
     player.punch = { t: A.dur * 0.3, kind: A.kind, heavy };
     return;
   }
-  const dmgMult = lustMult();
-  const range = (hasSword ? 3.1 : 2.2) * (frenzyOn() ? 1.35 : 1);
+  const dmgMult = 1;
+  const range = hasSword ? 3.1 : 2.2;
   const look = lookDir();
   const targets = meleeTargets(range, hasSword ? 0.9 : 0.6);
   const hits = hasSword ? targets : targets.slice(0, 1);
@@ -1941,7 +1909,7 @@ function landPunch({ kind, heavy }) {
   }
   const { e, point } = t;
   const mult = e.stun > 0 ? 3 : 1;
-  const dmg = (heavy ? 1.5 : 1) * lustMult() * mult;
+  const dmg = (heavy ? 1.5 : 1) * mult;
   const flat = look.clone().setY(0).normalize();
   const dir = kind === "upper" ? flat.clone().setY(1.3).normalize() : kind === "hook" ? flat.clone().add(new THREE.Vector3(-flat.z, 0, flat.x).multiplyScalar(VM.attack?.arm === "R" ? -0.6 : 0.6)).normalize() : flat;
   damageEnemy(e, dmg, point, dir, heavy ? "heavy" : "punch");
@@ -1975,7 +1943,7 @@ function thrustSweep(vel) {
   for (const e of alive()) {
     if (player.thrustHits.has(e) || !pathHits(e, vel, 1.6)) continue;
     player.thrustHits.add(e);
-    damageEnemy(e, 3 * lustMult(), enemyPos(e), vel.clone().normalize(), "thrust");
+    damageEnemy(e, 3, enemyPos(e), vel.clone().normalize(), "thrust");
     hitstop(0.07);
   }
 }
@@ -1992,13 +1960,12 @@ function slideSweep(vel) {
 function damagePlayer(n, src, blocked = false) {
   if (player.dead || state.tsMode === "stop" || player.god) return;
   player.hp -= n; player.lastHurt = state.time; sfx.hurt(); shake = Math.max(shake, blocked ? 0.12 : 0.25); glitch(blocked ? 0.2 : 0.55 + n / 60);
-  if (!blocked && player.lust > 0 && !frenzyOn()) player.lust = Math.max(0, player.lust - 1);
   $("damage").style.boxShadow = `inset 0 0 160px rgba(255,40,60,${0.25 + (1 - player.hp / 100) * 0.5})`;
   setTimeout(() => ($("damage").style.boxShadow = "inset 0 0 160px rgba(255,40,60,0)"), 180);
   if (player.hp <= 0) killPlayer(`Chassis destroyed by a ${src.T.label.toLowerCase()}.`);
 }
 function killPlayer(msg) {
-  player.dead = true; player.grapple = null; state.over = true; setTime("normal", 0); glitch(1);
+  player.focus = null; player.dead = true; player.grapple = null; state.over = true; setTime("normal", 0); glitch(1);
   document.exitPointerLock?.();
   const cp = state.checkpoint === 2 ? "Restoring from the armory checkpoint." : "Reloading UNIT-7 from backup.";
   showScreen("Offline", "OFFLINE", msg, `ARBITER: Disappointing. ${cp}`, "Reboot", true);
@@ -2039,7 +2006,8 @@ function buildTestLevel() {
   for (const [x, h] of [[12, 1.5], [16, 3], [20, 4.5], [24, 6]]) fixedBox(x, h / 2, -14, 3.6, h, 3.6, M.concrete);
   fixedBox(-14, 1.4, -14, 10, 0.4, 4, M.concrete, { rot: [0, 0, 0.3] });
   for (const [x, z, s] of [[-6, 6, 1.4], [6, 8, 1.2], [-10, -4, 1.6]]) fixedBox(x, s / 2, z, s, s, s, M.crate);
-  door = { mesh: new THREE.Object3D(), opening: false, y: 0 }; sword = new THREE.Group(); sword.userData.light = { intensity: 0 };
+  door = { mesh: new THREE.Object3D(), opening: false, y: 0 }; sword = new THREE.Group();
+  const tl = new THREE.PointLight(0x4ff0ff, 0, 9, 1.8); tl.position.set(0, -50, 0); levelGroup.add(tl); sword.userData.light = tl; // borrowed by the finisher
   TEST.respawn = []; TEST.spots = [];
   buildCity();
 }
@@ -2058,8 +2026,11 @@ function spawnDummies() {
 function updateTest(dt) {
   if (state.mode !== "test") return;
   for (let i = TEST.respawn.length - 1; i >= 0; i--) { const r = TEST.respawn[i]; r.t -= dt; if (r.t <= 0) { TEST.respawn.splice(i, 1); spawnDummy(r.type, r.x, r.z); updateCount(); } }
-  if (pressed.has("KeyK")) { player.lust = 5; flash("Bloodlust full", "var(--blood)"); sfx.lust(); }
   if (pressed.has("KeyL")) { for (const r of TEST.respawn) r.t = 0; }
+  if (pressed.has("KeyN") && player.ownsSword) {
+    const pp = playerPos(); const tgt = finisherTarget() || alive().sort((a, b) => enemyPos(a).distanceTo(pp) - enemyPos(b).distanceTo(pp))[0];
+    if (tgt) startFinisher(tgt); else flash("No target", "var(--dim)");
+  }
   if (pressed.has("KeyH")) { player.god = !player.god; flash(player.god ? "God mode on" : "God mode off", "var(--amber)"); }
   if (pressed.has("KeyJ")) {
     for (let i = 0; i < 3; i++) { const types = ["brawler", "gunman", "bot"]; spawnEnemy(types[i], -16 + i * 16, 0, -44); const e = enemies[enemies.length - 1]; e.alert = true; }
@@ -2085,13 +2056,14 @@ function phaseCleared() {
 }
 function openDoor() { door.opening = true; world.removeRigidBody(door.body); sfx.door(); }
 function pickupSword() {
-  player.ownsSword = true; player.weapon = "sword"; state.phase = 2; state.checkpoint = 2;
+  player.ownsSword = true; player.ownsPistol = true; player.ammo = GUN.mag; player.weapon = "sword"; state.phase = 2; state.checkpoint = 2;
   levelGroup.remove(sword); sword.userData.light.intensity = 0;
-  sfx.pickup(); flash("Sword acquired", "var(--cyan)"); glitch(0.7);
+  sfx.pickup(); flash("Sword and pistol acquired", "var(--cyan)"); glitch(0.7);
   setObjective("Breach the sealed wings through the windows");
   setViewModel();
   log("OKAFOR-REYES: The east wing and the server room are sealed from inside. Go out the window.", "okafor");
   setTimeout(() => log("Tip: slash the window, then press E on the amber rails outside. Hold E to hang, let go to fling. Hold E on a window and press C to breach.", "tip"), 2500);
+  setTimeout(() => log("Tip: press 3 for the steam pistol. R vents it when it runs dry. Hold RMB to aim.", "tip"), 4800);
   setTimeout(() => log("Tip: parry is easier with the blade. Block right as a bolt reaches you to send it back.", "tip"), 7000);
   spawnPhase(2); updateCount();
 }
@@ -2171,14 +2143,668 @@ const trickG = new THREE.Group(); trickG.position.copy(FIST); armR.hand.add(tric
 const swordMount = new THREE.Group(); swordMount.rotation.z = Math.PI / 2; trickG.add(swordMount);
 const vmSword = buildSwordMesh(); vmSword.scale.setScalar(0.62); vmSword.position.set(0, 0.0434, 0); swordMount.add(vmSword);
 // finger joint angles: open hand, empty fist, and wrapped around the sword grip (solved to hug the handle)
-const HAND_OPEN = [-0.12, -0.1, -0.05], HAND_FIST = [-1.5, -1.55, -1.2], HAND_GRIP = [-1.0, -0.8, -1.0];
-function setViewModel() { vmSword.visible = !!player?.hasSword; }
+const HAND_OPEN = [-0.12, -0.1, -0.05], HAND_FIST = [-1.5, -1.55, -1.2], HAND_GRIP = [-1.0, -0.8, -1.0], HAND_PGRIP = [-1.25, -1.2, -1.05];
+function setViewModel() { vmSword.visible = !!player?.hasSword; gunG.visible = !!player?.hasPistol; }
 
 const REST_R = { p: [0.27, -0.33, -0.06], r: [0.02, 0.14, 0], el: 0.42, w: [-0.05, 0, 0], curl: 0.95 };
 const REST_L = { p: [-0.27, -0.33, -0.06], r: [0.02, -0.14, 0], el: 0.42, w: [-0.05, 0, 0], curl: 0.95 };
 const SWORD_REST = { p: [0.25, -0.35, -0.06], r: [0.05, 0.2, 0], el: 0.6, w: [0.25, 0, -0.35], curl: 1 };
 const clonePose = (p) => ({ p: [...p.p], r: [...p.r], el: p.el, w: [...p.w], curl: p.curl });
 const cur = { R: clonePose(REST_R), L: clonePose(REST_L) };
+
+// ---------- the pistol: a long-barrelled steam pistol whose top lifts off to show the glowing works ----------
+// Gun space: the grip hangs down -y, the barrel runs along -z, the right side faces +x.
+const GUN = { mag: 8, cd: 0.17, dmg: 1.5, head: 4, range: 140, spread: 0.012 };
+const GM = {
+  brass: metal(0xc99a45, 0.26, { metalness: 0.95 }),
+  copper: metal(0xb8683c, 0.3, { metalness: 0.95 }),
+  iron: metal(0x2e2c35, 0.42),
+  steel: metal(0xa4acba, 0.18),
+  wood: toon(0x6a3420),
+  core: new THREE.MeshBasicMaterial({ color: 0xffa040 }),
+  sleeve: new THREE.MeshBasicMaterial({ color: 0xffc070, transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending }),
+  wireC: new THREE.MeshBasicMaterial({ color: 0x4ff0ff }),
+  wireR: new THREE.MeshBasicMaterial({ color: 0xff5a2a }),
+  face: new THREE.MeshBasicMaterial({ color: 0xeadcb8 }),
+  hole: new THREE.MeshBasicMaterial({ color: 0x050307 }),
+};
+const GUN_GRIP = new THREE.Vector3(0, -0.034, 0.011);   // where the fist closes on the grip
+const GUN_TG = new THREE.Vector3(0, 0.003, -0.036);      // inside the trigger guard: the axle for spins
+const GUN_MUZZLE = new THREE.Vector3(0, 0.05, -0.33);
+const GUN_CORE = new THREE.Vector3(0, 0.056, -0.045);
+const GP = {}; // moving parts
+VM.aim = 0; VM.recoil = 0; VM.trigger = 0; VM.coreFlare = 0; VM.gunWorks = 0; VM.flashT = 0;
+function buildPistol() {
+  const g = new THREE.Group();
+  const add = (geo, mat, x, y, z, parent = g, inked = false) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); if (inked) ink(m); parent.add(m); return m; };
+  const cyl = (r1, r2, len, seg = 16) => new THREE.CylinderGeometry(r1, r2, len, seg);
+  const zc = (r1, r2, len, mat, x, y, z, parent = g, seg = 16) => { const m = add(cyl(r1, r2, len, seg), mat, x, y, z, parent); m.rotation.x = Math.PI / 2; return m; };
+  const xc = (r, len, mat, x, y, z, parent = g, seg = 16) => { const m = add(cyl(r, r, len, seg), mat, x, y, z, parent); m.rotation.z = Math.PI / 2; return m; };
+  const tube = (pts, r, mat, parent = g) => { const m = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p))), 24, r, 5, false), mat); parent.add(m); return m; };
+  // grip: walnut panels on an iron core, raked back, brass butt cap and screws
+  const grip = new THREE.Group(); grip.rotation.x = -0.3; g.add(grip);
+  add(rbox(0.028, 0.11, 0.04, 0.4), GM.iron, 0, -0.048, 0, grip, true);
+  add(rbox(0.034, 0.088, 0.032, 0.45), GM.wood, 0, -0.05, 0.002, grip);
+  add(rbox(0.036, 0.014, 0.046, 0.4), GM.brass, 0, -0.104, 0.001, grip, true);
+  for (const sx of [-1, 1]) for (const y of [-0.028, -0.072]) xc(0.0042, 0.002, GM.brass, sx * 0.0175, y, 0.003, grip, 8);
+  // frame, trigger guard and trigger
+  add(rbox(0.03, 0.032, 0.16, 0.35), GM.iron, 0, 0.018, -0.04, g, true);
+  const guard = add(new THREE.TorusGeometry(0.0165, 0.0026, 6, 18, Math.PI), GM.brass, 0, 0.003, -0.036);
+  guard.rotation.set(0, Math.PI / 2, Math.PI);
+  const trig = new THREE.Group(); trig.position.set(0, 0.006, -0.031); g.add(trig); GP.trigger = trig;
+  add(rbox(0.006, 0.02, 0.006, 0.45), GM.steel, 0, -0.01, -0.002, trig).rotation.x = 0.35;
+  // the receiver: an open brass tray the works sit in
+  for (const sx of [-1, 1]) add(rbox(0.004, 0.034, 0.152, 0.4), GM.brass, sx * 0.016, 0.05, -0.036, g, true);
+  add(rbox(0.032, 0.034, 0.006, 0.4), GM.brass, 0, 0.05, 0.039, g, true);
+  add(rbox(0.032, 0.034, 0.006, 0.4), GM.brass, 0, 0.05, -0.111, g, true);
+  for (const sx of [-1, 1]) for (let i = 0; i < 6; i++) xc(0.0018, 0.003, GM.copper, sx * 0.0183, 0.062, 0.03 - i * 0.026, g, 6);
+  // long barrel: cooling fins at the chamber, banded with brass, a copper reservoir slung underneath, a crowned muzzle
+  zc(0.0105, 0.0105, 0.215, GM.iron, 0, 0.05, -0.222);
+  for (let i = 0; i < 6; i++) zc(0.0165, 0.0165, 0.0022, GM.steel, 0, 0.05, -0.118 - i * 0.0055, g, 18);
+  for (const z of [-0.175, -0.235, -0.29]) zc(0.0128, 0.0128, 0.007, GM.brass, 0, 0.05, z);
+  zc(0.0145, 0.013, 0.026, GM.brass, 0, 0.05, -0.322);
+  zc(0.0062, 0.0062, 0.004, GM.hole, 0, 0.05, -0.3355, g, 12);
+  zc(0.0068, 0.0068, 0.15, GM.copper, 0, 0.027, -0.19);
+  zc(0.0078, 0.0078, 0.008, GM.brass, 0, 0.027, -0.268);
+  add(rbox(0.004, 0.01, 0.012, 0.4), GM.brass, 0, 0.065, -0.318);           // front sight
+  for (let i = 0; i < 4; i++) { const t = add(new THREE.TorusGeometry(0.0118, 0.0016, 5, 16), GM.wireC, 0, 0.05, -0.146 - i * 0.006); }  // glowing coil
+  // pressure gauge on the right side: the needle reads what is left in the chamber
+  xc(0.012, 0.007, GM.brass, 0.021, 0.026, 0.016, g, 18);
+  xc(0.0098, 0.0012, GM.face, 0.0249, 0.026, 0.016, g, 18);
+  const needle = new THREE.Group(); needle.position.set(0.0257, 0.026, 0.016); g.add(needle); GP.needle = needle;
+  add(new THREE.BoxGeometry(0.0008, 0.0085, 0.0012), GM.wireR, 0, 0.004, 0, needle);
+  // hydraulic line down the left side
+  tube([[-0.017, 0.03, 0.03], [-0.02, 0.022, 0.0], [-0.02, 0.022, -0.08], [-0.012, 0.027, -0.13]], 0.0024, GM.copper);
+  // hammer at the back, cocks on every shot
+  const ham = new THREE.Group(); ham.position.set(0, 0.06, 0.042); g.add(ham); GP.hammer = ham;
+  add(rbox(0.008, 0.024, 0.008, 0.4), GM.steel, 0, 0.01, 0.004, ham, true);
+  // ---- the works ----
+  const works = new THREE.Group(); g.add(works); GP.works = works;
+  // the core: a glowing glass vial along the bore, capped in brass
+  zc(0.0075, 0.0075, 0.05, GM.core, GUN_CORE.x, GUN_CORE.y, GUN_CORE.z, works);
+  GP.sleeve = zc(0.0108, 0.0108, 0.054, GM.sleeve, GUN_CORE.x, GUN_CORE.y, GUN_CORE.z, works);
+  for (const dz of [-0.029, 0.029]) zc(0.0115, 0.0115, 0.006, GM.brass, 0, GUN_CORE.y, GUN_CORE.z + dz, works);
+  // gears: a big one and a small one meshed above it
+  const gear = (r, teeth, x, y, z) => {
+    const gr = new THREE.Group(); gr.position.set(x, y, z); works.add(gr);
+    xc(r * 0.82, 0.005, GM.brass, 0, 0, 0, gr, 18); xc(r * 0.3, 0.007, GM.steel, 0, 0, 0, gr, 8);
+    for (let i = 0; i < teeth; i++) { const a = (i / teeth) * Math.PI * 2; const t = add(new THREE.BoxGeometry(0.005, r * 0.3, r * 0.32), GM.brass, 0, Math.cos(a) * r * 0.92, Math.sin(a) * r * 0.92, gr); t.rotation.x = -a; }
+    for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2; const sp = add(new THREE.BoxGeometry(0.006, r * 0.9, 0.002), GM.copper, 0, Math.cos(a) * r * 0.4, Math.sin(a) * r * 0.4, gr); sp.rotation.x = -a; }
+    return gr;
+  };
+  GP.gear1 = gear(0.0135, 12, 0, 0.051, 0.015);
+  GP.gear2 = gear(0.0085, 8, 0.002, 0.0715, 0.0265);
+  // twin pistons at the front of the tray, and a hydraulic ram along the side
+  GP.pistons = [];
+  for (const [x, z] of [[-0.0065, -0.093], [0.0065, -0.093]]) {
+    add(cyl(0.0048, 0.0048, 0.02, 12), GM.copper, x, 0.045, z, works);
+    add(cyl(0.0056, 0.0056, 0.003, 12), GM.brass, x, 0.056, z, works);
+    const rod = new THREE.Group(); rod.position.set(x, 0.058, z); works.add(rod);
+    add(cyl(0.0022, 0.0022, 0.02, 8), GM.steel, 0, 0.0, 0, rod); add(cyl(0.0052, 0.0052, 0.0035, 12), GM.brass, 0, 0.01, 0, rod);
+    GP.pistons.push(rod);
+  }
+  zc(0.0042, 0.0042, 0.034, GM.copper, 0.0085, 0.04, -0.005, works, 10);
+  const ram = new THREE.Group(); ram.position.set(0.0085, 0.04, -0.005); works.add(ram); GP.ram = ram;
+  zc(0.0018, 0.0018, 0.03, GM.steel, 0, 0, 0.022, ram, 6);
+  // wires: two live lines out of the core, and a copper feed between the pistons and the ram
+  tube([[0.004, 0.056, -0.072], [0.009, 0.072, -0.062], [0.01, 0.078, -0.03], [0.008, 0.074, 0.0], [0.006, 0.066, 0.03]], 0.0015, GM.wireC, works);
+  tube([[-0.004, 0.056, -0.072], [-0.009, 0.07, -0.06], [-0.011, 0.076, -0.025], [-0.009, 0.07, 0.008], [-0.006, 0.06, 0.032]], 0.0015, GM.wireR, works);
+  tube([[0.0, 0.042, -0.093], [0.006, 0.038, -0.07], [0.0085, 0.04, -0.03]], 0.0017, GM.copper, works);
+  // the top cover: riveted brass over an iron shell, with vents and the rear sight
+  const top = new THREE.Group(); top.position.set(0, 0.072, -0.036); g.add(top); GP.top = top;
+  add(rbox(0.04, 0.03, 0.158, 0.45), GM.iron, 0, 0, 0, top, true);
+  add(rbox(0.03, 0.006, 0.15, 0.4), GM.brass, 0, 0.0155, 0, top);
+  for (let i = 0; i < 5; i++) add(new THREE.BoxGeometry(0.022, 0.002, 0.004), GM.hole, 0, 0.0187, -0.055 + i * 0.012, top);
+  for (const sx of [-1, 1]) for (let i = 0; i < 7; i++) add(new THREE.SphereGeometry(0.0021, 6, 4), GM.brass, sx * 0.0205, 0.004, 0.068 - i * 0.0225, top);
+  add(rbox(0.012, 0.008, 0.008, 0.4), GM.brass, 0, 0.019, 0.07, top);  // rear sight
+  add(rbox(0.006, 0.01, 0.018, 0.4), GM.steel, 0.021, -0.006, 0.07, top); // latch
+  GP.topHomeP = top.position.clone(); GP.topHomeQ = top.quaternion.clone();
+  return g;
+}
+const gunG = new THREE.Group(); armR.hand.add(gunG);
+const GUN_SCALE = 1.2;
+const vmGun = buildPistol(); vmGun.scale.setScalar(GUN_SCALE); vmGun.position.copy(GUN_GRIP).multiplyScalar(-GUN_SCALE); gunG.add(vmGun); gunG.visible = false;
+// how the pistol sits in the fist (hand space), and the extended index finger it spins on
+const GUN_HOLD_P = FIST.clone().add(new THREE.Vector3(0.002, 0, 0.004));
+const GUN_HOLD_Q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0.28, 0, Math.PI / 2, "ZYX")); // grip rake lined up with the fist
+const GUN_FINGER = new THREE.Vector3(-0.0375, -0.004, -0.155);
+const GUN_TILT = -0.5;
+const _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _va = new THREE.Vector3(), _ax = new THREE.Vector3();
+const Q_SPIN0 = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, -Math.PI / 2, 0));
+gunG.position.copy(GUN_HOLD_P); gunG.quaternion.copy(GUN_HOLD_Q);
+function spinFrame(a, outP, outQ) {
+  // the gun turns about the index finger (hand z) with its trigger guard on the finger
+  outQ.setFromAxisAngle(_ax.set(0, 0, 1), a).multiply(Q_SPIN0);
+  _va.copy(GUN_TG).sub(GUN_GRIP).multiplyScalar(GUN_SCALE).applyQuaternion(outQ);
+  outP.copy(GUN_FINGER).sub(_va);
+}
+// steam puffs and a muzzle flash, both in the arm camera's space
+const puffTex = (() => {
+  const c = document.createElement("canvas"); c.width = c.height = 64; const x = c.getContext("2d");
+  const gr = x.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, "rgba(255,255,255,0.85)"); gr.addColorStop(0.5, "rgba(255,255,255,0.3)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+  x.fillStyle = gr; x.fillRect(0, 0, 64, 64); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
+const flashTex = (() => {
+  const c = document.createElement("canvas"); c.width = c.height = 128; const x = c.getContext("2d");
+  const gr = x.createRadialGradient(64, 64, 0, 64, 64, 64); gr.addColorStop(0, "rgba(255,250,230,1)"); gr.addColorStop(0.25, "rgba(255,190,90,0.9)"); gr.addColorStop(1, "rgba(255,120,30,0)");
+  x.fillStyle = gr; x.beginPath();
+  for (let i = 0; i < 12; i++) { const a = (i / 12) * Math.PI * 2, r = i % 2 ? 18 : 62; x.lineTo(64 + Math.cos(a) * r, 64 + Math.sin(a) * r); }
+  x.closePath(); x.fill(); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
+const STEAM_N = 16;
+const steamPuffs = Array.from({ length: STEAM_N }, () => {
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: puffTex, color: 0xdfe4ec, transparent: true, depthWrite: false, opacity: 0 }));
+  s.visible = false; s.renderOrder = 22; vmCamera.add(s); return { s, life: 0, max: 1, v: new THREE.Vector3(), grow: 1 };
+});
+let steamI = 0;
+const muzzleFlash = new THREE.Sprite(new THREE.SpriteMaterial({ map: flashTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+muzzleFlash.visible = false; muzzleFlash.renderOrder = 24; vmCamera.add(muzzleFlash);
+const _wp = new THREE.Vector3();
+function gunPoint(local, out = new THREE.Vector3()) { vmGun.updateWorldMatrix(true, false); vmCamera.updateMatrixWorld(true); out.copy(local); vmGun.localToWorld(out); return vmCamera.worldToLocal(out); }
+function emitSteam(at, n, up = 1) {
+  for (let i = 0; i < n; i++) {
+    const P = steamPuffs[steamI]; steamI = (steamI + 1) % STEAM_N;
+    P.s.position.copy(at).add(_wp.set((Math.random() - 0.5) * 0.01, Math.random() * 0.01, (Math.random() - 0.5) * 0.01));
+    P.v.set((Math.random() - 0.5) * 0.12, (0.18 + Math.random() * 0.2) * up, (Math.random() - 0.3) * 0.08);
+    P.max = P.life = 0.7 + Math.random() * 0.6; P.grow = 0.05 + Math.random() * 0.05; P.s.visible = true; P.s.material.rotation = Math.random() * 6.3;
+  }
+}
+function emitGunSparks(at, n, speed = 1.4) {
+  const S = slashSparks;
+  for (let i = 0; i < n; i++) {
+    const p = S.p[S.i]; S.i = (S.i + 1) % SPARK_N;
+    p.x.copy(at); p.max = p.life = 0.15 + Math.random() * 0.3; p.warm = true; p.hot = Math.random();
+    p.v.set((Math.random() - 0.5) * 2, Math.random() * 1.6 + 0.4, (Math.random() - 0.5) * 1.4).multiplyScalar(speed);
+  }
+}
+function updateGunFx(dt) {
+  for (const P of steamPuffs) {
+    if (P.life <= 0) continue;
+    P.life -= dt; const q = Math.max(0, P.life / P.max);
+    P.v.multiplyScalar(Math.pow(0.35, dt)); P.s.position.addScaledVector(P.v, dt);
+    const sz = 0.02 + (1 - q) * P.grow * 2.2; P.s.scale.set(sz, sz, sz);
+    P.s.material.opacity = Math.sin(q * Math.PI) * 0.42; if (P.life <= 0) P.s.visible = false;
+  }
+  if (VM.flashT > 0) { VM.flashT -= dt; if (VM.flashT <= 0) muzzleFlash.visible = false; }
+}
+// a tracer from the muzzle to whatever the shot hit, in the world
+const tracers = Array.from({ length: 4 }, () => {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffd28a, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+  m.visible = false; m.frustumCulled = false; scene.add(m); return { m, t: 0 };
+});
+let tracerI = 0;
+function spawnTracer(a, b) {
+  const T = tracers[tracerI]; tracerI = (tracerI + 1) % tracers.length;
+  const len = a.distanceTo(b); T.m.position.copy(a).add(b).multiplyScalar(0.5); T.m.scale.set(0.014, 0.014, len);
+  T.m.lookAt(b); T.t = 0.07; T.m.visible = true; T.m.material.opacity = 0.9;
+}
+// world-space sparks (bullet strikes and the finisher), one draw call
+const WSPARK_N = 160;
+const worldSparks = (() => {
+  const pos = new Float32Array(WSPARK_N * 6), col = new Float32Array(WSPARK_N * 6);
+  const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(pos, 3)); geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  const lines = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  lines.frustumCulled = false; lines.renderOrder = 12; scene.add(lines);
+  return { lines, pos, col, p: Array.from({ length: WSPARK_N }, () => ({ life: 0, max: 1, x: new THREE.Vector3(), v: new THREE.Vector3(), c: 0 })), i: 0 };
+})();
+function emitWorldSparks(at, dir, n, color = 0, speed = 9) {
+  // color: 0 warm (orange), 1 cyan, 2 white-hot
+  const S = worldSparks;
+  for (let i = 0; i < n; i++) {
+    const p = S.p[S.i]; S.i = (S.i + 1) % WSPARK_N;
+    p.x.copy(at); p.max = p.life = 0.2 + Math.random() * 0.45; p.c = color;
+    p.v.set(Math.random() - 0.5, Math.random() - 0.3, Math.random() - 0.5).multiplyScalar(1.4).add(dir).normalize().multiplyScalar(speed * (0.35 + Math.random() * 0.8));
+  }
+}
+const _wd = new THREE.Vector3();
+function updateWorldSparks(dt) {
+  const S = worldSparks; let live = false;
+  for (let i = 0; i < WSPARK_N; i++) {
+    const p = S.p[i], o = i * 6;
+    if (p.life <= 0) { if (S.pos[o] !== 0 || S.pos[o + 3] !== 0) { S.pos.fill(0, o, o + 6); S.col.fill(0, o, o + 6); } continue; }
+    live = true; p.life -= dt; p.v.y -= 14 * dt; p.v.multiplyScalar(Math.pow(0.4, dt)); p.x.addScaledVector(p.v, dt);
+    const q = Math.max(0, p.life / p.max); const len = 0.05 + 0.06 * q;
+    _wd.copy(p.v); const sp = _wd.length(); if (sp > 1e-4) _wd.divideScalar(sp); else _wd.set(0, 1, 0);
+    S.pos[o] = p.x.x; S.pos[o + 1] = p.x.y; S.pos[o + 2] = p.x.z;
+    S.pos[o + 3] = p.x.x - _wd.x * len; S.pos[o + 4] = p.x.y - _wd.y * len; S.pos[o + 5] = p.x.z - _wd.z * len;
+    const [r, g, b] = p.c === 1 ? [0.4, 0.95, 1] : p.c === 2 ? [1, 0.95, 0.85] : [1, 0.6, 0.18];
+    const k = 2.4 * q; S.col[o] = r * k; S.col[o + 1] = g * k; S.col[o + 2] = b * k; S.col[o + 3] = r * k * 0.2; S.col[o + 4] = g * k * 0.2; S.col[o + 5] = b * k * 0.2;
+  }
+  S.lines.visible = live;
+  if (live) { S.lines.geometry.attributes.position.needsUpdate = true; S.lines.geometry.attributes.color.needsUpdate = true; }
+  for (const T of tracers) if (T.t > 0) { T.t -= dt; T.m.material.opacity = Math.max(0, T.t / 0.07) * 0.9; if (T.t <= 0) T.m.visible = false; }
+}
+// the muzzle in world space: projected through the arm camera, unprojected through the world camera
+function muzzleWorld() {
+  const v = gunPoint(GUN_MUZZLE, new THREE.Vector3()); vmCamera.localToWorld(v);
+  const dist = v.length(); v.project(vmCamera); v.z = 0.5; v.unproject(camera);
+  return v.sub(camera.position).normalize().multiplyScalar(Math.max(0.35, dist)).add(camera.position);
+}
+function fireGun() {
+  if (player.ammo <= 0) { sfx.gunEmpty(); flash("Vent the chamber · R", "var(--amber)"); startGunAnim("reload"); return; }
+  player.ammo--; player.gunCd = GUN.cd; VM.recoil = 1; VM.trigger = 1; VM.trick = null;
+  if (VM.gunAnim?.kind === "inspect") cancelGunAnim();
+  VM.gunSpin = null;
+  sfx.gunshot(); CAM.kickV += 2.2 + VM.aim * -0.8; CAM.rollV += (Math.random() - 0.5) * 1.2; shake = Math.max(shake, 0.1); fovKick += 1.2;
+  const o = camOrigin(); const d = lookDir();
+  const spr = GUN.spread * (1 - VM.aim * 0.9) * (player.grounded ? 1 : 1.5);
+  d.x += (Math.random() - 0.5) * spr; d.y += (Math.random() - 0.5) * spr; d.z += (Math.random() - 0.5) * spr; d.normalize();
+  const from = o.clone(); let left = GUN.range, end = null;
+  for (let pass = 0; pass < 5 && left > 0; pass++) {
+    const hit = world.castRayAndGetNormal(new RAPIER.Ray(from, d), left, true, undefined, GROUPS.playerShot, player.col);
+    if (!hit) break;
+    const toi = hit.toi ?? hit.timeOfImpact; const at = from.clone().addScaledVector(d, toi); const h = hit.collider.handle;
+    const pane = glassByHandle.get(h);
+    if (pane) { shatter(pane, at, d, 14); from.copy(at).addScaledVector(d, 0.06); left -= toi + 0.06; continue; } // bullets go through glass
+    end = at;
+    const n = new THREE.Vector3(hit.normal.x, hit.normal.y, hit.normal.z);
+    const e = enemyByHandle.get(h);
+    if (e && !e.dead) {
+      const head = at.y - e.floorY > 1.47;
+      damageEnemy(e, head ? GUN.head : GUN.dmg, at, d.clone(), "shot");
+      if (!e.dead) { e.flinch = 0.22; e.flinchDir = "jab"; e.knock.copy(d).setY(0).normalize().multiplyScalar(head ? 5 : 3); flashEnemy(e); }
+      if (head) flash(e.dead ? "Headshot" : "Head", "var(--amber)");
+      emitWorldSparks(at, d.clone().negate(), 16, 0, 7); sfx.gunHit(head); hitstop(e.dead ? 0.06 : 0.03);
+      $("cross").classList.add("hit"); crossTimer = 0.12;
+    } else {
+      const rd = ragByHandle.get(h);
+      if (rd) rd.parts.find((p) => p.col.handle === h).body.applyImpulseAtPoint({ x: d.x * 14, y: 3, z: d.z * 14 }, at, true);
+      emitWorldSparks(at.clone().addScaledVector(n, 0.02), n, 10, 0, 6); spark(at, 0xffc070);
+    }
+    break;
+  }
+  if (!end) end = from.clone().addScaledVector(d, left);
+  spawnTracer(muzzleWorld(), end);
+  alertNear(playerPos(), 28);
+  // at the gun: a flash, a few sparks out of the muzzle, a breath of steam from the vents
+  const mz = gunPoint(GUN_MUZZLE, new THREE.Vector3());
+  muzzleFlash.position.copy(mz); muzzleFlash.scale.setScalar(0.09 + Math.random() * 0.04); muzzleFlash.material.rotation = Math.random() * 6.3; muzzleFlash.visible = true; VM.flashT = 0.045;
+  emitGunSparks(mz, 5, 1.6); emitSteam(gunPoint(_wp.set(0, 0.09, -0.05)), 1, 0.6);
+  VM.coreFlare = 1;
+}
+
+// ---------- finisher: the last kill of the floor plays out in third person ----------
+// You (a full robot body) draw the sword, charge it until it crackles, dash through the last enemy and cut them in
+// half at the waist. Both halves fall apart spitting wires and sparks, then the view drops back into your eyes.
+M.cutHot = new THREE.MeshBasicMaterial({ color: 0xffb060 });
+let finRig = null;
+const FIN_DUR = 3.5, FIN_SLICE = 1.52;
+function buildFinRig() {
+  const root = new THREE.Group(); root.visible = false; scene.add(root);
+  const J = { root };
+  const grp = (parent, x, y, z) => { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; };
+  J.pelvis = grp(root, 0, 0.98, 0);
+  sbox(J.pelvis, 0.38, 0.17, 0.25, M.roboDark, 0, 0, 0);
+  J.spine = grp(J.pelvis, 0, 0.08, 0);
+  sbox(J.spine, 0.46, 0.5, 0.28, M.robo, 0, 0.32, 0);
+  sbox(J.spine, 0.36, 0.18, 0.04, M.roboAccent, 0, 0.42, -0.15);
+  sbox(J.spine, 0.1, 0.1, 0.03, M.cyan, 0, 0.42, -0.172);
+  sbox(J.spine, 0.5, 0.08, 0.3, M.roboDark, 0, 0.1, 0);
+  sbox(J.spine, 0.2, 0.3, 0.08, M.roboDark, 0, 0.35, 0.16); // back pack
+  J.head = grp(J.spine, 0, 0.62, 0);
+  sbox(J.head, 0.24, 0.24, 0.26, M.robo, 0, 0.14, 0);
+  sbox(J.head, 0.2, 0.05, 0.03, M.cyan, 0, 0.16, -0.135);
+  sbox(J.head, 0.26, 0.06, 0.2, M.roboDark, 0, 0.27, 0.02);
+  for (const side of [-1, 1]) {
+    const k = side > 0 ? "R" : "L";
+    const sh = J["sh" + k] = grp(J.spine, side * 0.31, 0.52, 0);
+    sbox(sh, 0.16, 0.16, 0.16, M.roboDark, 0, 0, 0);
+    sbox(sh, 0.12, 0.3, 0.12, M.robo, 0, -0.16, 0);
+    sbox(sh, 0.13, 0.17, 0.04, M.roboAccent, 0, -0.16, -0.06);
+    const el = J["el" + k] = grp(sh, 0, -0.31, 0);
+    el.add(new THREE.Mesh(new THREE.SphereGeometry(0.06, 12, 8), M.cyan));
+    sbox(el, 0.11, 0.27, 0.11, M.robo, 0, -0.14, 0);
+    sbox(el, 0.13, 0.12, 0.13, M.roboDark, 0, -0.2, 0);
+    const hand = J["hand" + k] = grp(el, 0, -0.3, 0);
+    sbox(hand, 0.11, 0.11, 0.12, M.roboDark, 0, -0.04, 0);
+    const hip = J["hip" + k] = grp(J.pelvis, side * 0.13, -0.07, 0);
+    sbox(hip, 0.16, 0.44, 0.17, M.robo, 0, -0.22, 0);
+    sbox(hip, 0.17, 0.1, 0.18, M.roboAccent, 0, -0.08, 0);
+    const knee = J["knee" + k] = grp(hip, 0, -0.45, 0);
+    sbox(knee, 0.14, 0.42, 0.15, M.roboDark, 0, -0.21, 0);
+    sbox(knee, 0.16, 0.08, 0.27, M.robo, 0, -0.44, -0.05);
+  }
+  // the sword sits in the right fist, blade out the front of the hand
+  const sw = buildSwordMesh(); sw.scale.setScalar(0.85); sw.rotation.x = -Math.PI / 2; sw.position.set(0, -0.045, -0.06); J.handR.add(sw); J.sword = sw;
+  root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return J;
+}
+// poses: pelvis height and the joint rotations
+const FP = (o) => Object.assign({ y: 0.98, pelvis: [0, 0, 0], spine: [0, 0, 0], head: [0, 0, 0], shL: [0.1, 0, -0.12], elL: 0.3, shR: [0.2, 0, 0.12], elR: 0.4, handR: [0, 0, 0], hipL: 0, kneeL: 0, hipR: 0, kneeR: 0 }, o);
+const FIN_POSES = {
+  stand: FP({ handR: [-0.6, 0, 0] }),
+  // the draw: low and twisted, sword dragged back along the floor, off hand out toward the target
+  charge: FP({ y: 0.7, pelvis: [0, -0.55, 0], spine: [-0.3, -0.3, 0], head: [0.25, 0.75, 0], shL: [1.2, 0, -0.25], elL: 0.35, shR: [-0.75, 0, 0.45], elR: 0.25, handR: [-2.35, 0, 0], hipL: 0.85, kneeL: -1.25, hipR: -0.5, kneeR: -0.55 }),
+  charge2: FP({ y: 0.64, pelvis: [0, -0.62, 0], spine: [-0.38, -0.35, 0], head: [0.3, 0.85, 0], shL: [1.3, 0, -0.3], elL: 0.3, shR: [-0.85, 0, 0.5], elR: 0.2, handR: [-2.4, 0, 0], hipL: 0.95, kneeL: -1.4, hipR: -0.55, kneeR: -0.6 }),
+  // mid-dash: body thrown forward, the blade sweeping across at waist height
+  dash: FP({ y: 0.74, pelvis: [0, 0.25, 0], spine: [-0.65, 0.35, 0], head: [0.4, -0.2, 0], shL: [-0.6, 0, -0.5], elL: 0.6, shR: [1.0, 0, 1.25], elR: 0.1, handR: [-1.2, 0, -0.6], hipL: -0.7, kneeL: -0.4, hipR: 1.0, kneeR: -1.0 }),
+  // follow-through: past the target, sword arm flung out to the side, body still low
+  follow: FP({ y: 0.82, pelvis: [0, 0.4, 0], spine: [-0.18, 0.55, 0], head: [0.05, -0.75, 0], shL: [0.3, 0, -0.6], elL: 0.8, shR: [0.25, 0, 1.45], elR: 0.05, handR: [0, 0, 0.1], hipL: 0.5, kneeL: -0.7, hipR: -0.4, kneeR: -0.45 }),
+  // stand up and flick the blade clean, point down
+  end: FP({ y: 0.96, pelvis: [0, 0.1, 0], spine: [0, 0.1, 0], head: [0.1, -0.3, 0], shL: [0.1, 0, -0.15], elL: 0.25, shR: [0.15, 0, 0.35], elR: 0.25, handR: [-1.3, 0, 0], hipL: 0.1, kneeL: -0.1, hipR: -0.05, kneeR: -0.08 }),
+};
+const FIN_KEYS = [[0, "stand"], [0.4, "charge"], [1.38, "charge2"], [1.47, "dash"], [1.6, "follow"], [2.6, "follow"], [2.95, "end"], [9, "end"]];
+const mixVal = (a, b, q) => Array.isArray(a) ? a.map((v, i) => v + (b[i] - v) * q) : a + (b - a) * q;
+function finPose(t) {
+  let i = 0; while (i < FIN_KEYS.length - 2 && t > FIN_KEYS[i + 1][0]) i++;
+  const [t0, A] = FIN_KEYS[i], [t1, B] = FIN_KEYS[i + 1]; const q = smooth((t - t0) / Math.max(1e-4, t1 - t0));
+  const a = FIN_POSES[A], b = FIN_POSES[B], out = {};
+  for (const k in a) out[k] = mixVal(a[k], b[k], q);
+  return out;
+}
+function applyFinPose(J, p) {
+  J.pelvis.position.y = p.y; J.pelvis.rotation.set(...p.pelvis);
+  J.spine.rotation.set(...p.spine); J.head.rotation.set(...p.head);
+  J.shL.rotation.set(...p.shL); J.shR.rotation.set(...p.shR); J.elL.rotation.x = p.elL; J.elR.rotation.x = p.elR; J.handR.rotation.set(...p.handR);
+  J.hipL.rotation.x = p.hipL; J.kneeL.rotation.x = p.kneeL; J.hipR.rotation.x = p.hipR; J.kneeR.rotation.x = p.kneeR;
+}
+function canFinish(e, kind) {
+  return state.mode === "floor" && state.phase === 2 && !state.fin && !player.dead && player.ownsSword && kind !== "finisher" && alive().length === 1 && alive()[0] === e;
+}
+function startFinisher(e) {
+  if (!finRig) finRig = buildFinRig();
+  const ep = enemyPos(e), pp = playerPos();
+  const dir = ep.clone().sub(pp).setY(0); if (dir.lengthSq() < 0.04) lookDir(dir).setY(0); dir.normalize();
+  const ground = new THREE.Vector3(ep.x, e.floorY, ep.z);
+  // dash from a couple of metres short of the target to a couple past it, shortened if a wall is in the way
+  const clear = (d, want) => { const h = world.castRay(new RAPIER.Ray({ x: ground.x, y: ground.y + 1, z: ground.z }, d), want + 0.6, true, undefined, GROUPS.envOnly, player.col, undefined, (c) => !glassByHandle.has(c.handle)); return h ? Math.max(1.1, (h.toi ?? h.timeOfImpact) - 0.6) : want; };
+  const back = clear(dir.clone().negate(), 2.4), fwd = clear(dir, 2.6);
+  e.finishing = true; e.stun = 99; e.vel.set(0, 0, 0); e.knock.set(0, 0, 0);
+  e.group.rotation.y = Math.atan2(-dir.x, -dir.z);
+  endFocus(); if (player.grapple) releaseGrapple(); player.sling = null; hookFx.state = "idle"; VM.attack = null; VM.inspect = null; cancelGunAnim(); VM.gunSpin = null;
+  const side = new THREE.Vector3(-dir.z, 0, dir.x);
+  for (const x of enemies) if (x.rPrev && x.rCur) x.rPrev.copy(x.rCur);
+  state.fin = { e, t: 0, dir, side, ground, start: ground.clone().addScaledVector(dir, -back), end: ground.clone().addScaledVector(dir, fwd), acc: 0, ts: 0.03, sliced: false,
+    camP: camera.position.clone(), camQ: camera.quaternion.clone(), halves: null, cues: new Set(), shake: 0 };
+  finRig.root.visible = true; finRig.root.position.copy(state.fin.start); finRig.root.rotation.y = Math.atan2(-dir.x, -dir.z);
+  applyFinPose(finRig, finPose(0));
+  document.body.classList.add("fin"); sfx.finCharge(); glitch(0.4);
+}
+// the cut: the enemy becomes two physics halves, each with a glowing cut face and wires hanging out of it
+function sliceEnemy(e, dir) {
+  e.dead = true; enemyByHandle.delete(e.col.handle);
+  world.removeCharacterController(e.ctrl); world.removeRigidBody(e.body); levelGroup.remove(e.group);
+  for (const b of bolts) if (b.owner === e) b.owner = null;
+  const base = e.group.position.clone(); const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), e.group.rotation.y);
+  const s = e.type === "bot" ? 1.12 : 1, cutY = 1.05;
+  const mat = (name) => partMaterial(e.type, name);
+  const half = (upper) => {
+    const g = new THREE.Group(); levelGroup.add(g);
+    const box = (w, h, d, m, x, y, z) => { const mesh = new THREE.Mesh(rbox(w, h, d, 0.45, 0.2), m); mesh.position.set(x, y, z); mesh.castShadow = true; ink(mesh); g.add(mesh); return mesh; };
+    if (upper) {
+      box(0.6 * s, 0.45, 0.36 * s, mat("torso"), 0, 0.225, 0);
+      const head = box(0.34 * s, 0.36, 0.34 * s, mat("head"), 0, 0.64, 0);
+      const v = new THREE.Mesh(rbox(e.type === "bot" ? 0.3 : 0.22, 0.06, 0.03, 0.45), M.visor); v.position.set(0, 0.04, 0.18); head.add(v);
+      for (const sx of [-1, 1]) box(0.18 * s, 0.64, 0.18 * s, mat(sx < 0 ? "armL" : "armR"), sx * 0.41 * s, 0.09, 0);
+    } else {
+      box(0.6 * s, 0.25, 0.36 * s, mat("torso"), 0, -0.125, 0);
+      for (const sx of [-1, 1]) box(0.22 * s, 0.8, 0.22 * s, mat(sx < 0 ? "legL" : "legR"), sx * 0.15, -0.65, 0);
+    }
+    // the cut face, white-hot, and what spills out of it: wires, a spine rod, a hydraulic line
+    const face = new THREE.Mesh(UNIT_BOX, M.cutHot); face.scale.set(0.56 * s, 0.012, 0.32 * s); face.position.y = upper ? -0.004 : 0.004; g.add(face);
+    const sgn = upper ? -1 : 1;
+    const wires = [[0.12, 0.05, M.cyan, 0.42], [-0.1, -0.04, M.red, 0.36], [0.02, 0.08, M.amber, 0.3], [-0.16, 0.06, M.cyan, 0.28], [0.18, -0.07, M.mullion, 0.32], [0.0, -0.08, M.red, 0.24], [0.07, -0.02, M.cyan, 0.2]];
+    for (const [x, z, m, len] of wires) {
+      const w = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.013, len, 5), m);
+      w.position.set(x * s, sgn * len * 0.42, z * s); w.rotation.set((Math.random() - 0.5) * 0.9, 0, (Math.random() - 0.5) * 0.9); g.add(w);
+    }
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.16, 8), M.mullion); rod.position.set(0, sgn * 0.06, -0.06); g.add(rod);
+    const wp = new THREE.Vector3(0, cutY, 0).applyQuaternion(q).add(base);
+    const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(wp.x, wp.y, wp.z).setRotation(q).setLinearDamping(0.1).setAngularDamping(0.9).setCcdEnabled(true));
+    const col = world.createCollider((upper ? RAPIER.ColliderDesc.cuboid(0.36 * s, 0.4, 0.2 * s).setTranslation(0, 0.43, 0) : RAPIER.ColliderDesc.cuboid(0.26 * s, 0.51, 0.16 * s).setTranslation(0, -0.535, 0))
+      .setDensity(e.type === "bot" ? 2.5 : 1).setFriction(0.8).setRestitution(0.1).setCollisionGroups(GROUPS.ragdoll), body);
+    g.position.copy(wp); g.quaternion.copy(q);
+    const rd = { parts: [{ body, col, mesh: g }], torso: body, born: state.time, half: true };
+    ragByHandle.set(col.handle, rd); ragdolls.push(rd);
+    return { rd, body, g };
+  };
+  const up = half(true), lo = half(false);
+  // the top half is thrown along the cut and spun; the legs buckle backward
+  const m1 = up.body.mass(), m2 = lo.body.mass();
+  up.body.applyImpulse({ x: dir.x * 4.5 * m1, y: 4.2 * m1, z: dir.z * 4.5 * m1 }, true);
+  up.body.applyTorqueImpulse({ x: -dir.z * 0.35 * m1, y: 0.25 * m1, z: dir.x * 0.35 * m1 }, true);
+  lo.body.applyImpulse({ x: -dir.x * 1.2 * m2, y: 0.4 * m2, z: -dir.z * 1.2 * m2 }, true);
+  lo.body.applyTorqueImpulse({ x: dir.z * 0.25 * m2, y: 0, z: -dir.x * 0.25 * m2 }, true);
+  while (ragdolls.length > 8) freezeRagdoll(ragdolls.find((r) => !r.half) || ragdolls[0]);
+  sfx.kill();
+  if (e.dummy && state.mode === "test") TEST.respawn.push({ type: e.type, x: e.home.x, z: e.home.z, t: 3 });
+  updateCount();
+  return [up, lo];
+}
+const _fc = new THREE.Vector3(), _ft = new THREE.Vector3(), _fq = new THREE.Quaternion(), _fm = new THREE.Matrix4(), _fu = new THREE.Vector3(0, 1, 0);
+function finCam(F, t) {
+  // three shots: a slow push-in on the draw, a low wide shot for the cut, then a slow orbit around the falling halves
+  const G = F.ground, d = F.dir, sd = F.side;
+  if (t < 1.4) {
+    const q = smooth(t / 1.4);
+    _fc.copy(F.start).addScaledVector(sd, 3.3 - 0.7 * q).addScaledVector(d, -1.2 + 0.5 * q); _fc.y = G.y + 1.25 - 0.25 * q;
+    _ft.copy(F.start).lerp(G, 0.45); _ft.y = G.y + 0.95;
+  } else if (t < 1.75) {
+    const q = (t - 1.4) / 0.35;
+    _fc.copy(G).addScaledVector(sd, 4.2).addScaledVector(d, 0.6 + q * 0.4); _fc.y = G.y + 0.75;
+    _ft.copy(G).addScaledVector(d, 0.4 * q); _ft.y = G.y + 1.0;
+  } else {
+    const q = smooth((t - 1.75) / (FIN_DUR - 1.75)); const a = 0.25 + q * 0.95;
+    _fc.copy(G).addScaledVector(sd, Math.cos(a) * 3.8).addScaledVector(d, Math.sin(a) * 3.8 - 0.3); _fc.y = G.y + 1.1 + q * 0.6;
+    _ft.copy(G).addScaledVector(d, 0.6); _ft.y = G.y + 0.8;
+  }
+  // keep the camera out of walls
+  const to = _fc.clone().sub(_ft); const len = to.length(); to.divideScalar(len);
+  const hit = world.castRay(new RAPIER.Ray(_ft, to), len, true, undefined, GROUPS.envOnly, player.col, undefined, (c) => !glassByHandle.has(c.handle));
+  if (hit) _fc.copy(_ft).addScaledVector(to, Math.max(0.8, (hit.toi ?? hit.timeOfImpact) - 0.3));
+  _fm.lookAt(_fc, _ft, _fu); _fq.setFromRotationMatrix(_fm);
+}
+function updateFinisher(dt) {
+  const F = state.fin;
+  if (F.holdAt == null || F.t < F.holdAt) F.t += dt; const t = F.t;
+  const held = F.holdAt != null && F.t >= F.holdAt;
+  F.ts = held ? 0 : t < FIN_SLICE ? 0.025 : Math.min(0.6, 0.1 + (t - FIN_SLICE) * 0.32);
+  // physics at the finisher's clock; the rest of the world stays frozen
+  F.acc += dt;
+  while (F.acc >= DT) {
+    F.acc -= DT;
+    for (const rd of ragdolls) for (const p of rd.parts) { const tr = p.body.translation(), r = p.body.rotation(); (p.pp ||= new THREE.Vector3()).set(tr.x, tr.y, tr.z); (p.pq ||= new THREE.Quaternion()).set(r.x, r.y, r.z, r.w); }
+    player.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    if (F.ts > 0) { world.timestep = DT * F.ts; world.step(); }
+  }
+  state.alpha = F.acc / DT;
+  // the body
+  const J = finRig;
+  const p = finPose(t);
+  if (t > 0.4 && t < 1.42) { const tr = Math.min(1, (t - 0.4) * 1.5); p.spine[2] += Math.sin(t * 61) * 0.012 * tr; p.y += Math.sin(t * 47) * 0.006 * tr; }
+  applyFinPose(J, p);
+  const dashQ = THREE.MathUtils.clamp((t - 1.42) / 0.16, 0, 1);
+  J.root.position.lerpVectors(F.start, F.end, dashQ * dashQ * (3 - 2 * dashQ));
+  // the charge: the blade's edge burns brighter, sparks crawl along it, the light comes up
+  const charge = THREE.MathUtils.clamp((t - 0.35) / 1.05, 0, 1) * (t < FIN_SLICE + 0.1 ? 1 : Math.max(0, 1 - (t - FIN_SLICE - 0.1) * 0.9));
+  const flick = Math.random() < 0.3 ? 1 : 0;
+  M.edgeGlow.color.copy(NEON_BASE).multiplyScalar(2 + charge * 9 + flick * charge * 4); M.bladeHalo.color.copy(NEON_BASE).lerp(EDGE_HOT, charge * 0.5); M.bladeHalo.opacity = Math.min(1, 0.5 + charge);
+  J.sword.updateWorldMatrix(true, false);
+  const lamp = sword?.userData?.light;
+  if (lamp?.isLight) { J.sword.localToWorld(_ft.set(0, 0.7, 0)); lamp.position.copy(_ft); lamp.intensity = charge * 26 + (F.sliced && t < FIN_SLICE + 0.25 ? 40 : 0); lamp.color.setHex(0x4ff0ff); }
+  if (charge > 0.05 && t < FIN_SLICE) {
+    const n = Math.round(1 + charge * 3);
+    for (let i = 0; i < n; i++) { J.sword.localToWorld(_ft.set((Math.random() - 0.5) * 0.04, 0.15 + Math.random() * 1.0, 0)); emitWorldSparks(_ft, _fu, 1, Math.random() < 0.25 ? 2 : 1, 1.5 + charge * 3); }
+    if (!F.cues.has("crackle") || Math.random() < dt * 9 * charge) { F.cues.add("crackle"); tone("square", 2400 + Math.random() * 2600, 900, 0.03, 0.025 * charge); }
+  }
+  if (t > 1.4 && !F.cues.has("dash")) { F.cues.add("dash"); sfx.dash(); noise(0.3, "bandpass", 700, 0.6, 1, 3200); }
+  // the cut
+  if (!F.sliced && t >= FIN_SLICE) {
+    F.sliced = true; F.halves = sliceEnemy(F.e, F.dir); F.shake = 0.6;
+    sfx.finSlash(); impactFrame(90); glitch(0.9);
+    const at = F.ground.clone(); at.y += 1.05;
+    emitWorldSparks(at, F.dir, 60, 2, 11); emitWorldSparks(at, _fu, 40, 1, 7);
+  }
+  // both cut faces keep spitting sparks while the halves fall
+  if (F.sliced && t < 3.1 && F.halves) {
+    const k = Math.max(0, 1 - (t - FIN_SLICE) / 1.6);
+    for (const [i, h] of F.halves.entries()) {
+      if (!ragdolls.includes(h.rd)) continue;
+      _ft.copy(_fu).applyQuaternion(h.g.quaternion).multiplyScalar(i === 0 ? -1 : 1);
+      emitWorldSparks(h.g.position, _ft, Math.round(1 + 4 * k), Math.random() < 0.5 ? 0 : 1, 3 + 5 * k);
+    }
+    M.cutHot.color.setRGB(1, 0.35 + 0.5 * k, 0.1 + 0.5 * k * k);
+    if (Math.random() < dt * 14 * k) tone("square", 3000 + Math.random() * 3000, 1400, 0.02, 0.03);
+  }
+  if (t > 2.6 && !F.cues.has("flick")) { F.cues.add("flick"); tone("sine", 2600, 2500, 0.5, 0.03); sfx.swordSwing(); }
+  // the camera
+  finCam(F, t);
+  F.shake *= Math.pow(0.04, dt);
+  const sh = F.shake;
+  const intro = smooth(t / 0.4), outro = smooth((t - (FIN_DUR - 0.45)) / 0.45);
+  camera.position.copy(_fc).add(_ft.set((Math.random() - 0.5) * sh * 0.15, (Math.random() - 0.5) * sh * 0.15, 0));
+  camera.quaternion.copy(_fq);
+  if (intro < 1) { camera.position.lerpVectors(F.camP, camera.position, intro); _qa.copy(F.camQ).slerp(_fq, intro); camera.quaternion.copy(_qa); }
+  if (outro > 0) {
+    // drop back into first person where the dash ended, looking back at what is left
+    const eye = F.end.clone(); eye.y = F.ground.y + 1.0 + P.eye;
+    _qb.setFromEuler(new THREE.Euler(-0.16, Math.atan2(F.dir.x, F.dir.z), 0, "YXZ"));
+    camera.position.lerp(eye, outro); camera.quaternion.slerp(_qb, outro);
+  }
+  camera.fov += ((t > 1.4 && t < 1.75 ? 62 : 54) - camera.fov) * (1 - Math.exp(-dt * 8));
+  if (outro > 0) camera.fov = THREE.MathUtils.lerp(camera.fov, 88, outro);
+  J.root.visible = outro < 0.3;
+  camera.updateProjectionMatrix(); camera.updateMatrixWorld();
+  updateWorldSparks(dt * Math.max(0.15, F.ts));
+  if (t >= FIN_DUR && !held) endFinisher();
+}
+function endFinisher() {
+  const F = state.fin; state.fin = null;
+  finRig.root.visible = false; document.body.classList.remove("fin");
+  const lamp = sword?.userData?.light; if (lamp?.isLight) lamp.intensity = 0;
+  M.cutHot.color.setRGB(0.6, 0.12, 0.05);
+  world.timestep = DT;
+  const at = { x: F.end.x, y: F.ground.y + 1.0, z: F.end.z };
+  player.body.setTranslation(at, true); player.body.setLinvel({ x: 0, y: 0, z: 0 }, true); player.prev = new THREE.Vector3(at.x, at.y, at.z);
+  yaw = Math.atan2(F.dir.x, F.dir.z); pitch = -0.16; camera.fov = 88; fovKick = 0;
+  player.grounded = true; player.vel.set(0, 0, 0); shake = 0.2;
+  if (state.mode !== "test" && alive().length === 0) phaseCleared();
+  else flash("Finisher", "var(--cyan)");
+}
+finRig = buildFinRig();
+// keyframes, all in the arm rig's pose format
+const GUN_REST = { p: [0.366, -0.466, 0.02], r: [0.32, 0.256, 0], el: 0.15, w: [-0.165, -0.048, -0.3], curl: 1 };
+const GUN_ADS = { p: [0.0275, -0.5056, 0.02], r: [0.45, 0, 0], el: 0.8, w: [-1.005, 0.0089, 0], curl: 1 };
+// close in front of you, nose down and the top rolled toward you, so the open works fill the view
+const GUN_CLOSE = { p: [0.2806, -0.367, 0.0598], r: [0.0978, 0.3097, 0], el: 1.0378, w: [-1.362, 0.7523, 1.0197], curl: 1 };
+const GUN_CLOSE2 = { p: [0.28, -0.36, 0.06], r: [0.12, 0.29, 0], el: 1.04, w: [-1.22, 0.98, 0.9], curl: 1 };
+const GUN_CLOSE3 = { p: [0.28, -0.37, 0.06], r: [0.09, 0.33, 0], el: 1.03, w: [-1.45, 0.55, 1.15], curl: 1 };
+const GUN_SIDE = { p: [0.275, -0.36, 0], r: [0.24, 0.192, 0], el: 0.2125, w: [-0.469, 0.645, -0.878], curl: 1 };       // the right side, gauge and all
+const GUN_SIDE2 = { p: [0.27, -0.35, 0], r: [0.26, 0.2, 0], el: 0.22, w: [-0.3, 0.45, -0.55], curl: 1 };
+const GUN_SPIN = { p: [0.2, -0.3, -0.04], r: [0.3, 0.2, 0], el: 0.4, w: [-0.2, 0.0, 0], curl: 1 };
+const lpose = (r0, r1, el, curl) => ({ p: [-0.14, -0.3, 0.239], r: [r0, r1, 0], el, w: [0.2, 0, 0.9], curl });
+const L_REACH = lpose(-0.04, -0.13, 0.82, 0.15), L_GRAB = lpose(-0.1178, -0.1486, 0.839, 0.85);
+const L_LIFT = lpose(0.1, 0.2, 0.7, 0.85), L_LIFT2 = lpose(0.13, 0.26, 0.66, 0.85);
+const L_HIGH = lpose(0.2, 0.28, 0.55, 0.85), L_HIGH2 = lpose(0.24, 0.34, 0.5, 0.85);
+const RELOAD_R = [[0, GUN_REST], [0.12, GUN_CLOSE], [0.4, GUN_CLOSE2], [0.62, GUN_CLOSE], [0.8, GUN_CLOSE], [1, GUN_REST]];
+const RELOAD_L = [[0, REST_L], [0.13, L_REACH], [0.19, L_GRAB], [0.3, L_LIFT], [0.6, L_LIFT2], [0.69, L_GRAB], [0.78, L_REACH], [1, REST_L]];
+const INSPECT_GUN_R = [[0, GUN_REST], [0.09, GUN_SIDE], [0.2, GUN_SIDE2], [0.3, GUN_CLOSE], [0.5, GUN_CLOSE2], [0.7, GUN_CLOSE3], [0.84, GUN_CLOSE], [1, GUN_REST]];
+const INSPECT_GUN_L = [[0, REST_L], [0.3, REST_L], [0.36, L_REACH], [0.41, L_GRAB], [0.5, L_HIGH], [0.76, L_HIGH2], [0.83, L_GRAB], [0.9, L_REACH], [1, REST_L]];
+// cues: [k, action] — grab and release the cover, sound, steam, sparks, refill
+const GUN_ANIMS = {
+  reload: { dur: 2.3, R: RELOAD_R, L: RELOAD_L, grab: 0.19, drop: 0.69, vent: [0.3, 0.62], refill: 0.7 },
+  inspect: { dur: 4.6, R: INSPECT_GUN_R, L: INSPECT_GUN_L, grab: 0.41, drop: 0.83, show: [0.45, 0.8] },
+};
+function startGunAnim(kind) {
+  if (VM.gunAnim || player.grapple || player.swapTo || !player.hasPistol) return;
+  if (kind === "reload" && player.ammo >= GUN.mag) { flash("Chamber full", "var(--dim)"); return; }
+  VM.gunAnim = { kind, ...GUN_ANIMS[kind], t: 0, cues: new Set() }; VM.gunSpin = null; sfx.servo();
+}
+function grabCover() { rig.updateMatrixWorld(true); armL.hand.attach(GP.top); VM.coverHeld = true; VM.coverSettle = false; sfx.latch(); }
+function dropCover() { rig.updateMatrixWorld(true); vmGun.attach(GP.top); VM.coverHeld = false; VM.coverSettle = true; }
+function cancelGunAnim() {
+  if (VM.coverHeld) dropCover();
+  VM.gunAnim = null;
+}
+function updateGun(dt, R, L, swinging) {
+  const run = VM.freeze ? 0 : dt;
+  VM.recoil = Math.max(0, (VM.recoil || 0) - run * 7); VM.trigger = Math.max(0, (VM.trigger || 0) - run * 10);
+  VM.aim = (VM.aim || 0) + ((player.aiming && !VM.gunAnim ? 1 : 0) - (VM.aim || 0)) * (1 - Math.exp(-dt * 14));
+  let idx = 0.62 + 0.3 * VM.trigger, others = 1, tilt = VM.tiltOverride ?? GUN_TILT, works = 1;
+  if (VM.aim > 0.002) Object.assign(R, keyPose([[0, R], [1, GUN_ADS]], VM.aim));
+  const rc = VM.recoil * VM.recoil;
+  R.r[0] += 0.24 * rc * (1 - VM.aim * 0.4); R.p[2] += 0.055 * rc; R.p[1] += 0.01 * rc; R.w[0] += 0.3 * rc;
+  GP.hammer.rotation.x = 0.7 * Math.min(1, VM.recoil * 1.6); GP.trigger.rotation.x = 0.3 * VM.trigger;
+  // reload and inspect
+  const A = VM.gunAnim;
+  if (A) {
+    if (player.grapple || VM.attack || !player.hasPistol) cancelGunAnim();
+    else {
+      A.t += run; const k = Math.min(1, A.t / A.dur);
+      Object.assign(R, keyPose(A.R, k)); Object.assign(L, keyPose(A.L, k));
+      const cue = (name, at, fn) => { if (k >= at && !A.cues.has(name)) { A.cues.add(name); fn(); } };
+      cue("grab", A.grab, grabCover);
+      cue("drop", A.drop, () => { dropCover(); sfx.latch(); setTimeout(() => sfx.clunk(), 70); });
+      if (A.kind === "reload") {
+        const [v0, v1] = A.vent;
+        cue("hiss", v0, () => { sfx.steam(); emitGunSparks(gunPoint(GUN_CORE), 22, 1.8); VM.coreFlare = 1; shake = Math.max(shake, 0.06); });
+        if (k > v0 && k < v1 && run > 0) {
+          const q = (k - v0) / (v1 - v0);
+          if (Math.random() < run * (34 - 26 * q)) emitSteam(gunPoint(_wp.set((Math.random() - 0.5) * 0.02, 0.07, GUN_CORE.z + (Math.random() - 0.5) * 0.09)), 1, 1);
+          if (Math.random() < run * (16 - 12 * q)) emitGunSparks(gunPoint(_wp.set(0, 0.06, GUN_CORE.z + (Math.random() - 0.5) * 0.06)), 3, 1.2);
+          works = 3.5 - 2 * q; R.w[2] += Math.sin(A.t * 40) * 0.012 * (1 - q); // the gun shudders as it vents
+        }
+        cue("gears", 0.5, () => sfx.gears());
+        cue("refill", A.refill, () => { player.ammo = GUN.mag; VM.coreFlare = 1.4; tone("sine", 600, 1500, 0.35, 0.05); });
+      } else {
+        const [s0, s1] = A.show;
+        if (k > s0 && k < s1) {
+          works = 2.6; if (run > 0 && Math.random() < run * 3) emitGunSparks(gunPoint(_wp.set(0, 0.06, GUN_CORE.z)), 2, 0.8);
+          if (run > 0 && Math.random() < run * 2.5) emitSteam(gunPoint(_wp.set(0, 0.07, -0.09)), 1, 0.6);
+        }
+        cue("sweep", 0.09, () => tone("sine", 1900, 1950, 0.6, 0.02));
+        cue("gears", s0, () => sfx.gears()); cue("gears2", s0 + 0.15, () => sfx.gears());
+      }
+      if (k >= 1) VM.gunAnim = null;
+    }
+  }
+  // finger spins while you swing on the grapple
+  if (!VM.gunSpin && swinging && !VM.gunAnim && !player.aiming && VM.recoil <= 0.01) {
+    VM.gunSpinWait = (VM.gunSpinWait ?? 0.25) - run;
+    if (VM.gunSpinWait <= 0) { const v = (VM.gunSpinN = ((VM.gunSpinN || 0) + 1) % 3); VM.gunSpin = { t: 0, dur: [1.25, 1.35, 1.6][v], spins: [2, -2, 3][v], v, cues: new Set() }; }
+  }
+  if (VM.gunSpin && (!swinging || VM.gunAnim || player.aiming)) VM.gunSpin = null;
+  const S = VM.gunSpin;
+  if (S) {
+    S.t += run; const k = Math.min(1, S.t / S.dur);
+    const lift = smooth(Math.min(1, k * 6)) * smooth(Math.min(1, (1 - k) * 6));
+    Object.assign(R, keyPose([[0, R], [1, GUN_SPIN]], lift));
+    const k0 = 0.13, k1 = 0.84;
+    const u = THREE.MathUtils.clamp((k - k0) / (k1 - k0), 0, 1);
+    const a = S.spins * Math.PI * 2 * (u * u * (3 - 2 * u)) + (S.v === 2 ? Math.sin(u * Math.PI) * 0.0 : 0);
+    spinFrame(a, gunG.position, gunG.quaternion);
+    if (k < k0 || k > k1) {
+      const b = k < k0 ? smooth(k / k0) : 1 - smooth((k - k1) / (1 - k1));
+      gunG.position.lerpVectors(GUN_HOLD_P, gunG.position, b); _qa.copy(GUN_HOLD_Q).slerp(gunG.quaternion, b); gunG.quaternion.copy(_qa);
+    }
+    // the wrist drives the spin: a flick to start it, little pumps to keep it going
+    R.w[0] += -Math.sin(u * Math.PI * 2 * Math.abs(S.spins)) * 0.06 * lift; R.p[1] += Math.sin(u * Math.PI * 2 * Math.abs(S.spins)) * 0.006 * lift;
+    if (k < 0.1) R.w[0] -= 0.25 * Math.sin(k / 0.1 * Math.PI);
+    idx = k > 0.06 && k < 0.92 ? 0.02 : 0.62; others = k > 0.08 && k < 0.9 ? 0.92 : 1; tilt = 0;
+    if (k > 0.08 && !S.cues.has("flick")) { S.cues.add("flick"); tone("sine", 900, 1200, 0.08, 0.02); }
+    if (k > 0.9 && !S.cues.has("catch")) { S.cues.add("catch"); sfx.clunk(); }
+    if (k >= 1) { VM.gunSpin = null; VM.gunSpinWait = 0.35 + Math.random() * 0.4; }
+  } else {
+    const e = 1 - Math.exp(-dt * 20);
+    gunG.position.lerp(GUN_HOLD_P, e); gunG.quaternion.slerp(GUN_HOLD_Q, e);
+  }
+  // the cover settles home when it goes back on
+  if (VM.coverSettle) {
+    const e = 1 - Math.exp(-dt * 28); GP.top.position.lerp(GP.topHomeP, e); GP.top.quaternion.slerp(GP.topHomeQ, e);
+    if (GP.top.position.distanceToSquared(GP.topHomeP) < 1e-8) { GP.top.position.copy(GP.topHomeP); GP.top.quaternion.copy(GP.topHomeQ); VM.coverSettle = false; }
+  }
+  // the works always run; faster while venting or on show
+  VM.gunWorks = (VM.gunWorks || 0) + run * works;
+  const wt = VM.gunWorks;
+  GP.gear1.rotation.x = wt * 2.4; GP.gear2.rotation.x = -wt * 2.4 * (13.5 / 8.5) + 0.2;
+  GP.pistons[0].position.y = 0.058 + 0.006 * Math.sin(wt * 7); GP.pistons[1].position.y = 0.058 + 0.006 * Math.sin(wt * 7 + Math.PI);
+  GP.ram.position.z = -0.005 + 0.007 * Math.sin(wt * 3.5);
+  VM.coreFlare = Math.max(0, (VM.coreFlare || 0) - run * 3);
+  const glow = 1.6 + 0.5 * Math.sin(state.time * 5) + VM.coreFlare * 2.5 + (works - 1) * 0.4;
+  const gk = 0.75 + glow * 0.22; GM.core.color.setRGB(gk, 0.42 * gk, 0.08 * gk); GM.sleeve.opacity = 0.2 + 0.12 * Math.min(2, glow - 1);
+  GP.needle.rotation.x = -1.1 + 2.2 * (player.ammo / GUN.mag);
+  VM.gunTilt = tilt; VM.gunIdx = idx; VM.gunOthers = others;
+}
 function lerpPose(a, b, k) {
   for (let i = 0; i < 3; i++) { a.p[i] += (b.p[i] - a.p[i]) * k; a.r[i] += (b.r[i] - a.r[i]) * k; a.w[i] += (b.w[i] - a.w[i]) * k; }
   a.el += (b.el - a.el) * k; a.curl += (b.curl - a.curl) * k;
@@ -2187,9 +2813,9 @@ function applyPose(arm, p) {
   arm.shoulder.position.set(p.p[0], p.p[1], p.p[2]);
   arm.shoulder.rotation.set(p.r[0], p.r[1], p.r[2], "YXZ");
   arm.elbow.rotation.x = p.el;
-  const holding = arm === armR && vmSword.visible;
+  const gun = arm === armR && gunG.visible, holding = (arm === armR && vmSword.visible) || gun;
   arm.wrist.rotation.set(p.w[0], p.w[1], p.w[2] + (holding ? SWORD_ROLL : 0));
-  arm.hand.rotation.y = holding ? SWORD_TILT : 0;
+  arm.hand.rotation.y = gun ? VM.gunTilt ?? GUN_TILT : holding ? SWORD_TILT : 0;
   setFingers(arm, p.curl, holding ? HAND_GRIP : HAND_FIST, holding);
 }
 // each finger closes a touch after the one beside it, so opening and closing ripple across the hand
@@ -2257,10 +2883,10 @@ function thrustPose(base, k) {
   return p;
 }
 function updateRig(dt) {
-  const t = state.time; const sword = player.hasSword;
+  const t = state.time; const sword = player.hasSword, pistol = player.hasPistol;
   const hs = Math.hypot(player.vel.x, player.vel.z);
   const move = player.grounded && !player.sliding ? Math.min(1, hs / 9) : 0;
-  let R = clonePose(sword ? SWORD_REST : REST_R), L = clonePose(REST_L);
+  let R = clonePose(sword ? SWORD_REST : pistol ? GUN_REST : REST_R), L = clonePose(REST_L);
   // idle breathing, walk sway, air and sprint poses
   for (const [p, side] of [[R, 1], [L, -1]]) {
     const ph = bob + (side > 0 ? 0 : Math.PI);
@@ -2278,7 +2904,7 @@ function updateRig(dt) {
     if (amt > 0.01) {
       const sw = Math.sin(ph), fwd = Math.max(0, sw), back = Math.max(0, -sw);
       const ease = sw * (1.25 - 0.25 * sw * sw); // slightly fuller at the ends of the swing, like a real arm
-      if (sword && side > 0) {
+      if ((sword || pistol) && side > 0) {
         // the sword hand stays steady, blade back, and only rocks with the stride
         p.p[1] -= 0.02 * amt; p.p[2] -= ease * 0.025 * amt; p.r[0] += ease * 0.12 * amt; p.w[2] -= 0.15 * amt;
       } else {
@@ -2337,11 +2963,13 @@ function updateRig(dt) {
   updateTricks(dt, R, sword && g && g.phase === "attached" && !A && !player.blocking);
   // inspect (F): bring the weapon up and turn it in the light
   updateInspect(dt, R, L, sword);
+  if (pistol) updateGun(dt, R, L, !!VM.forceSwing || !!(g && g.phase === "attached" && !A));
   if (sword && !VM.trick) R.curl = Math.max(R.curl, 0.97);
   if (VM.debugR) Object.assign(R, VM.debugR); if (VM.debugL) Object.assign(L, VM.debugL);
   const kR = 1 - Math.exp(-dt * (snapR ? 60 : 13)), kL = 1 - Math.exp(-dt * (snapL ? 60 : 13));
   lerpPose(cur.R, R, kR); lerpPose(cur.L, L, kL);
   applyPose(armR, cur.R); applyPose(armL, cur.L);
+  if (pistol) setFingers(armR, 1, HAND_PGRIP, true, [VM.gunIdx, VM.gunOthers, VM.gunOthers, VM.gunOthers]);
   if (VM.fingerWave >= 0) setFingers(armL, 0.5, HAND_FIST, false, [0, 1, 2, 3].map((i) => 0.1 + 0.9 * Math.max(0, Math.sin(VM.fingerWave * Math.PI * 4 - i * 0.8))));
   // the arms lag a little behind fast mouse turns
   let dy = yaw - VM.lastYaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
@@ -2441,7 +3069,7 @@ const INSPECT_FIST = [
   [0.75, { p: [-0.2, -0.33, -0.02], r: [0.25, -0.45, 0.9], el: 0.7, w: [0, 0, 0], curl: 1 }],
   [1, REST_L],
 ];
-function startInspect() { if (VM.inspect || VM.attack || player.grapple) return; VM.inspect = { t: 0, dur: player.hasSword ? 2.6 : 2.4, cues: new Set() }; sfx.servo(); }
+function startInspect() { if (player.hasPistol) return startGunAnim("inspect"); if (VM.inspect || VM.attack || player.grapple) return; VM.inspect = { t: 0, dur: player.hasSword ? 2.6 : 2.4, cues: new Set() }; sfx.servo(); }
 function updateInspect(dt, R, L, sword) {
   VM.fingerWave = -1;
   const I = VM.inspect; if (!I) { VM.edgeSweep = 0; return; }
@@ -2513,7 +3141,7 @@ function spawnSlash(v) {
     if (i < TRAIL_N - 1 && r < ROWS - 1) { const a = o, b = o + ROWS; idx.push(a, b, a + 1, b, b + 1, a + 1); }
   }
   const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(pos, 3)); geo.setAttribute("uv", new THREE.BufferAttribute(uv, 2)); geo.setIndex(idx);
-  const edge = player.lust >= 2 ? 0xff2a4a : 0x4ff0ff;
+  const edge = 0x4ff0ff;
   const mat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, side: THREE.DoubleSide,
     uniforms: { uHead: { value: 0 }, uFade: { value: 0 }, uSeed: { value: Math.random() * 50 }, uCore: { value: new THREE.Color(0xf4fbff) }, uEdge: { value: new THREE.Color(edge) }, uInk: { value: new THREE.Color(0x140a1e) } },
@@ -2543,7 +3171,7 @@ function emitSlashSparks(dt) {
     const k = 0.45 + Math.random() * 0.55; const at = vmSword.userData.baseLocal.clone().lerp(vmSword.userData.tipLocal, k); at.x += 0.02;
     vmSword.localToWorld(at); vmCamera.worldToLocal(at);
     const p = S.p[S.i]; S.i = (S.i + 1) % SPARK_N;
-    p.x.copy(at); p.max = p.life = 0.12 + Math.random() * 0.22;
+    p.x.copy(at); p.max = p.life = 0.12 + Math.random() * 0.22; p.warm = false;
     p.v.copy(swingV).multiplyScalar(-0.12 * Math.random()).add(new THREE.Vector3((Math.random() - 0.5) * 2.4, (Math.random() - 0.2) * 2.2, (Math.random() - 0.5) * 1.6));
     p.hot = Math.random();
   }
@@ -2559,8 +3187,8 @@ function updateSlashSparks(dt) {
     S.pos[o] = p.x.x; S.pos[o + 1] = p.x.y; S.pos[o + 2] = p.x.z;
     S.pos[o + 3] = p.x.x - d.x * len; S.pos[o + 4] = p.x.y - d.y * len; S.pos[o + 5] = p.x.z - d.z * len;
     // white-hot heads cooling to cyan (or orange), tails dimmer
-    const lust = player && player.lust >= 2;
-    const r = p.hot > 0.6 ? 1 : (lust ? 1 : 0.35), g = p.hot > 0.6 ? 0.85 : (lust ? 0.3 : 0.95), b = p.hot > 0.6 ? 0.6 : (lust ? 0.25 : 1);
+    // warm sparks (the pistol's) run white to orange; blade sparks run white to cyan
+    const r = p.hot > 0.6 ? 1 : (p.warm ? 1 : 0.35), g = p.hot > 0.6 ? 0.85 : (p.warm ? 0.55 : 0.95), b = p.hot > 0.6 ? 0.6 : (p.warm ? 0.15 : 1);
     const k = 2.2 * q;
     S.col[o] = r * k; S.col[o + 1] = g * k; S.col[o + 2] = b * k; S.col[o + 3] = r * k * 0.25; S.col[o + 4] = g * k * 0.25; S.col[o + 5] = b * k * 0.25;
   }
@@ -2615,7 +3243,7 @@ const starTex = (() => {
 const RING_GEO = new THREE.RingGeometry(0.28, 0.36, 32); RING_GEO.userData.cached = true;
 function impactFx(point, kind) {
   const big = kind === "breach" || kind === "finisher" || kind === "thrust" || kind === "heavy";
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex, depthTest: false, transparent: true, color: kind === "punch" || kind === "heavy" ? 0xffffff : player.lust >= 2 ? 0xffb0bc : 0xd8fbff }));
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex, depthTest: false, transparent: true, color: kind === "punch" || kind === "heavy" ? 0xffffff : 0xd8fbff }));
   sp.material.rotation = Math.random() * Math.PI; sp.position.copy(point); sp.renderOrder = 15; levelGroup.add(sp);
   fx.push({ obj: sp, t: 0.13, life: 0.13, grow: big ? 1.8 : 1.0, kind: "star" });
   const ring = new THREE.Mesh(RING_GEO, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, side: THREE.DoubleSide, depthTest: false }));
@@ -2786,7 +3414,7 @@ function updateCamera(dt) {
   camera.rotation.set(pitch + CAM.kick * 0.03 + swayP - 0.012 * CAM.sprint, yaw + swayY, roll + CAM.roll * 0.03, "YXZ");
   fovKick *= Math.pow(0.05, dt);
   const charge = player.grapple?.mode === "sling" && player.grapple.phase === "attached" ? player.grapple.charge : 0;
-  const fov = 88 + Math.min(16, Math.max(0, hs - 9) * 0.9) + fovKick + 6 * CAM.sprint - 7 * charge;
+  const fov = 88 + Math.min(16, Math.max(0, hs - 9) * 0.9) + fovKick + 6 * CAM.sprint - 7 * charge - 20 * (player.hasPistol ? VM.aim || 0 : 0);
   camera.fov += (fov - camera.fov) * (1 - Math.exp(-dt * 5)); camera.updateProjectionMatrix();
   camera.updateMatrixWorld();
   vmCamera.rotation.z = roll * 0.6;
@@ -2801,6 +3429,8 @@ function updateCamera(dt) {
   updateSpeedLines(dt, hs);
   updateSelfBody(dt);
   updateRope(dt);
+  updateGunFx(dt);
+  updateWorldSparks(dt * Math.max(0.05, state.ts));
 }
 
 // ---------- HUD update ----------
@@ -2823,17 +3453,16 @@ function updateLock(dt) {
 }
 function updateHud(dt) {
   updateLock(dt);
+  $("focusbar").hidden = !player.focus; if (player.focus) $("focusbar").firstChild.style.transform = `scaleX(${Math.max(0, 1 - player.focus.t / FOCUS_MAX)})`;
   crossTimer -= dt; flashT -= dt;
   if (flashT <= 0) $("flash").hidden = true;
   $("cross").classList.toggle("hit", crossTimer > 0); if (crossTimer <= 0) $("cross").classList.remove("heavy");
-  const segs = $("segs").children;
-  for (let i = 0; i < 5; i++) { const f = Math.max(0, Math.min(1, player.lust - i)); segs[i].firstChild.style.transform = `scaleX(${f})`; segs[i].classList.toggle("full", f >= 1); }
-  const labels = $("lustlabels").children;
-  for (let i = 0; i < 5; i++) labels[i].classList.toggle("on", player.lust >= i + 1 && i > 0);
   hudT -= dt; if (hudT > 0) return; hudT = 0.05;
   const g = player.ownsSword && !player.grapple && player.grappleCd <= 0 && grappleRay();
   $("cross").classList.toggle("grap", !!g);
-  $("cross").classList.toggle("reach", !player.hasSword && !g && meleeTargets(PUNCH.reach, PUNCH.arc).length > 0);
+  $("ammorow").hidden = !player.ownsPistol;
+  if (player.ownsPistol) { $("ammov").textContent = VM.gunAnim?.kind === "reload" ? "VENTING" : `${player.ammo} / ${GUN.mag}`; $("ammov").style.color = player.ammo === 0 ? "var(--threat)" : ""; }
+  $("cross").classList.toggle("reach", !player.hasSword && !player.hasPistol && !g && meleeTargets(PUNCH.reach, PUNCH.arc).length > 0);
   $("hpv").textContent = Math.max(0, Math.round(player.hp));
   $("hpbar").style.width = Math.max(0, player.hp) + "%";
   $("dashv").textContent = "▮".repeat(player.dash) + "▯".repeat(P.dashCharges - player.dash);
@@ -2852,6 +3481,7 @@ function updateHud(dt) {
 // ---------- level lifecycle ----------
 function restart(fromScratch) {
   if (fromScratch) state.checkpoint = 1;
+  if (state.fin) { state.fin = null; document.body.classList.remove("fin"); finRig.root.visible = false; }
   if (world) world.free();
   if (levelGroup) { levelGroup.traverse((o) => dispGeo(o.geometry)); scene.remove(levelGroup); }
   panes = []; enemies = []; ragdolls = []; shards = []; fx = []; bolts = [];
@@ -2860,16 +3490,18 @@ function restart(fromScratch) {
   world = new RAPIER.World({ x: 0, y: -9.81 * 2.2, z: 0 });
   world.timestep = DT;
   if (state.mode === "test") buildTestLevel(); else buildLevel();
+  { const vis = [finRig.root, worldSparks.lines, tracers[0].m]; for (const o of vis) o.visible = true; try { renderer.compile(scene, camera); } catch {} for (const o of vis) o.visible = false; }
   Object.assign(state, { over: false, time: 0, runStart: 0 });
   setTime("normal", 0); hitstopT = 0; hookFx.state = "idle"; VM.attack = null; GL.spike = 0;
   $("log").innerHTML = "";
   if (state.mode === "test") {
     player = createPlayer(new THREE.Vector3(0, 1.2, 12), 0);
-    player.ownsSword = true; player.weapon = "sword"; state.phase = 2; setViewModel();
+    player.ownsSword = true; player.ownsPistol = true; player.weapon = "sword"; state.phase = 2; setViewModel();
     spawnDummies(); updateCount();
     setObjective("Testing ground");
     log("TESTING GROUND: dummies respawn 3 s after they die. Glass, walls and towers reset with R.");
-    setTimeout(() => log("Keys: K fill bloodlust · J spawn live hostiles · L respawn dummies · H god mode", "tip"), 400);
+    setTimeout(() => log("Keys: N finisher on the dummy you face · J spawn live hostiles · L respawn dummies · H god mode", "tip"), 400);
+    setTimeout(() => log("Weapons: 1 fists · 2 sword · 3 steam pistol (R vents it, F inspects it, spins it while you grapple) · G sling mode, hold Space on the line to focus", "tip"), 900);
   } else if (state.checkpoint === 2) {
     player = createPlayer(new THREE.Vector3(0, 1.2, -24), 0);
     state.phase = 1.5; door.mesh.position.y = -2.1; world.removeRigidBody(door.body);
@@ -2899,12 +3531,14 @@ function warmup() {
   const add = (o) => { g.add(o); return o; };
   const f = add(new THREE.Sprite(M.fire.clone())); f.material.map = steamTex;
   add(new THREE.Sprite(new THREE.SpriteMaterial({ map: steamTex, transparent: true, depthWrite: false })));
-  add(new THREE.Mesh(UNIT_BOX, M.shard)); add(new THREE.Mesh(UNIT_RBOX, M.rubble)); add(new THREE.Mesh(UNIT_RBOX, M.drywall));
+  add(new THREE.Mesh(UNIT_BOX, M.cutHot)); add(new THREE.Mesh(UNIT_BOX, M.shard)); add(new THREE.Mesh(UNIT_RBOX, M.rubble)); add(new THREE.Mesh(UNIT_RBOX, M.drywall));
   add(new THREE.Mesh(SPARK_GEO, new THREE.MeshBasicMaterial({ color: 0xffc060 }))); add(new THREE.Mesh(UNIT_BOX, M.hitFlash));
   add(new THREE.Mesh(RING_GEO, new THREE.MeshBasicMaterial({ transparent: true, side: THREE.DoubleSide, depthTest: false })));
   add(new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex, depthTest: false, transparent: true })));
   scene.add(g);
+  const vis = [gunG, muzzleFlash, steamPuffs[0].s, tracers[0].m, worldSparks.lines]; for (const o of vis) o.visible = true;
   try { renderer.compile(scene, camera); renderer.compile(vmScene, vmCamera); } catch {}
+  for (const o of vis) o.visible = false; setViewModel();
   scene.remove(g);
 }
 function begin() {
@@ -3130,11 +3764,14 @@ function frame(now) {
   const running = !booting && state.started && $("screen").hidden && player && !player.dead;
   if (booting) { updateBoot(dt); if (player.dead === false) updateCamera(dt); }
   if (running) {
-    acc += dt;
-    let steps = 0;
-    while (acc >= DT && steps < 4) { simStep(); acc -= DT; steps++; }
-    if (acc >= DT) acc = DT * 0.5;
-    state.alpha = acc / DT;
+    if (state.fin) updateFinisher(dt);
+    else {
+      acc += dt;
+      let steps = 0;
+      while (acc >= DT && steps < 4 && !state.fin) { simStep(); acc -= DT; steps++; }
+      if (acc >= DT) acc = DT * 0.5;
+      state.alpha = state.fin ? 0 : acc / DT;
+    }
     const al = state.alpha, _q = new THREE.Quaternion();
     for (const rd of ragdolls) for (const p of rd.parts) { const t = p.body.translation(), r = p.body.rotation(); p.mesh.position.set(t.x, t.y, t.z); p.mesh.quaternion.set(r.x, r.y, r.z, r.w); if (p.pp) { p.mesh.position.lerpVectors(p.pp, p.mesh.position, al); p.mesh.quaternion.copy(_q.copy(p.pq).slerp(p.mesh.quaternion, al)); } }
     for (const e of enemies) if (!e.dead && e.rPrev && e.rCur) e.group.position.lerpVectors(e.rPrev, e.rCur, al);
@@ -3154,7 +3791,7 @@ function frame(now) {
       }
       if (f.t <= 0) { levelGroup.remove(f.obj); dispGeo(f.obj.geometry); if (f.life) f.obj.material.dispose(); fx.splice(i, 1); }
     }
-    updateCamera(dt);
+    if (!state.fin) updateCamera(dt);
     updateHud(dt);
   } else if (!state.started) {
     const t = now * 0.00004; camera.position.set(Math.cos(t) * 70, 22, Math.sin(t) * 70); camera.lookAt(0, 2, 0);
@@ -3173,8 +3810,8 @@ function frame(now) {
   renderer.clear();
   renderer.render(scene, camera);
   const live = running || booting;
-  rig.visible = selfBody.visible = !!live;
-  if (live) { renderer.clearDepth(); renderer.render(vmScene, vmCamera); }
+  rig.visible = selfBody.visible = !!live && !state.fin;
+  if (live && !state.fin) { renderer.clearDepth(); renderer.render(vmScene, vmCamera); }
   renderer.setRenderTarget(null);
   // glitch level: low health and time powers hold it up, events spike it, and now and then the feed blips on its own
   const gdt = Math.min(0.1, dt);
@@ -3185,6 +3822,8 @@ function frame(now) {
   GL.base = hpLow + (state.tsMode === "stop" ? 0.22 : state.tsMode === "slow" ? 0.08 : 0);
   postMat.uniforms.uAmt.value = Math.min(1, GL.base + GL.spike + (GL.blip > 0 ? 0.18 : 0) + (state.started ? 0 : 0.06));
   postMat.uniforms.uTime.value = now / 1000;
+  const grayT = live && state.tsMode === "focus" ? 0.92 : 0; const gu = postMat.uniforms.uGray;
+  gu.value += (grayT - gu.value) * (1 - Math.exp(-gdt * (grayT > gu.value ? 7 : 4)));
   renderer.render(postScene, postCam);
 }
 restart(true); player.dead = true;
@@ -3213,7 +3852,7 @@ window.__res = {
     renderer.setRenderTarget(null); renderer.setClearColor(0x30303a, 1); renderer.clear(); renderer.render(vmScene, cam); renderer.setClearColor(0x000000, 1);
     return renderer.domElement.toDataURL("image/png");
   }, get boot() { return state.boot; },
-  VM, get slashes() { return slashes; }, playAttackAnim, spawnSlash, GL, glitch, M,
+  get fin() { return state.fin; }, startFinisher, finisherTarget, finStep(n) { for (let i = 0; i < n && state.fin; i++) updateFinisher(DT); }, pickupSword, VM, GP, gunG, startGunAnim, gunPoint, vmCamera, armR, armL, rig, applyPose, setTilt(t) { VM.gunTilt = t; }, get slashes() { return slashes; }, playAttackAnim, spawnSlash, GL, glitch, M,
   step(n) { for (let i = 0; i < n && !player.dead; i++) simStep(); },
   killPhase() { for (const e of alive()) damageEnemy(e, 999, enemyPos(e), new THREE.Vector3(1, 0, 0), "punch"); },
 };
