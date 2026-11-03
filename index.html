@@ -275,9 +275,9 @@ const GROUPS = {
 };
 const P = {
   radius: 0.4, half: 0.5, eye: 0.62, slideEye: 0.0,
-  speed: 9.5, accel: 75, airAccel: 30, friction: 9, slideFriction: 0.6,
-  jump: 9.2, gravity: -26, dashSpeed: 24, dashCharges: 2, dashRecharge: 1.4,
-  grappleRange: 42, grapplePull: 70, grappleCooldown: 0.45,
+  speed: 8.2, accel: 62, airAccel: 26, friction: 9, slideFriction: 0.6,
+  jump: 8.9, gravity: -25, dashSpeed: 20.5, dashCharges: 2, dashRecharge: 1.5,
+  grappleRange: 42, grapplePull: 60, grappleCooldown: 0.45,
   parryFists: 0.18, parrySword: 0.38,
 };
 const DT = 1 / 60;
@@ -285,34 +285,35 @@ const TS = { normal: 1, slow: 0.3, stop: 0.02 };
 
 // ---------- renderer ----------
 const host = document.getElementById("game");
-const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-const PR_MAX = Math.min(devicePixelRatio, 1.5), PR_MIN = Math.min(PR_MAX, 0.75);
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" }); // the scene is antialiased in its own target; the screen pass needs none
+const PR_MAX = Math.min(devicePixelRatio, 1.25), PR_MIN = Math.min(PR_MAX, 0.75);
 let prNow = PR_MAX;
 renderer.setPixelRatio(prNow);
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.toneMappingExposure = 0.9;
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.autoClear = false;
 host.appendChild(renderer.domElement);
 
-// Art direction: cel-shaded dusk. Flat toon bands, black ink edges, a violet-to-ember sky.
+// Art direction: cel-shaded night. Flat toon bands, black ink edges, polished metal, a black sky bleeding red at the horizon.
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x4a2a55, 55, 270);
+scene.fog = new THREE.Fog(0x0c0912, 26, 170);
 const camera = new THREE.PerspectiveCamera(88, innerWidth / innerHeight, 0.05, 900);
 scene.add(camera);
 // the arms render in their own pass so they never clip into walls
 const vmScene = new THREE.Scene();
 const vmCamera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.01, 10);
 vmScene.add(vmCamera);
-vmScene.add(new THREE.HemisphereLight(0xffd8c8, 0x3a2048, 1.5));
-const vmKey = new THREE.DirectionalLight(0xffb08a, 2.4); vmKey.position.set(-1, 2, 1.5); vmScene.add(vmKey);
-const vmRim = new THREE.DirectionalLight(0x7fe8ff, 1.2); vmRim.position.set(1.5, 0.5, -1); vmScene.add(vmRim);
+vmScene.add(new THREE.HemisphereLight(0x8a90b8, 0x1a0810, 0.7));
+const vmKey = new THREE.DirectionalLight(0xc8d0ff, 1.5); vmKey.position.set(-1, 2, 1.5); vmScene.add(vmKey);
+const vmRim = new THREE.DirectionalLight(0x4ff0ff, 2.0); vmRim.position.set(1.5, 0.5, -1); vmScene.add(vmRim);
+const vmRed = new THREE.DirectionalLight(0xff2a3a, 1.1); vmRed.position.set(-1.5, -0.6, -1); vmScene.add(vmRed);
 // everything renders into this target, then a glitch pass draws it to the screen
 const rtSize = () => renderer.getDrawingBufferSize(new THREE.Vector2());
-const rt = new THREE.WebGLRenderTarget(rtSize().x, rtSize().y, { type: THREE.HalfFloatType, samples: 4 });
+const rt = new THREE.WebGLRenderTarget(rtSize().x, rtSize().y, { type: THREE.HalfFloatType, samples: 2 });
 const postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 const postMat = new THREE.ShaderMaterial({
   depthTest: false, depthWrite: false,
@@ -369,23 +370,29 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(800, 32, 16), new THREE.Shad
   fragmentShader: `varying vec3 vP;
     void main() {
       float h = vP.y;
-      vec3 top = vec3(0.06, 0.04, 0.16), mid = vec3(0.34, 0.15, 0.40), low = vec3(0.10, 0.05, 0.12), ember = vec3(1.0, 0.45, 0.24);
+      vec3 top = vec3(0.008, 0.006, 0.02), mid = vec3(0.07, 0.025, 0.06), low = vec3(0.02, 0.01, 0.02), ember = vec3(0.75, 0.07, 0.06);
       vec3 c = h > 0.0 ? mix(mid, top, smoothstep(0.0, 0.55, h)) : mix(mid, low, smoothstep(0.0, -0.25, h));
-      c = mix(c, ember, exp(-abs(h - 0.03) * 12.0) * 0.85);
-      float sun = smoothstep(0.995, 0.999, dot(vP, normalize(vec3(-0.8, 0.12, -0.55))));
-      c = mix(c, vec3(1.0, 0.85, 0.6), sun);
-      gl_FragColor = vec4(pow(c, vec3(2.2)) * 1.25, 1.0);
+      c = mix(c, ember, exp(-abs(h - 0.03) * 14.0) * 0.6);
+      float moon = dot(vP, normalize(vec3(-0.8, 0.12, -0.55)));
+      c = mix(c, vec3(0.85, 0.12, 0.08), smoothstep(0.996, 0.9985, moon));       // a blood moon low over the city
+      c += vec3(0.25, 0.02, 0.02) * pow(max(moon, 0.0), 300.0);
+      gl_FragColor = vec4(pow(c, vec3(2.2)) * 1.1, 1.0);
     }`,
 }));
 scene.add(sky);
 
-scene.add(new THREE.HemisphereLight(0xb8a0ff, 0x40202a, 1.1));
-scene.add(new THREE.AmbientLight(0x503850, 0.9));
-for (const [x, z] of [[-20, 20], [-16, -10], [0, -25], [21, -19], [21, 19], [8, 0]]) { const l = new THREE.PointLight(0xffc0a0, 50, 28, 1.6); l.position.set(x, 7, z); scene.add(l); }
-const sun = new THREE.DirectionalLight(0xffa070, 2.6);
+scene.add(new THREE.HemisphereLight(0x5a5a8a, 0x14060c, 0.5));
+scene.add(new THREE.AmbientLight(0x241626, 0.4));
+// a few hard work lights and red emergency strobes; the strobes breathe so the dark never sits still
+const alarmLights = [];
+for (const [x, z, red] of [[-20, 20, 0], [0, -25, 1], [21, -19, 0], [21, 19, 1], [8, 0, 1]]) {
+  const l = new THREE.PointLight(red ? 0xff2236 : 0xa8d8ff, red ? 34 : 30, 24, 1.7); l.position.set(x, 7, z); scene.add(l);
+  if (red) alarmLights.push({ l, base: 34, ph: x * 0.37 + z * 0.21 });
+}
+const sun = new THREE.DirectionalLight(0x8270b0, 1.0); // moonlight
 sun.position.set(-80, 22, -55);
 sun.castShadow = true;
-sun.shadow.mapSize.set(1536, 1536);
+sun.shadow.mapSize.set(1024, 1024);
 Object.assign(sun.shadow.camera, { left: -70, right: 70, top: 70, bottom: -70, near: 1, far: 260 });
 sun.shadow.bias = -0.0006;
 scene.add(sun);
@@ -414,6 +421,23 @@ function windowsTexture() {
 }
 const toonRamp = (() => { const t = new THREE.DataTexture(new Uint8Array([70, 140, 205, 255]), 4, 1, THREE.RedFormat); t.minFilter = t.magFilter = THREE.NearestFilter; t.needsUpdate = true; return t; })();
 const toon = (color, o = {}) => new THREE.MeshToonMaterial({ color, gradientMap: toonRamp, ...o });
+// Metal: a dark studio of neon strips is baked into an environment map, so polished parts catch cyan and red highlights.
+const envTex = (() => {
+  const pm = new THREE.PMREMGenerator(renderer); const s = new THREE.Scene(); s.background = new THREE.Color(0x040308);
+  const strip = (c, k, x, y, z, w, h) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(c).multiplyScalar(k), side: THREE.DoubleSide })); m.position.set(x, y, z); m.lookAt(0, 0, 0); s.add(m); };
+  strip(0xdfe8ff, 4, 0, 6, 0, 10, 1.2); strip(0x4ff0ff, 5, 6, 1, -3, 0.5, 6); strip(0x4ff0ff, 3, -5, 2, 4, 6, 0.4);
+  strip(0xff2a3a, 5, -6, 0.5, -2, 0.6, 5); strip(0xff2a3a, 2.5, 3, -1, 6, 7, 0.5); strip(0xffffff, 2, 0, -5, 0, 4, 4);
+  const t = pm.fromScene(s, 0.035).texture; pm.dispose(); return t;
+})();
+const brushTex = (() => {
+  const c = document.createElement("canvas"); c.width = c.height = 256; const g = c.getContext("2d");
+  g.fillStyle = "#c8c8c8"; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 900; i++) { const v = 150 + Math.random() * 105; g.fillStyle = `rgb(${v},${v},${v})`; g.globalAlpha = 0.35; g.fillRect(0, Math.random() * 256, 256, 1 + Math.random() * 1.5); }
+  for (let i = 0; i < 40; i++) { g.globalAlpha = 0.5; g.fillStyle = "#ffffff"; g.fillRect(Math.random() * 256, Math.random() * 256, 10 + Math.random() * 60, 1); }
+  g.globalAlpha = 1;
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; return t;
+})();
+const metal = (color, roughness, o = {}) => new THREE.MeshStandardMaterial({ color, metalness: 0.9, roughness, roughnessMap: brushTex, envMap: envTex, envMapIntensity: 1.3, ...o });
 const INK = new THREE.LineBasicMaterial({ color: 0x0b0612 });
 const GLASS_INK = new THREE.LineBasicMaterial({ color: 0xe6f8ff, transparent: true, opacity: 0.55 });
 // Rounded boxes are cached and shared, so they are never disposed.
@@ -452,8 +476,8 @@ const M = {
   ceiling: toon(0x24202e),
   desk: toon(0xd8d4dc),
   crate: toon(0xe0873a),
-  rack: toon(0x262433),
-  mullion: toon(0x1c1826),
+  rack: metal(0x262433, 0.55),
+  mullion: metal(0x1c1826, 0.45),
   door: toon(0xd8344a),
   glass: new THREE.MeshBasicMaterial({ color: 0xbfefff, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }),
   shard: new THREE.MeshBasicMaterial({ color: 0xeefcff, transparent: true, opacity: 0.8, side: THREE.DoubleSide }),
@@ -468,16 +492,17 @@ const M = {
   skin: toon(0xe8b494),
   brawler: toon(0xa8443e),
   guard: toon(0x34508a),
-  bot: toon(0xd4dae6),
+  bot: metal(0xc4cad6, 0.38),
   pants: toon(0x2a2433),
   visor: new THREE.MeshBasicMaterial({ color: 0xff3d5a }),
   stun: new THREE.MeshBasicMaterial({ color: 0xffe066 }),
-  tower: toon(0x1a1328, { emissive: 0xffffff, emissiveMap: windowsTexture(), emissiveIntensity: 0.95 }),
-  gun: toon(0x2b2836),
-  robo: toon(0xc7cfdc),
-  roboDark: toon(0x2c2f3d),
-  roboAccent: toon(0xff7a3d),
-  blade: toon(0xf4f8ff, { emissive: 0x3fd8ff, emissiveIntensity: 0.35 }),
+  tower: toon(0x0c0912, { emissive: 0xffffff, emissiveMap: windowsTexture(), emissiveIntensity: 0.55 }),
+  gun: metal(0x2b2836, 0.42),
+  robo: metal(0xb4bcc8, 0.3),
+  roboDark: metal(0x24262f, 0.4),
+  roboAccent: metal(0xff6a2d, 0.35, { metalness: 0.6 }),
+  blade: metal(0xe6eeff, 0.1, { metalness: 1, emissive: 0x1a7090, emissiveIntensity: 0.55, envMapIntensity: 1.8 }),
+  bladeHalo: new THREE.MeshBasicMaterial({ color: 0x4ff0ff, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }),
   bolt: new THREE.MeshBasicMaterial({ color: 0xff3d5a }),
   hitFlash: new THREE.MeshBasicMaterial({ color: 0xfff4e8 }),
   barrel: toon(0xd23a3a), hazard: toon(0xffc23d), drywall: toon(0xb7b3c4), rubble: toon(0x8f8aa0),
@@ -673,7 +698,8 @@ function buildLevel() {
 
   // destructibles: drywall partitions that break when bodies hit them hard, and explosive barrels
   for (const [x, z, sx, sz] of [[-8, 9, 3.2, 0.25], [-15.5, 9, 3.2, 0.25], [4, -5, 0.25, 3.2], [-10, -18, 3.2, 0.25], [8.5, 21, 0.25, 3.2], [20, -13, 3.2, 0.25], [26.5, -20, 0.25, 3.2]]) breakableWall(x, z, sx, sz);
-  for (const [x, z] of [[-6, 11.5], [-18.5, -3.5], [7, -10], [25, -17], [20, 19]]) spawnBarrel(x, z);
+  // explosive barrels are switched off for now; add positions here to bring them back, e.g. [[-6, 11.5], [7, -10]]
+  for (const [x, z] of []) spawnBarrel(x, z);
 
   // armory (N centre) x -6..6, z -30..-20, door in the south wall
   wall(-6, -30, -6, -20); wall(6, -30, 6, -20); wall(-6, -20, -2, -20); wall(2, -20, 6, -20);
@@ -929,6 +955,28 @@ function buildHumanoidMesh(type) {
   }
   return { group: g, meshes };
 }
+const HALO_GEO = (() => { const g = new THREE.PlaneGeometry(0.17, 1.2); g.userData.cached = true; return g; })();
+M.bladeHalo.map = (() => {
+  const c = document.createElement("canvas"); c.width = 64; c.height = 256; const g = c.getContext("2d");
+  const img = g.createImageData(64, 256);
+  for (let y = 0; y < 256; y++) for (let x = 0; x < 64; x++) {
+    const u = (x - 31.5) / 32, v = y / 255; const taper = Math.sin(Math.PI * Math.min(1, v * 1.05)) ** 0.6;
+    const a = (Math.exp(-u * u * 7) * 0.8 + Math.exp(-u * u * 60) * 0.6) * taper; const i = (y * 64 + x) * 4; img.data[i] = img.data[i + 1] = img.data[i + 2] = 255 * a; img.data[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0); return new THREE.CanvasTexture(c);
+})();
+// the edge pulses like a live current, with a razor-sharp flicker now and then
+const NEON_BASE = new THREE.Color(0x4ff0ff), NEON_LUST = new THREE.Color(0xff2a4a), _edgeC = new THREE.Color();
+let edgeFlick = 0;
+function updateSwordGlow(t, dt) {
+  const pulse = 0.5 + 0.5 * Math.sin(t * 6.5) * Math.sin(t * 2.3 + 1);
+  if (Math.random() < dt * 1.4) edgeFlick = 1; edgeFlick = Math.max(0, edgeFlick - dt * 9);
+  const swing = slashes.length ? 1 : 0;
+  _edgeC.copy(player && player.lust >= 2 ? NEON_LUST : NEON_BASE).lerp(EDGE_HOT, VM.edgeSweep || 0);
+  M.edgeGlow.color.copy(_edgeC).multiplyScalar(1.8 + pulse * 2.2 + edgeFlick * 3 + swing * 1.5);
+  M.bladeHalo.color.copy(_edgeC);
+  M.bladeHalo.opacity = Math.min(1, 0.5 + pulse * 0.4 + edgeFlick * 0.35 + swing * 0.3);
+}
 function buildSwordMesh() {
   const g = new THREE.Group();
   // blade outline: a slight curve that tapers to a point, extruded thin with a soft bevel
@@ -943,6 +991,10 @@ function buildSwordMesh() {
   es.moveTo(0.014, 0.1); es.lineTo(0.025, 0.1); es.quadraticCurveTo(0.032, 0.75, 0.013, 1.1); es.quadraticCurveTo(0.006, 1.15, -0.003, 1.185); es.quadraticCurveTo(0.004, 1.12, 0.006, 1.08); es.quadraticCurveTo(0.022, 0.75, 0.014, 0.1);
   const edgeGeo = new THREE.ExtrudeGeometry(es, { depth: 0.016, bevelEnabled: false, curveSegments: 10 }); edgeGeo.translate(0, 0, -0.008);
   const edge = new THREE.Mesh(edgeGeo, M.edgeGlow); g.add(edge);
+  // two crossed glow cards hug the edge so it reads as light, not paint
+  for (const ry of [0, Math.PI / 2]) {
+    const h = new THREE.Mesh(HALO_GEO, M.bladeHalo); h.position.set(0.02, 0.64, 0); h.rotation.y = ry; h.renderOrder = 5; g.add(h);
+  }
   const guard = new THREE.Mesh(rbox(0.19, 0.045, 0.06, 0.45), M.mullion); guard.position.y = 0.06; g.add(guard);
   const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.029, 0.031, 0.24, 14), M.gun); grip.position.y = -0.07; g.add(grip);
   for (let i = 0; i < 4; i++) { const wrap = new THREE.Mesh(new THREE.TorusGeometry(0.031, 0.004, 6, 16), M.mullion); wrap.rotation.x = Math.PI / 2; wrap.position.y = -0.16 + i * 0.06; g.add(wrap); }
@@ -1680,7 +1732,7 @@ function phaseCleared() {
 function openDoor() { door.opening = true; world.removeRigidBody(door.body); sfx.door(); }
 function pickupSword() {
   player.hasSword = true; state.phase = 2; state.checkpoint = 2;
-  levelGroup.remove(sword); levelGroup.remove(sword.userData.light);
+  levelGroup.remove(sword); sword.userData.light.intensity = 0;
   sfx.pickup(); flash("Sword acquired", "var(--cyan)"); glitch(0.7);
   setObjective("Breach the sealed wings through the windows");
   setViewModel();
@@ -2015,14 +2067,14 @@ const INSPECT_FIST = [
 function startInspect() { if (VM.inspect || VM.attack || player.grapple) return; VM.inspect = { t: 0, dur: player.hasSword ? 2.6 : 2.4, cues: new Set() }; sfx.servo(); }
 function updateInspect(dt, R, L, sword) {
   VM.fingerWave = -1;
-  const I = VM.inspect; if (!I) { M.edgeGlow.color.copy(EDGE_BASE); return; }
+  const I = VM.inspect; if (!I) { VM.edgeSweep = 0; return; }
   if (VM.attack || player.grapple || player.blocking) { VM.inspect = null; return; }
   if (!VM.freeze) I.t += dt; const k = Math.min(1, I.t / I.dur);
   if (sword) {
     Object.assign(R, keyPose(INSPECT_SWORD, k));
     // a light sweep runs up the edge while the blade is shown
     const sweep = Math.max(0, Math.sin(THREE.MathUtils.clamp((k - 0.15) / 0.5, 0, 1) * Math.PI));
-    M.edgeGlow.color.copy(EDGE_BASE).lerp(EDGE_HOT, sweep);
+    VM.edgeSweep = sweep;
     if (k > 0.16 && !I.cues.has("ring")) { I.cues.add("ring"); tone("sine", 2600, 2550, 0.9, 0.04); tone("sine", 3900, 3880, 0.6, 0.02); }
   } else {
     Object.assign(L, keyPose(INSPECT_FIST, k));
@@ -2093,7 +2145,53 @@ function spawnSlash(v) {
   const mesh = new THREE.Mesh(geo, mat); mesh.renderOrder = 20; mesh.frustumCulled = false; vmCamera.add(mesh);
   slashes.push({ g: mesh, mats: [mat], age: 0, dur: 0.38 });
 }
+const SPARK_N = 90;
+const slashSparks = (() => {
+  const pos = new Float32Array(SPARK_N * 6), col = new Float32Array(SPARK_N * 6);
+  const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(pos, 3)); geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  const lines = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+  lines.frustumCulled = false; lines.renderOrder = 25; vmCamera.add(lines);
+  return { lines, pos, col, p: Array.from({ length: SPARK_N }, () => ({ life: 0, max: 1, x: new THREE.Vector3(), v: new THREE.Vector3() })), i: 0, acc: 0, lastTip: new THREE.Vector3(), hasTip: false };
+})();
+const _sp = new THREE.Vector3();
+function emitSlashSparks(dt) {
+  const S = slashSparks;
+  vmSword.updateWorldMatrix(true, false); vmCamera.updateMatrixWorld(true);
+  const tip = _sp.copy(vmSword.userData.tipLocal); vmSword.localToWorld(tip); vmCamera.worldToLocal(tip);
+  const swingV = S.hasTip ? tip.clone().sub(S.lastTip).divideScalar(Math.max(dt, 1e-3)) : new THREE.Vector3();
+  S.lastTip.copy(tip); S.hasTip = true;
+  S.acc += dt * 170;
+  while (S.acc >= 1) {
+    S.acc -= 1;
+    const k = 0.45 + Math.random() * 0.55; const at = vmSword.userData.baseLocal.clone().lerp(vmSword.userData.tipLocal, k); at.x += 0.02;
+    vmSword.localToWorld(at); vmCamera.worldToLocal(at);
+    const p = S.p[S.i]; S.i = (S.i + 1) % SPARK_N;
+    p.x.copy(at); p.max = p.life = 0.12 + Math.random() * 0.22;
+    p.v.copy(swingV).multiplyScalar(-0.12 * Math.random()).add(new THREE.Vector3((Math.random() - 0.5) * 2.4, (Math.random() - 0.2) * 2.2, (Math.random() - 0.5) * 1.6));
+    p.hot = Math.random();
+  }
+}
+function updateSlashSparks(dt) {
+  const S = slashSparks; let live = false;
+  for (let i = 0; i < SPARK_N; i++) {
+    const p = S.p[i]; const o = i * 6;
+    if (p.life <= 0) { S.pos.fill(0, o, o + 6); S.col.fill(0, o, o + 6); continue; }
+    live = true; p.life -= dt; p.v.y -= 6 * dt; p.v.multiplyScalar(Math.pow(0.2, dt)); p.x.addScaledVector(p.v, dt);
+    const q = Math.max(0, p.life / p.max); const len = 0.018 + 0.012 * q;
+    const d = p.v.lengthSq() > 1e-6 ? p.v.clone().normalize() : new THREE.Vector3(0, 1, 0);
+    S.pos[o] = p.x.x; S.pos[o + 1] = p.x.y; S.pos[o + 2] = p.x.z;
+    S.pos[o + 3] = p.x.x - d.x * len; S.pos[o + 4] = p.x.y - d.y * len; S.pos[o + 5] = p.x.z - d.z * len;
+    // white-hot heads cooling to cyan (or orange), tails dimmer
+    const lust = player && player.lust >= 2;
+    const r = p.hot > 0.6 ? 1 : (lust ? 1 : 0.35), g = p.hot > 0.6 ? 0.85 : (lust ? 0.3 : 0.95), b = p.hot > 0.6 ? 0.6 : (lust ? 0.25 : 1);
+    const k = 2.2 * q;
+    S.col[o] = r * k; S.col[o + 1] = g * k; S.col[o + 2] = b * k; S.col[o + 3] = r * k * 0.25; S.col[o + 4] = g * k * 0.25; S.col[o + 5] = b * k * 0.25;
+  }
+  S.lines.visible = live;
+  S.lines.geometry.attributes.position.needsUpdate = true; S.lines.geometry.attributes.color.needsUpdate = true;
+}
 function updateSlashes(dt) {
+  let swinging = false;
   for (let i = slashes.length - 1; i >= 0; i--) {
     const s = slashes[i]; if (!VM.freeze) s.age += dt;
     const k = s.age / s.dur;
@@ -2101,8 +2199,12 @@ function updateSlashes(dt) {
     m.uniforms.uHead.value = THREE.MathUtils.clamp((k - TRAIL_K0) / (TRAIL_K1 - TRAIL_K0), 0, 1.0);
     m.uniforms.uFade.value = THREE.MathUtils.smoothstep(k, TRAIL_K1 + 0.05, 0.85);
     s.g.visible = k > TRAIL_K0;
+    if (k > TRAIL_K0 - 0.04 && k < TRAIL_K1 + 0.04) swinging = true;
     if (k > 0.85) { vmCamera.remove(s.g); s.g.geometry.dispose(); m.dispose(); slashes.splice(i, 1); }
   }
+  if (swinging && player && player.hasSword) emitSlashSparks(dt); else slashSparks.hasTip = false;
+  updateSlashSparks(dt);
+  updateSwordGlow(state.time, dt);
 }
 const speedGroup = new THREE.Group(); speedGroup.position.z = -1.2; vmCamera.add(speedGroup);
 const speedMeshes = [];
@@ -2612,6 +2714,7 @@ function frame(now) {
     const t = now * 0.00004; camera.position.set(Math.cos(t) * 70, 22, Math.sin(t) * 70); camera.lookAt(0, 2, 0);
   }
   sky.position.copy(camera.position);
+  for (const a of alarmLights) a.l.intensity = a.base * (0.45 + 0.55 * Math.pow(0.5 + 0.5 * Math.sin(now * 0.0021 + a.ph), 2));
   renderer.setRenderTarget(rt);
   renderer.clear();
   renderer.render(scene, camera);
@@ -2653,6 +2756,7 @@ window.__res = {
   begin() { $("menu").hidden = true; document.body.classList.remove("cine"); if (state.pendingRestart) { restart(state.pendingFresh); state.pendingRestart = false; } state.started = true; $("screen").hidden = true; },
   startBoot, endBoot, showIntro, get barrels() { return barrels; }, get breakables() { return breakables; }, get shards() { return shards; },
   boom(i) { explodeBarrel(barrels[i]); },
+  get sparkCount() { return slashSparks.p.filter((p) => p.life > 0).length; }, get slashCount() { return slashes.length; },
   slam(e, x, z, dir) { e.body.setTranslation({ x, y: e.floorY + 0.95, z }, true); e.body.setNextKinematicTranslation({ x, y: e.floorY + 0.95, z }); damageEnemy(e, 999, new THREE.Vector3(x, 1, z), new THREE.Vector3(...dir), "heavy"); },
   closeup(armName, off, fov = 24) {
     // test helper: render the arm pass from a close camera aimed at a hand and return the image
