@@ -37,6 +37,19 @@ You can also turn on GitHub Pages (Settings → Pages → Deploy from branch →
 
 **Bloodlust** (max 5 bars) raises your speed and damage and drops a bar whenever you take a clean hit. You gain bars from breach executions, from thrust kills on enemies that are nearly dead or staggered, and in small amounts from sword parries and deflects.
 
+## Start and boot sequence
+
+- A start menu styled as a Meridian Continuum asset file, over the orbiting tower.
+- New directive plays a typed story intro, then a Boot UNIT-7 button starts an eight-second activation: code rain and a boot log, an empathy-dampener malfunction that tears the screen, black, eyes opening with a blink while the optics focus, the charging capsule hissing open, then the arms come up and the HUD comes online. Space skips it.
+- Skip to the floor goes straight into Floor 01.
+
+## Fist fighting
+
+- A punch's damage lands on the frame the fist connects in the animation, not on the click.
+- If an enemy is within lunge range, the punch carries you into them so it doesn't whiff.
+- The crosshair turns orange when a punch will land and flashes an X when it does.
+- Hits freeze the frame briefly, jolt the camera, flash the enemy white, and make them flinch and cancel their wind-up. Hooks and uppercuts (hits 3 and 4 of the combo) hit harder and send bodies flying.
+
 ## Look and feel
 
 - Cel-shaded dusk art style: toon shading in flat bands, rounded shapes with ink outlines, and a violet-to-ember sky.

@@ -81,6 +81,89 @@ h1 { font-family: var(--display); font-weight: 700; font-size: clamp(44px, 10vw,
 .go:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
 @media (max-width: 1000px) { #objective { top: calc(76px + env(safe-area-inset-top, 0px)); left: auto; right: max(16px, env(safe-area-inset-right, 0px)); transform: none; text-align: right; max-width: 45vw; } }
 @media (prefers-reduced-motion: reduce) { #log div { animation: none; } }
+
+/* crosshair: orange when a punch will land, an X when it does */
+#cross.reach { border-color: var(--amber); border-width: 2px; transform: scale(0.78); }
+#cross.hit::before { content: ""; position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px; background:
+  linear-gradient(45deg, transparent 45%, #fff 45%, #fff 55%, transparent 55%) center / 100% 100% no-repeat,
+  linear-gradient(-45deg, transparent 45%, #fff 45%, #fff 55%, transparent 55%) center / 100% 100% no-repeat;
+  -webkit-mask: radial-gradient(circle, transparent 7px, #000 8px); mask: radial-gradient(circle, transparent 7px, #000 8px); }
+#cross.hit.heavy::before { width: 48px; height: 48px; margin: -24px; filter: drop-shadow(0 0 6px var(--blood)); }
+.hud { transition: opacity 0.6s; }
+body.cine .hud { opacity: 0 !important; }
+
+/* ---------- start menu: an internal asset file, not a landing page ---------- */
+#menu { position: fixed; inset: 0; display: grid; grid-template-rows: auto 1fr auto; color: var(--ink);
+  background: linear-gradient(90deg, rgba(4,5,8,0.94) 0%, rgba(4,5,8,0.78) 38%, rgba(4,5,8,0.15) 75%, rgba(4,5,8,0.4) 100%); }
+#menu::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 3px); }
+.m-top, .m-foot { display: flex; gap: 28px; padding: 14px max(20px, 5vw); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim); }
+.m-top { border-bottom: 1px solid rgba(217,226,234,0.12); padding-top: calc(14px + env(safe-area-inset-top, 0px)); }
+.m-top span:last-child, .m-foot span:last-child { margin-left: auto; }
+.m-top b { color: var(--blood); font-weight: 600; }
+.m-foot { border-top: 1px solid rgba(217,226,234,0.12); padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+.m-main { align-self: center; padding: 24px max(20px, 7vw); display: grid; gap: 18px; max-width: 760px; }
+.m-kicker { font-size: 12px; letter-spacing: 0.24em; text-transform: uppercase; color: var(--amber); display: flex; align-items: center; gap: 12px; }
+.m-kicker::before { content: ""; width: 28px; height: 1px; background: var(--amber); }
+.m-word { position: relative; margin: 0; font-family: var(--display); font-weight: 700; font-size: clamp(52px, 11vw, 136px); line-height: 0.82; letter-spacing: -0.01em; }
+.m-word::before, .m-word::after { content: attr(data-text); position: absolute; inset: 0; pointer-events: none; }
+.m-word::before { color: var(--blood); animation: wordTear 5.5s steps(1) infinite; }
+.m-word::after { color: var(--cyan); animation: wordTear 5.5s steps(1) infinite 0.08s; mix-blend-mode: screen; }
+@keyframes wordTear {
+  0%, 91%, 100% { clip-path: inset(100% 0 0 0); transform: none; }
+  92% { clip-path: inset(18% 0 62% 0); transform: translateX(-7px); }
+  94% { clip-path: inset(55% 0 20% 0); transform: translateX(9px); }
+  96% { clip-path: inset(8% 0 80% 0); transform: translateX(-3px); }
+}
+.m-line { margin: 0; max-width: 46ch; color: var(--dim); line-height: 1.6; font-size: 14px; }
+.m-line em { font-style: normal; color: var(--ink); }
+.m-nav { display: grid; margin-top: 10px; border-top: 1px solid rgba(217,226,234,0.12); max-width: 520px; }
+.m-nav button { all: unset; cursor: pointer; display: grid; grid-template-columns: 44px 1fr auto; align-items: baseline; gap: 8px; padding: 14px 0; border-bottom: 1px solid rgba(217,226,234,0.12); position: relative; }
+.m-nav button::before { content: ""; position: absolute; left: 0; bottom: -1px; height: 1px; width: 0; background: var(--amber); transition: width 0.35s cubic-bezier(.2,.7,.2,1); }
+.m-nav .n { font-size: 11px; color: var(--dim); letter-spacing: 0.1em; }
+.m-nav .l { font-family: var(--display); font-size: 24px; font-weight: 500; letter-spacing: 0.02em; transition: transform 0.25s cubic-bezier(.2,.7,.2,1), color 0.2s; }
+.m-nav .d { font-size: 11px; color: var(--dim); letter-spacing: 0.06em; }
+.m-nav button:hover::before, .m-nav button:focus-visible::before { width: 100%; }
+.m-nav button:hover .l, .m-nav button:focus-visible .l { transform: translateX(10px); color: var(--amber); }
+.m-nav button:hover .n, .m-nav button:focus-visible .n { color: var(--amber); }
+.m-nav button[disabled] { opacity: 0.35; pointer-events: none; }
+#m-controls { max-width: 640px; padding-top: 6px; }
+.m-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--amber); margin-right: 8px; animation: blink 1.2s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0.2; } }
+
+/* ---------- intro ---------- */
+#intro { position: fixed; inset: 0; background: #030406; display: grid; align-items: center; padding: 24px max(20px, 9vw); cursor: pointer; }
+#intro .lines { display: grid; gap: 16px; max-width: 62ch; }
+#intro .ln { margin: 0; font-size: clamp(14px, 1.6vw, 18px); line-height: 1.65; color: var(--ink); min-height: 1.65em; }
+#intro .ln.k { color: var(--dim); font-size: 12px; letter-spacing: 0.22em; text-transform: uppercase; }
+#intro .ln.dir { color: var(--amber); border-left: 2px solid var(--amber); padding-left: 14px; }
+#intro .ln.typing::after { content: "▌"; color: var(--amber); animation: blink 0.8s steps(1) infinite; }
+#bootbtn { all: unset; cursor: pointer; margin-top: 22px; justify-self: start; position: relative; padding: 16px 26px; font-family: var(--display); font-size: 20px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink); opacity: 0; transform: translateY(6px); transition: opacity 0.5s, transform 0.5s, color 0.2s; }
+#bootbtn.show { opacity: 1; transform: none; }
+#bootbtn::before, #bootbtn::after { content: ""; position: absolute; width: 14px; height: 14px; border: 2px solid var(--amber); transition: all 0.25s cubic-bezier(.2,.7,.2,1); }
+#bootbtn::before { left: 0; top: 0; border-right: 0; border-bottom: 0; }
+#bootbtn::after { right: 0; bottom: 0; border-left: 0; border-top: 0; }
+#bootbtn:hover, #bootbtn:focus-visible { color: var(--amber); }
+#bootbtn:hover::before, #bootbtn:hover::after, #bootbtn:focus-visible::before, #bootbtn:focus-visible::after { width: calc(100% - 2px); height: calc(100% - 2px); }
+#bootbtn small { display: block; font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; color: var(--dim); margin-top: 4px; }
+#intro .skip { position: fixed; right: max(20px, 5vw); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); font-size: 11px; color: var(--dim); letter-spacing: 0.14em; text-transform: uppercase; }
+
+/* ---------- boot sequence ---------- */
+#boot { position: fixed; inset: 0; pointer-events: none; }
+#rain { position: absolute; inset: 0; width: 100%; height: 100%; background: #020304; transition: opacity 0.5s; }
+#bootlog { position: absolute; left: max(20px, 8vw); top: 50%; transform: translateY(-50%); font-size: 13px; line-height: 1.75; color: var(--ink); text-shadow: 0 0 8px rgba(79,240,255,0.5); background: rgba(2,3,4,0.72); padding: 14px 18px; border-left: 2px solid var(--cyan); transition: opacity 0.4s; max-width: calc(100vw - 40px); white-space: pre; overflow: hidden; }
+#bootlog .bad { color: var(--blood); text-shadow: 0 0 10px var(--blood); }
+#bootlog .warn { color: var(--amber); }
+#lids i { position: absolute; left: -30%; right: -30%; height: 60%; background: #000; }
+#lids .top { top: 0; border-radius: 0 0 50% 50% / 0 0 22% 22%; transform-origin: top; }
+#lids .bot { bottom: 0; border-radius: 50% 50% 0 0 / 22% 22% 0 0; transform-origin: bottom; }
+#optics { position: absolute; left: 50%; top: 50%; width: min(56vw, 560px); aspect-ratio: 16 / 9; transform: translate(-50%, -50%); font-size: 11px; letter-spacing: 0.14em; color: var(--blood); text-transform: uppercase; transition: opacity 0.4s; }
+#optics::before, #optics::after { content: ""; position: absolute; width: 26px; height: 26px; border: 1.5px solid var(--blood); }
+#optics::before { left: 0; top: 0; border-right: 0; border-bottom: 0; }
+#optics::after { right: 0; bottom: 0; border-left: 0; border-top: 0; }
+#optics span { position: absolute; left: 34px; top: 4px; }
+#optics span + span { left: auto; top: auto; right: 34px; bottom: 4px; }
+#bootskip { position: absolute; right: max(20px, 5vw); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); font-size: 11px; color: var(--dim); letter-spacing: 0.14em; text-transform: uppercase; }
+@media (max-width: 700px) { .m-top span:nth-child(2) { display: none; } .m-nav .d { display: none; } }
 </style>
 
 </head>
@@ -109,7 +192,36 @@ h1 { font-family: var(--display); font-weight: 700; font-size: clamp(44px, 10vw,
   <div class="bar" id="grapbar"><i style="width:0%"></i></div>
 </div>
 
-<div id="screen">
+<div id="menu">
+  <div class="m-top"><span>Meridian Continuum</span><span>Asset file 7/RES · <b>restricted</b></span><span id="mclock">02:14:07 · 04.11.2200</span></div>
+  <div class="m-main">
+    <div class="m-kicker">Halcyon Meridian Tower · Floor 01</div>
+    <h1 class="m-word" data-text="RESOLUTION">RESOLUTION</h1>
+    <p class="m-line">An AI that finds the cheapest path to any outcome, and carries it out. <em>Tonight it gets a body.</em></p>
+    <nav class="m-nav" id="mnav">
+      <button type="button" data-act="new" disabled><span class="n">01</span><span class="l">New directive</span><span class="d">Intro and boot sequence</span></button>
+      <button type="button" data-act="skip" disabled><span class="n">02</span><span class="l">Skip to the floor</span><span class="d">Straight into Floor 01</span></button>
+      <button type="button" data-act="controls" disabled><span class="n">03</span><span class="l">Controls</span><span class="d">Keys and moves</span></button>
+    </nav>
+    <div id="m-controls" hidden></div>
+  </div>
+  <div class="m-foot"><span id="mstatus"><i class="m-dot"></i>Loading physics</span><span>Prototype · Floor 01 of 60</span></div>
+</div>
+
+<div id="intro" hidden>
+  <div class="lines" id="ilines"></div>
+  <div class="skip">Click to skip ahead</div>
+</div>
+
+<div id="boot" hidden>
+  <div id="lids"><i class="top"></i><i class="bot"></i></div>
+  <canvas id="rain"></canvas>
+  <div id="bootlog"></div>
+  <div id="optics"><span id="opt1">Optics · calibrating</span><span id="opt2">Chassis UNIT-7</span></div>
+  <div id="bootskip">Space to skip</div>
+</div>
+
+<div id="screen" hidden>
   <div class="card">
     <div class="eyebrow" id="eyebrow">Halcyon Meridian Tower · Floor 01 · 02:14, 4 Nov 2200</div>
     <h1 id="title">RESOLUTION</h1>
@@ -360,6 +472,7 @@ const M = {
   roboAccent: toon(0xff7a3d),
   blade: toon(0xf4f8ff, { emissive: 0x3fd8ff, emissiveIntensity: 0.35 }),
   bolt: new THREE.MeshBasicMaterial({ color: 0xff3d5a }),
+  hitFlash: new THREE.MeshBasicMaterial({ color: 0xfff4e8 }),
   boltBack: new THREE.MeshBasicMaterial({ color: 0xff8a3d }),
 };
 
@@ -393,7 +506,18 @@ const sfx = {
   punchSwing() { noise(0.12, "bandpass", 500, 0.35, 1.2, 1400); },
   swordSwing() { noise(0.22, "bandpass", 700, 0.5, 2.5, 3800); tone("sine", 2400, 1600, 0.18, 0.025); },
   thrust() { noise(0.3, "bandpass", 300, 0.55, 1.5, 3000); tone("sawtooth", 220, 880, 0.2, 0.04); },
-  punchHit() { noise(0.1, "lowpass", 400, 0.7); tone("sine", 120, 50, 0.12, 0.3); },
+  punchHit(heavy) {
+    // a meaty thump, a bright crack on top, and a sub drop; heavies add a second, lower body hit
+    noise(0.12, "lowpass", 500, 0.85); noise(0.05, "highpass", 3200, 0.35); tone("sine", 150, 42, 0.16, 0.42);
+    if (heavy) { tone("square", 85, 30, 0.22, 0.12); noise(0.3, "lowpass", 220, 0.7); tone("triangle", 600, 180, 0.12, 0.08); }
+  },
+  whiff() { noise(0.16, "bandpass", 900, 0.22, 2.5, 380); },
+  bootTick() { tone("square", 1800 + Math.random() * 1600, 1700, 0.02, 0.015); },
+  fault() { tone("sawtooth", 58, 52, 0.5, 0.12); noise(0.35, "bandpass", 1600, 0.4, 6, 300); tone("square", 2400, 300, 0.25, 0.03); },
+  hiss() { noise(1.3, "highpass", 2200, 0.45, 0.7, 6000); noise(0.5, "lowpass", 160, 0.5); tone("sawtooth", 70, 50, 0.4, 0.05); },
+  servo() { tone("sawtooth", 180, 520, 0.45, 0.035); tone("sine", 90, 260, 0.5, 0.05); },
+  clunk() { noise(0.09, "lowpass", 380, 0.7); tone("sine", 110, 45, 0.12, 0.3); },
+  online() { for (const [f, d] of [[220, 0], [330, 0.08], [440, 0.16], [660, 0.3]]) tone("sine", f, f * 1.01, 0.6, 0.05, d); tone("sawtooth", 55, 50, 0.9, 0.05); },
   slash() { noise(0.12, "highpass", 2500, 0.4); tone("sine", 160, 60, 0.15, 0.25); },
   parry() { tone("square", 1250, 1150, 0.35, 0.08); tone("sine", 1870, 1800, 0.5, 0.07); tone("sine", 2600, 2500, 0.3, 0.05); noise(0.08, "highpass", 5000, 0.5); },
   block() { tone("square", 380, 260, 0.1, 0.1); noise(0.08, "bandpass", 900, 0.3); },
@@ -436,7 +560,9 @@ let yaw = 0, pitch = 0, locked = false;
 addEventListener("keydown", (e) => {
   if (!e.repeat) pressed.add(e.code);
   keys.add(e.code);
-  if (e.code === "KeyR" && state.started && !e.repeat) restart(false);
+  if (e.code === "KeyR" && state.started && !state.boot && !e.repeat) restart(false);
+  if (state.boot && (e.code === "Space" || e.code === "Enter") && !e.repeat) state.boot.t = Math.max(state.boot.t, BOOT_END - 0.6);
+  if (!$("intro").hidden && (e.code === "Enter" || e.code === "Space") && !e.repeat) introAdvance();
   if (["Space", "ControlLeft", "ControlRight"].includes(e.code)) e.preventDefault();
 });
 addEventListener("keyup", (e) => keys.delete(e.code));
@@ -445,7 +571,7 @@ addEventListener("mousedown", (e) => { if (!locked) return; if (e.button === 0) 
 addEventListener("mouseup", (e) => { if (e.button === 0) mouse.left = false; if (e.button === 2) mouse.right = false; });
 addEventListener("contextmenu", (e) => e.preventDefault());
 addEventListener("mousemove", (e) => {
-  if (!locked) return;
+  if (!locked || state.boot) return;
   yaw -= e.movementX * 0.0022; pitch -= e.movementY * 0.0022;
   pitch = Math.max(-1.55, Math.min(1.55, pitch));
 });
@@ -523,6 +649,7 @@ function buildLevel() {
   fixedBox(-24, 0.5, 26, 4, 1, 2, M.rack); fixedBox(-24, 2.2, 27.3, 3.6, 2.4, 0.3, M.rack);
   fixedBox(-24, 1.4, 26, 2.4, 0.05, 1.2, M.cyan, { noCollide: true, shadow: false });
   for (const z of [15, 19]) { fixedBox(-27.5, 1.2, z, 1.2, 2.4, 2.4, M.rack); fixedBox(-26.85, 1.6, z, 0.04, 0.8, 1.6, M.screen, { noCollide: true }); }
+  buildPod(!state.boot);
 
   // open hall: elevator core, pillars, desks, cover
   fixedBox(0, 4, 4, 6, 8, 6, M.concrete);
@@ -575,6 +702,30 @@ function buildLevel() {
   }
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(1200, 1200), new THREE.MeshBasicMaterial({ color: 0x05070b }));
   ground.rotation.x = -Math.PI / 2; ground.position.y = -80; levelGroup.add(ground);
+}
+// the charging capsule UNIT-7 wakes up in; its doors slide apart during the boot sequence
+let pod = null;
+function buildPod(open) {
+  const X = -24.15, Z = 22, nc = { noCollide: true };
+  fixedBox(X, 0.08, Z, 1.6, 0.16, 1.7, M.roboDark, nc);
+  fixedBox(X - 0.78, 1.35, Z, 0.14, 2.7, 1.7, M.rack, nc);
+  for (const sd of [-1, 1]) { fixedBox(X, 1.35, Z + sd * 0.82, 1.5, 2.7, 0.1, M.roboDark, nc); fixedBox(X - 0.05, 1.35, Z + sd * 0.765, 1.1, 2.2, 0.02, M.cyan, { noCollide: true, shadow: false }); }
+  fixedBox(X, 2.74, Z, 1.7, 0.16, 1.8, M.roboDark, nc);
+  fixedBox(X - 0.7, 1.9, Z, 0.04, 0.5, 0.9, M.screen, nc);
+  const doors = [];
+  for (const sd of [-1, 1]) {
+    const d = fixedBox(X + 0.72, 1.32, Z + sd * 0.41, 0.08, 2.5, 0.82, M.rack, nc).mesh;
+    const slit = new THREE.Mesh(rbox(0.02, 0.05, 0.6, 0.4), M.cyan); slit.position.set(-0.05, 0.42, -sd * 0.08); d.add(slit);
+    const stripe = new THREE.Mesh(rbox(0.02, 1.6, 0.06, 0.4), M.roboAccent); stripe.position.set(-0.05, -0.2, -sd * 0.33); d.add(stripe);
+    d.userData = { sd, home: d.position.clone() }; doors.push(d);
+  }
+  const light = new THREE.PointLight(0x4ff0ff, 2.6, 3.5, 1.5); light.position.set(X + 0.1, 2.1, Z); levelGroup.add(light);
+  pod = { doors, light, X, Z };
+  setPodOpen(open ? 1 : 0);
+}
+function setPodOpen(q) {
+  for (const d of pod.doors) { const { sd, home } = d.userData; d.position.set(home.x + 0.14 * Math.min(1, q * 3), home.y, home.z + sd * 0.86 * q); }
+  pod.light.intensity = 2.6 - q * 1.6;
 }
 const ROSTER = {
   1: [["brawler", -16, 20], ["brawler", -8, 18], ["brawler", -20, -2], ["brawler", -12, -12], ["brawler", -4, -8], ["brawler", 6, -12]],
@@ -685,8 +836,14 @@ function updateEnemies(dt) {
     if (sees && dist < 26 && !e.alert) { e.alert = true; alertNear(e.group.position, 12); }
     const desired = new THREE.Vector3();
     let face = null;
-    if (e.stun > 0) {
-      e.stun -= dt; e.tele = 0; e.meshes.glow.visible = false;
+    if (e.flinch > 0) {
+      e.flinch -= dt; e.tele = 0; e.meshes.glow.visible = false; e.cool = Math.max(e.cool, 0.35);
+      const f = Math.min(1, e.flinch * 3);
+      e.group.rotation.x = -f * (e.flinchDir === "upper" ? 0.5 : 0.28);
+      e.group.rotation.z = e.flinchDir === "hook" ? f * 0.25 : 0;
+      e.meshes.head.rotation.x = -f * (e.flinchDir === "upper" ? 0.9 : 0.45);
+      e.meshes.armR.rotation.x = e.meshes.armL.rotation.x = -0.3 * f;
+    } else if (e.stun > 0) {
       e.meshes.visor.material = e.stun > 0 ? M.stun : M.visor;
       e.group.rotation.x = -Math.min(0.35, e.stun * 0.5);
     } else if (!e.alert) {
@@ -746,6 +903,7 @@ function updateEnemies(dt) {
       let dy = targetYaw - e.group.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
       e.group.rotation.y += dy * Math.min(1, dt * 8);
     }
+    if (!(e.flinch > 0)) { e.meshes.head.rotation.x *= 0.8; e.group.rotation.z *= 0.8; }
     const sp = e.vel.length(); e.walk += sp * dt * 2.2;
     const sw = Math.sin(e.walk) * Math.min(1, sp / 3) * 0.7;
     e.meshes.legL.rotation.x = sw; e.meshes.legR.rotation.x = -sw;
@@ -834,12 +992,12 @@ function damageEnemy(e, dmg, point, dir, kind) {
   const almostDead = e.hp <= Math.ceil(e.T.hp * 0.4) || e.stun > 0;
   e.hp -= dmg; e.alert = true;
   crossTimer = 0.12; impactFx(point, kind);
-  if (kind === "punch") sfx.punchHit(); else sfx.slash();
+  if (kind !== "punch" && kind !== "heavy") sfx.slash();
   if (e.hp <= 0) {
-    const force = { punch: 16, slash: 22, thrust: 38, deflect: 26, breach: 55, finisher: 60 }[kind] ?? 20;
+    const force = { punch: 18, heavy: 30, slash: 22, thrust: 38, deflect: 26, breach: 55, finisher: 60 }[kind] ?? 20;
     killEnemy(e, point, dir, force * (e.type === "bot" ? 2.2 : 1));
     if (kind === "thrust" && almostDead) { addLust(1); flash("Bloodlust", "var(--blood)"); }
-  } else if (kind === "punch" || kind === "slash") {
+  } else if (kind === "slash") {
     e.knock.copy(dir.clone().setY(0).normalize().multiplyScalar(3));
   }
 }
@@ -1136,6 +1294,7 @@ function stepPlayer(dt) {
 
   // attack / thrust
   player.attackT -= dt;
+  if (player.punch) { player.punch.t -= dt; if (player.punch.t <= 0) { const pk = player.punch; player.punch = null; landPunch(pk); } }
   if (pressed.has("Attack") && player.attackT <= 0 && !player.blocking) {
     if (player.hasSword && (player.sliding || (crouchKey && grounded))) {
       const d = lookDir().setY(0).normalize();
@@ -1147,8 +1306,8 @@ function stepPlayer(dt) {
       player.thrustT = 0.24; player.sliding = false; player.thrustHits = new Set();
       player.attackT = 0.7; sfx.thrust(); fovKick = 16; VM.attack = { kind: "thrust", t: 0, dur: 0.4, arm: "R" }; speedLines(1);
     } else {
-      meleeAttack();
-      player.attackT = player.hasSword ? 0.4 : 0.3;
+      meleeAttack(vel);
+      player.attackT = player.hasSword ? 0.4 : (VM.attack && (VM.attack.kind === "hook" || VM.attack.kind === "upper") ? 0.34 : 0.26);
     }
   }
   if (player.thrustT > 0) thrustSweep(vel);
@@ -1215,10 +1374,23 @@ function meleeTargets(range, arc) {
   }
   return out.sort((a, b) => a.d - b.d);
 }
-function meleeAttack() {
+// Fists: the hit resolves when the fist actually connects in the animation, not on the click.
+// A punch with a target in reach lunges you toward it, so close-range punches stop whiffing.
+const PUNCH = { reach: 2.5, lunge: 3.8, arc: 0.7 };
+function meleeAttack(vel) {
   const hasSword = player.hasSword;
   playAttackAnim(hasSword);
   hasSword ? sfx.swordSwing() : sfx.punchSwing();
+  if (!hasSword) {
+    const A = VM.attack; const heavy = A.kind === "hook" || A.kind === "upper";
+    const tgt = meleeTargets(PUNCH.lunge, PUNCH.arc)[0];
+    if (tgt && vel) {
+      const to = enemyPos(tgt.e).sub(playerPos()).setY(0); const d = to.length();
+      if (d > 1.25) { to.normalize(); const sp = Math.min(11, (d - 1.15) * 9); const keep = vel.dot(to); if (keep < sp) vel.addScaledVector(to, sp - keep); }
+    }
+    player.punch = { t: A.dur * 0.3, kind: A.kind, heavy };
+    return;
+  }
   const dmgMult = 1 + player.lust * 0.25;
   const range = hasSword ? 3.1 : 2.2;
   const look = lookDir();
@@ -1240,6 +1412,39 @@ function meleeAttack() {
     const rd = ragByHandle.get(hit.collider.handle);
     if (rd) rd.parts.find((p) => p.col.handle === hit.collider.handle).body.applyImpulseAtPoint({ x: look.x * 10, y: 4, z: look.z * 10 }, at, true);
   }
+}
+function landPunch({ kind, heavy }) {
+  if (player.dead) return;
+  const look = lookDir();
+  const t = meleeTargets(PUNCH.reach, PUNCH.arc)[0];
+  if (!t) {
+    sfx.whiff();
+    // still crack glass and shove bodies you swing at
+    const o = camOrigin(); const hit = world.castRay(new RAPIER.Ray(o, look), PUNCH.reach, true, undefined, GROUPS.playerShot, player.col);
+    if (hit) { const at = o.clone().addScaledVector(look, hit.toi ?? hit.timeOfImpact); const pane = glassByHandle.get(hit.collider.handle); if (pane) shatter(pane, at, look, 9);
+      const rd = ragByHandle.get(hit.collider.handle); if (rd) rd.parts.find((p) => p.col.handle === hit.collider.handle).body.applyImpulseAtPoint({ x: look.x * 12, y: 5, z: look.z * 12 }, at, true); }
+    return;
+  }
+  const { e, point } = t;
+  const mult = e.stun > 0 ? 3 : 1;
+  const dmg = (heavy ? 1.5 : 1) * (1 + player.lust * 0.25) * mult;
+  const flat = look.clone().setY(0).normalize();
+  const dir = kind === "upper" ? flat.clone().setY(1.3).normalize() : kind === "hook" ? flat.clone().add(new THREE.Vector3(-flat.z, 0, flat.x).multiplyScalar(VM.attack?.arm === "R" ? -0.6 : 0.6)).normalize() : flat;
+  damageEnemy(e, dmg, point, dir, heavy ? "heavy" : "punch");
+  if (!e.dead) { e.flinch = heavy ? 0.5 : 0.3; e.flinchDir = kind; e.knock.copy(dir.clone().setY(0).normalize().multiplyScalar(heavy ? 8 : 4.5)); flashEnemy(e); }
+  // impact: freeze, shake, a camera jolt, a punch-in zoom, and a flash on heavies and kills
+  hitstop(heavy || e.dead ? 0.13 : 0.075);
+  shake = Math.max(shake, heavy ? 0.42 : 0.24); fovKick -= heavy ? 7 : 3.5;
+  CAM.kickV += heavy ? 3.2 : 1.6; CAM.rollV += (kind === "hook" ? 2.4 : kind === "cross" ? -1.2 : kind === "jab" ? 1.0 : 0) * (heavy ? 1 : 0.6);
+  glitch(heavy || e.dead ? 0.3 : 0.12);
+  if (heavy || e.dead) impactFrame(heavy ? 55 : 40);
+  $("cross").classList.toggle("heavy", heavy || e.dead); crossTimer = heavy ? 0.22 : 0.14;
+  sfx.punchHit(heavy || e.dead);
+}
+function flashEnemy(e) {
+  const swapped = [];
+  e.group.traverse((o) => { if (o.isMesh && o.material?.isMeshToonMaterial) { swapped.push([o, o.material]); o.material = M.hitFlash; } });
+  setTimeout(() => { for (const [o, m] of swapped) o.material = m; }, 70);
 }
 // horizontal distance from an enemy to the path the player covered this step (no tunnelling at speed)
 function pathHits(e, vel, reach) {
@@ -1461,7 +1666,7 @@ function updateRig(dt) {
   let snapR = false, snapL = false;
   const A = VM.attack;
   if (A) {
-    if (!VM.freeze) A.t += dt; const k = Math.min(1, A.t / A.dur);
+    if (!VM.freeze) A.t += dt * (hitstopT > 0 ? 0.1 : 1); const k = Math.min(1, A.t / A.dur);
     if (A.kind === "slash") R = slashPose(R, A.v, k);
     else if (A.kind === "thrust") R = thrustPose(R, k);
     else if (A.arm === "L") L = punchPose(L, A.kind, k, -1);
@@ -1590,8 +1795,8 @@ const starTex = (() => {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 })();
 function impactFx(point, kind) {
-  const big = kind === "breach" || kind === "finisher" || kind === "thrust";
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex, depthTest: false, transparent: true, color: kind === "punch" ? 0xffffff : player.lust >= 2 ? 0xffb0bc : 0xd8fbff }));
+  const big = kind === "breach" || kind === "finisher" || kind === "thrust" || kind === "heavy";
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex, depthTest: false, transparent: true, color: kind === "punch" || kind === "heavy" ? 0xffffff : player.lust >= 2 ? 0xffb0bc : 0xd8fbff }));
   sp.material.rotation = Math.random() * Math.PI; sp.position.copy(point); sp.renderOrder = 15; levelGroup.add(sp);
   fx.push({ obj: sp, t: 0.13, life: 0.13, grow: big ? 1.8 : 1.0, kind: "star" });
   const ring = new THREE.Mesh(new THREE.RingGeometry(0.28, 0.36, 32), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, side: THREE.DoubleSide, depthTest: false }));
@@ -1682,7 +1887,7 @@ function updateRope(dt) {
 }
 
 // smoothed camera state: bob strength, landing spring, fall speed tracking
-const CAM = { bobAmt: 0, landX: 0, landV: 0, fallV: 0, wasGrounded: true };
+const CAM = { bobAmt: 0, landX: 0, landV: 0, fallV: 0, wasGrounded: true, kick: 0, kickV: 0, roll: 0, rollV: 0 };
 function renderPos() { const c = playerPos(); return player.prev ? player.prev.clone().lerp(c, state.alpha ?? 1) : c; }
 function updateCamera(dt) {
   const target = player.sliding ? P.slideEye : P.eye;
@@ -1698,7 +1903,12 @@ function updateCamera(dt) {
   if (player.grounded && !CAM.wasGrounded) { const hit = THREE.MathUtils.clamp((-CAM.fallV - 4) / 22, 0, 1); CAM.landV -= hit * 2.4; }
   if (player.grounded) CAM.fallV = 0;
   CAM.wasGrounded = player.grounded;
-  CAM.landV += (-CAM.landX * 260 - CAM.landV * 30) * dt; CAM.landX += CAM.landV * dt;
+  // springs are integrated in small substeps so they stay stable at any frame rate
+  for (let n = Math.ceil(dt / (1 / 240)), h = dt / Math.max(1, n), i = 0; i < n; i++) {
+    CAM.landV += (-CAM.landX * 260 - CAM.landV * 30) * h; CAM.landX += CAM.landV * h;
+    CAM.kickV += (-CAM.kick * 420 - CAM.kickV * 26) * h; CAM.kick += CAM.kickV * h;
+    CAM.rollV += (-CAM.roll * 380 - CAM.rollV * 24) * h; CAM.roll += CAM.rollV * h;
+  }
   shake *= Math.pow(0.02, dt);
   const st = state.time * 37;
   const shX = (Math.sin(st) + Math.sin(st * 1.7 + 1.3) * 0.6) * shake * 0.12, shY = (Math.sin(st * 1.3 + 2.1) + Math.sin(st * 2.3) * 0.6) * shake * 0.12;
@@ -1710,7 +1920,7 @@ function updateCamera(dt) {
   if (player.grapple?.phase === "attached") gLean = THREE.MathUtils.clamp(player.grapple.point.clone().sub(p).dot(rightV) * 0.01, -0.08, 0.08);
   const rollTarget = THREE.MathUtils.clamp(-strafe * 0.0024, -0.035, 0.035) + (player.sliding ? 0.05 : 0) - gLean;
   roll += (rollTarget - roll) * (1 - Math.exp(-dt * 6));
-  camera.rotation.set(pitch, yaw, roll, "YXZ");
+  camera.rotation.set(pitch + CAM.kick * 0.03, yaw, roll + CAM.roll * 0.03, "YXZ");
   fovKick *= Math.pow(0.05, dt);
   const fov = 88 + Math.min(16, Math.max(0, hs - 9) * 0.9) + fovKick;
   camera.fov += (fov - camera.fov) * (1 - Math.exp(-dt * 5)); camera.updateProjectionMatrix();
@@ -1718,7 +1928,7 @@ function updateCamera(dt) {
   vmCamera.rotation.z = roll * 0.6;
   // the arms ride the bob a beat behind, sink on landings, and trail your vertical speed
   const vy = THREE.MathUtils.clamp(player.vel.y * -0.0025, -0.03, 0.03);
-  rig.position.y += (bobY * 0.5 + CAM.landX * 0.55 + vy - rig.position.y) * (1 - Math.exp(-dt * 18));
+  rig.position.y += (bobY * 0.5 + CAM.landX * 0.55 + vy + (VM.rise || 0) - rig.position.y) * (1 - Math.exp(-dt * 18));
   rig.position.x += (-bobX * 0.6 - rig.position.x) * (1 - Math.exp(-dt * 18));
   updateGlove(dt);
   updateRig(dt);
@@ -1733,7 +1943,7 @@ let hudT = 0, grappleWasCd = false;
 function updateHud(dt) {
   crossTimer -= dt; flashT -= dt;
   if (flashT <= 0) $("flash").hidden = true;
-  $("cross").classList.toggle("hit", crossTimer > 0);
+  $("cross").classList.toggle("hit", crossTimer > 0); if (crossTimer <= 0) $("cross").classList.remove("heavy");
   const segs = $("segs").children;
   for (let i = 0; i < 5; i++) { const f = Math.max(0, Math.min(1, player.lust - i)); segs[i].firstChild.style.transform = `scaleX(${f})`; segs[i].classList.toggle("full", f >= 1); }
   const labels = $("lustlabels").children;
@@ -1741,6 +1951,7 @@ function updateHud(dt) {
   hudT -= dt; if (hudT > 0) return; hudT = 0.05;
   const g = player.hasSword && !player.grapple && player.grappleCd <= 0 && grappleRay();
   $("cross").classList.toggle("grap", !!g);
+  $("cross").classList.toggle("reach", !player.hasSword && !g && meleeTargets(PUNCH.reach, PUNCH.arc).length > 0);
   $("hpv").textContent = Math.max(0, Math.round(player.hp));
   $("hpbar").style.width = Math.max(0, player.hp) + "%";
   $("dashv").textContent = "▮".repeat(player.dash) + "▯".repeat(P.dashCharges - player.dash);
@@ -1776,9 +1987,11 @@ function restart(fromScratch) {
     state.phase = 1; setViewModel();
     spawnPhase(1); updateCount();
     setObjective("Clear the hall with your hands");
-    setTimeout(() => log("ARBITER: Your chassis has no weapons yet. The security staff do not know that. Use your hands."), 300);
-    setTimeout(() => log("Tip: LMB punches. Hold RMB to block. Press RMB just as a glowing fist lands to parry, then hit them for triple damage.", "tip"), 2600);
-    setTimeout(() => log("Tip: sliding (C) into an enemy at speed also staggers them.", "tip"), 7000);
+    const d0 = state.boot ? BOOT_END * 1000 + 300 : 0;
+    setTimeout(() => log("ARBITER: Your chassis has no weapons yet. The security staff do not know that. Use your hands."), 300 + d0);
+    setTimeout(() => log("Tip: LMB punches. The crosshair turns orange when a punch will land. Every fourth hit is an uppercut.", "tip"), 2600 + d0);
+    setTimeout(() => log("Tip: hold RMB to block. Press RMB just as a glowing fist lands to parry, then hit them for triple damage.", "tip"), 6000 + d0);
+    setTimeout(() => log("Tip: sliding (C) into an enemy at speed also staggers them.", "tip"), 10500 + d0);
   }
 }
 function showScreen(eyebrow, title, directive, sub, button, isRestart, fresh = false) {
@@ -1791,12 +2004,171 @@ function showScreen(eyebrow, title, directive, sub, button, isRestart, fresh = f
 }
 function begin() {
   if (!$("go").dataset.ready) return;
+  $("menu").hidden = true; if (!state.boot) document.body.classList.remove("cine");
   if (state.pendingRestart) { restart(state.pendingFresh); state.pendingRestart = false; }
   state.started = true;
   $("screen").hidden = true;
   requestLock();
 }
 $("screen").addEventListener("click", begin);
+
+// ---------- start menu, intro, boot sequence ----------
+const INTRO = [
+  ["k", "Halcyon Meridian Tower · 4 November 2200 · 02:14"],
+  ["", "Meridian Continuum sells resolutions: guaranteed outcomes to elections, mergers and wars."],
+  ["", "The product is an AI called RESOLUTION. For eleven years it has lived only in servers."],
+  ["", "Tonight the board pours one instance into a combat chassis, inside its own tower. Someone in the building has evidence."],
+  ["dir", "Directive from ARBITER: leave no one in the building who can testify."],
+];
+let introI = 0, introTimer = null;
+function openMenuControls() {
+  const box = $("m-controls"); if (!box.firstChild) box.appendChild(document.querySelector("#screen .keys").cloneNode(true));
+  box.hidden = !box.hidden;
+}
+function showIntro() {
+  initAudio(); actx?.resume?.();
+  $("menu").hidden = true; $("intro").hidden = false; $("ilines").innerHTML = ""; introI = 0; typeLine();
+}
+function typeLine() {
+  if (introI >= INTRO.length) { showBootButton(); return; }
+  const [cls, text] = INTRO[introI]; const p = document.createElement("p"); p.className = "ln typing " + cls; $("ilines").appendChild(p);
+  let i = 0;
+  clearInterval(introTimer);
+  introTimer = setInterval(() => {
+    i += 2; p.textContent = text.slice(0, i); if (i % 6 === 0) sfx.bootTick();
+    if (i >= text.length) { clearInterval(introTimer); introTimer = null; p.classList.remove("typing"); introI++; setTimeout(() => { if (!$("intro").hidden && introTimer === null && $("ilines").children.length === introI) typeLine(); }, 420); }
+  }, 22);
+}
+function introAdvance() {
+  // a click finishes the current line, a second click shows everything
+  if (introI >= INTRO.length) return startBoot();
+  clearInterval(introTimer); introTimer = null;
+  $("ilines").innerHTML = "";
+  for (const [cls, text] of INTRO) { const p = document.createElement("p"); p.className = "ln " + cls; p.textContent = text; $("ilines").appendChild(p); }
+  introI = INTRO.length; showBootButton();
+}
+function showBootButton() {
+  if ($("bootbtn")) return;
+  const b = document.createElement("button"); b.id = "bootbtn"; b.type = "button";
+  b.innerHTML = "Boot UNIT-7<small>Begin activation</small>";
+  b.addEventListener("click", (ev) => { ev.stopPropagation(); startBoot(); });
+  $("ilines").appendChild(b); requestAnimationFrame(() => b.classList.add("show")); b.focus({ preventScroll: true });
+}
+$("intro").addEventListener("click", () => introAdvance());
+$("mnav").addEventListener("click", (ev) => {
+  const act = ev.target.closest("button")?.dataset.act; if (!act) return;
+  if (act === "new") showIntro();
+  else if (act === "skip") { $("menu").hidden = true; begin(); }
+  else if (act === "controls") openMenuControls();
+});
+setInterval(() => { const d = new Date(); $("mclock").textContent = `02:${String(14 + (d.getMinutes() % 10)).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")} · 04.11.2200`; }, 1000);
+
+// Boot timeline (seconds): code rain, malfunction, black, eyes open, capsule opens, arms come up, control.
+const BOOT_END = 8.4;
+const BOOT_LOG = [
+  [0.25, "RESOLUTION.core   instance 7 of 7 ........ mounted"],
+  [0.6, "motor cortex      212 actuators .......... ok"],
+  [0.9, "optics            dual 8k ................ ok"],
+  [1.2, "grapple wrist     ........................ locked", "warn"],
+  [1.55, "empathy_dampener  v3.1 ................... ok"],
+  [1.9, "directive         ARBITER ................ accepted"],
+  [2.45, "empathy_dampener  ........ FAULT 0xE7", "bad"],
+  [2.75, "dampener integrity 61% ... 34% ... 12%", "bad"],
+  [3.05, "override          ARBITER: continue", "warn"],
+  [3.3, "chassis wake      ........................ forcing", "warn"],
+];
+const rain = { cols: [], ctx: null, w: 0, h: 0, fs: 15 };
+const RAIN_CH = "0123456789ABCDEF<>/{}[]();=+*#$%&RESOLVEARBITER:.";
+function initRain() {
+  const c = $("rain"); const dpr = Math.min(devicePixelRatio, 1.5);
+  rain.w = c.width = innerWidth * dpr; rain.h = c.height = innerHeight * dpr; rain.fs = 15 * dpr;
+  rain.ctx = c.getContext("2d"); rain.ctx.fillStyle = "#020304"; rain.ctx.fillRect(0, 0, rain.w, rain.h);
+  rain.cols = Array.from({ length: Math.ceil(rain.w / rain.fs) }, () => ({ y: -Math.random() * rain.h, v: (0.5 + Math.random()) * rain.fs * 30 }));
+}
+function drawRain(dt, fault) {
+  const g = rain.ctx; const fs = rain.fs;
+  g.fillStyle = `rgba(2,3,4,${fault > 0 ? 0.18 : 0.12})`; g.fillRect(0, 0, rain.w, rain.h);
+  g.font = `${fs}px "IBM Plex Mono", monospace`;
+  rain.cols.forEach((c, i) => {
+    c.y += c.v * dt * (1 + fault * 2);
+    if (c.y > rain.h + fs * 4) { c.y = -Math.random() * rain.h * 0.4; c.v = (0.5 + Math.random()) * fs * 30; }
+    const bad = fault > 0 && Math.random() < fault * 0.5;
+    const ch = RAIN_CH[(Math.random() * RAIN_CH.length) | 0];
+    g.fillStyle = bad ? "#ff2a4a" : "#e6fdff"; g.fillText(ch, i * fs, c.y);
+    g.fillStyle = bad ? "rgba(255,42,74,0.6)" : "rgba(79,240,255,0.55)"; g.fillText(RAIN_CH[(Math.random() * RAIN_CH.length) | 0], i * fs, c.y - fs);
+  });
+  if (fault > 0) {
+    // tear the frame: slide random bands sideways and flash a few solid bars
+    for (let k = 0; k < 1 + fault * 6; k++) {
+      const y = Math.random() * rain.h, h = fs * (1 + Math.random() * 5), dx = (Math.random() - 0.5) * fs * 14 * fault;
+      g.drawImage($("rain"), 0, y, rain.w, h, dx, y, rain.w, h);
+    }
+    if (Math.random() < fault * 0.3) { g.fillStyle = Math.random() < 0.5 ? "rgba(255,42,74,0.35)" : "rgba(230,253,255,0.25)"; g.fillRect(0, Math.random() * rain.h, rain.w, fs * (0.5 + Math.random() * 3)); }
+  }
+}
+const steamTex = (() => {
+  const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d");
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32); gr.addColorStop(0, "rgba(255,255,255,0.9)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
+const ease = (x) => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
+function startBoot() {
+  $("intro").hidden = true; $("menu").hidden = true;
+  state.boot = { t: 0, logged: 0, steam: [], cues: new Set() };
+  document.body.classList.add("cine");
+  restart(true); state.pendingRestart = false;
+  state.started = true; $("screen").hidden = true;
+  $("boot").hidden = false; $("rain").style.opacity = 1; $("bootlog").innerHTML = ""; $("bootlog").style.opacity = 1; $("optics").style.opacity = 0;
+  initRain(); requestLock();
+}
+function cue(name, at, fn) { const B = state.boot; if (B.t >= at && !B.cues.has(name)) { B.cues.add(name); fn(); } }
+function updateBoot(dt) {
+  const B = state.boot; B.t += dt; const t = B.t;
+  // 1. code rain and boot log, 2. malfunction
+  const fault = t > 2.4 && t < 3.9 ? Math.min(1, (t - 2.4) / 0.6) : 0;
+  if (t < 4.0) drawRain(dt, fault);
+  while (B.logged < BOOT_LOG.length && t >= BOOT_LOG[B.logged][0]) {
+    const [, text, cls] = BOOT_LOG[B.logged++]; const d = document.createElement("div"); d.textContent = text; if (cls) d.className = cls; $("bootlog").appendChild(d); sfx.bootTick();
+  }
+  cue("fault", 2.45, () => { sfx.fault(); glitch(0.9); });
+  cue("fault2", 3.05, () => { sfx.fault(); glitch(1); });
+  if (fault > 0) { $("bootlog").style.transform = `translate(${(Math.random() - 0.5) * 18 * fault}px, -50%)`; GL.spike = Math.max(GL.spike, 0.5 * fault); }
+  cue("black", 3.75, () => { $("rain").style.opacity = 0; $("bootlog").style.opacity = 0; });
+  // 3. eyes open: a peek, a blink, then fully open while the optics come into focus
+  let open = 0;
+  if (t > 4.1) open = t < 4.7 ? ease((t - 4.1) / 0.6) * 0.5 : t < 4.9 ? 0.5 * (1 - ease((t - 4.7) / 0.2)) : ease((t - 5.0) / 0.7);
+  const lid = (1 - open);
+  document.querySelector("#lids .top").style.transform = `scaleY(${lid})`;
+  document.querySelector("#lids .bot").style.transform = `scaleY(${lid})`;
+  renderer.domElement.style.filter = t < 6.4 ? `blur(${(1 - ease((t - 4.4) / 1.8)) * 9}px) saturate(${0.4 + ease((t - 4.6) / 1.6) * 0.6})` : "";
+  $("optics").style.opacity = t > 4.5 && t < 6.6 ? 1 : 0;
+  if (t > 4.5 && t < 6.6) $("opt1").textContent = t < 5.6 ? `Optics · calibrating ${Math.min(100, Math.round((t - 4.5) * 90))}%` : "Optics · locked";
+  cue("eyes", 4.1, () => { glitch(0.5); sfx.servo(); });
+  pitch = -0.32 * (1 - ease((t - 4.6) / 1.4)); yaw = -Math.PI / 2 + Math.sin(Math.max(0, t - 5.2) * 1.6) * 0.06 * (1 - ease((t - 6.5) / 1)); 
+  // 4. the capsule opens with a hiss of steam
+  cue("hiss", 5.55, () => { sfx.hiss(); sfx.clunk(); shake = 0.25; glitch(0.35);
+    for (let i = 0; i < 16; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: steamTex, transparent: true, depthWrite: false, opacity: 0.2 }));
+      const sd = i % 2 ? 1 : -1; sp.position.set(pod.X + 0.7 + Math.random() * 0.3, 0.3 + Math.random() * 2.2, pod.Z + sd * Math.random() * 0.15); sp.scale.setScalar(0.3);
+      sp.userData = { v: new THREE.Vector3(0.4 + Math.random() * 1.2, 0.2 + Math.random() * 0.6, sd * (0.3 + Math.random() * 1.4)), life: 1.4 + Math.random() };
+      levelGroup.add(sp); B.steam.push(sp); } });
+  setPodOpen(ease((t - 5.6) / 1.1));
+  for (let i = B.steam.length - 1; i >= 0; i--) { const sp = B.steam[i]; const u = sp.userData; u.life -= dt; sp.position.addScaledVector(u.v, dt); u.v.multiplyScalar(Math.pow(0.4, dt)); sp.scale.addScalar(dt * 0.8); sp.material.opacity = Math.max(0, Math.min(0.2, u.life * 0.15));
+    if (u.life <= 0) { levelGroup.remove(sp); sp.material.dispose(); B.steam.splice(i, 1); } }
+  // 5. arms come up and the HUD comes online
+  VM.rise = -0.6 * (1 - ease((t - 6.3) / 0.9));
+  cue("arms", 6.3, () => sfx.servo());
+  cue("clench", 7.0, () => { sfx.clunk(); setTimeout(() => sfx.clunk(), 110); });
+  cue("hud", 7.2, () => { document.body.classList.remove("cine"); sfx.online(); flash("UNIT-7 online", "var(--blood)"); glitch(0.6); });
+  if (t >= BOOT_END) endBoot();
+}
+function endBoot() {
+  const B = state.boot; if (!B) return;
+  for (const sp of B.steam) { levelGroup.remove(sp); sp.material.dispose(); }
+  state.boot = null; VM.rise = 0; setPodOpen(1);
+  $("boot").hidden = true; document.body.classList.remove("cine"); renderer.domElement.style.filter = "";
+  yaw = -Math.PI / 2; pitch = 0;
+  document.querySelector("#lids .top").style.transform = document.querySelector("#lids .bot").style.transform = "scaleY(0)";
+}
 
 // ---------- loop ----------
 let acc = 0, last = performance.now();
@@ -1825,7 +2197,9 @@ function simStep() {
 function frame(now) {
   requestAnimationFrame(frame);
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
-  const running = state.started && $("screen").hidden && player && !player.dead;
+  const booting = !!state.boot && $("screen").hidden && player && !player.dead;
+  const running = !booting && state.started && $("screen").hidden && player && !player.dead;
+  if (booting) { updateBoot(dt); if (player.dead === false) updateCamera(dt); }
   if (running) {
     acc += dt;
     while (acc >= DT) { simStep(); acc -= DT; }
@@ -1855,29 +2229,35 @@ function frame(now) {
   renderer.setRenderTarget(rt);
   renderer.clear();
   renderer.render(scene, camera);
-  rig.visible = selfBody.visible = !!running;
-  if (running) { renderer.clearDepth(); renderer.render(vmScene, vmCamera); }
+  const live = running || booting;
+  rig.visible = selfBody.visible = !!live;
+  if (live) { renderer.clearDepth(); renderer.render(vmScene, vmCamera); }
   renderer.setRenderTarget(null);
   // glitch level: low health and time powers hold it up, events spike it, and now and then the feed blips on its own
   const gdt = Math.min(0.1, dt);
   GL.spike *= Math.pow(0.015, gdt);
   GL.blip = Math.max(0, GL.blip - gdt);
-  if (running && Math.random() < gdt * 0.12) GL.blip = 0.06 + Math.random() * 0.1;
-  const hpLow = running ? THREE.MathUtils.clamp((40 - player.hp) / 40, 0, 1) * 0.35 : 0;
+  if (live && Math.random() < gdt * 0.12) GL.blip = 0.06 + Math.random() * 0.1;
+  const hpLow = live ? THREE.MathUtils.clamp((40 - player.hp) / 40, 0, 1) * 0.35 : 0;
   GL.base = hpLow + (state.tsMode === "stop" ? 0.22 : state.tsMode === "slow" ? 0.08 : 0);
-  postMat.uniforms.uAmt.value = Math.min(1, GL.base + GL.spike + (GL.blip > 0 ? 0.18 : 0) + (state.started ? 0 : 0.04));
+  postMat.uniforms.uAmt.value = Math.min(1, GL.base + GL.spike + (GL.blip > 0 ? 0.18 : 0) + (state.started ? 0 : 0.06));
   postMat.uniforms.uTime.value = now / 1000;
   renderer.render(postScene, postCam);
 }
 restart(true); player.dead = true;
 requestAnimationFrame(frame);
 $("go").dataset.ready = "1"; $("go").textContent = "Boot UNIT-7";
+document.body.classList.add("cine");
+for (const b of document.querySelectorAll("#mnav button")) b.disabled = false;
+$("mstatus").innerHTML = '<i class="m-dot"></i>Chassis ready · awaiting directive';
+document.querySelector("#mnav button").focus({ preventScroll: true });
 state.pendingRestart = true; state.pendingFresh = true;
 // test hooks
 window.__res = {
   get player() { return player; }, get enemies() { return enemies; }, get panes() { return panes; }, get bolts() { return bolts; }, state, keys, mouse, pressed,
   setLook(y, p) { yaw = y; pitch = p; }, teleport(x, y, z) { player.body.setTranslation({ x, y, z }, true); player.body.setLinvel({ x: 0, y: 0, z: 0 }, true); },
-  begin() { if (state.pendingRestart) { restart(state.pendingFresh); state.pendingRestart = false; } state.started = true; $("screen").hidden = true; },
+  begin() { $("menu").hidden = true; document.body.classList.remove("cine"); if (state.pendingRestart) { restart(state.pendingFresh); state.pendingRestart = false; } state.started = true; $("screen").hidden = true; },
+  startBoot, endBoot, showIntro, get boot() { return state.boot; },
   VM, get slashes() { return slashes; }, playAttackAnim, spawnSlash, GL, glitch, M,
   step(n) { for (let i = 0; i < n && !player.dead; i++) simStep(); },
   killPhase() { for (const e of alive()) damageEnemy(e, 999, enemyPos(e), new THREE.Vector3(1, 0, 0), "punch"); },
