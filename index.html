@@ -15,84 +15,110 @@
   --amber: #ffb547;
   --cyan: #4ff0ff;
   --threat: #ff4d5e;
+  --blood: #ff2a4a;
   --panel: rgba(7, 9, 13, 0.78);
   --display: "Chakra Petch", "Arial Narrow", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
   color-scheme: dark;
 }
+[hidden] { display: none !important; }
 html, body { height: 100%; }
 body { background: var(--void); color: var(--ink); font-family: var(--mono); overflow: hidden; user-select: none; }
-[hidden] { display: none !important; }
 #game { position: fixed; inset: 0; }
-#game canvas { display: block; width: 100%; height: 100%; }
+#game canvas { display: block; width: 100%; height: 100%; transition: filter 0.25s; }
 .hud { position: fixed; pointer-events: none; font-size: 12px; letter-spacing: 0.04em; }
 #log { top: calc(16px + env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); max-width: min(420px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 4px; }
-#log div { background: var(--panel); padding: 5px 9px; border-left: 2px solid var(--amber); animation: fade 7s forwards; }
+#log div { background: var(--panel); padding: 5px 9px; border-left: 2px solid var(--amber); animation: fade 8s forwards; }
 #log div.okafor { border-color: var(--cyan); color: var(--cyan); }
-#log div.warn { border-color: var(--threat); }
-@keyframes fade { 0%, 80% { opacity: 1 } 100% { opacity: 0 } }
+#log div.tip { border-color: var(--dim); color: var(--dim); }
+@keyframes fade { 0%, 82% { opacity: 1 } 100% { opacity: 0 } }
+#objective { top: calc(16px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); text-align: center; text-transform: uppercase; color: var(--dim); max-width: 40vw; }
+#objective b { display: block; color: var(--ink); font-family: var(--display); font-size: 16px; letter-spacing: 0.06em; font-weight: 500; }
 #stats { bottom: calc(16px + env(safe-area-inset-bottom, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); display: grid; gap: 6px; min-width: 220px; }
 #stats .row { display: flex; justify-content: space-between; gap: 16px; text-transform: uppercase; color: var(--dim); }
 #stats .row b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
 .bar { height: 4px; background: rgba(255,255,255,0.12); }
-.bar > i { display: block; height: 100%; background: var(--amber); transition: width 0.1s; }
+.bar > i { display: block; height: 100%; background: var(--amber); }
+#grapbar > i { background: var(--cyan); }
 #targets { top: calc(16px + env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); text-align: right; text-transform: uppercase; color: var(--dim); }
-#targets b { display: block; font-family: var(--display); font-size: 32px; color: var(--threat); font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+#targets b { display: block; font-family: var(--display); font-size: 32px; color: var(--threat); font-variant-numeric: tabular-nums; }
 #speed { bottom: calc(16px + env(safe-area-inset-bottom, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); text-align: right; color: var(--dim); text-transform: uppercase; }
 #speed b { display: block; font-family: var(--display); font-size: 28px; color: var(--ink); font-variant-numeric: tabular-nums; }
+#lust { bottom: calc(16px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); display: grid; gap: 5px; justify-items: center; }
+#lust .segs { display: grid; grid-template-columns: repeat(5, 46px); gap: 4px; }
+#lust .seg { height: 8px; background: rgba(255,255,255,0.1); position: relative; overflow: hidden; }
+#lust .seg i { position: absolute; inset: 0; background: var(--blood); transform-origin: left; transform: scaleX(0); }
+#lust .seg.full i { box-shadow: 0 0 10px var(--blood); }
+#lust .labels { display: grid; grid-template-columns: repeat(5, 46px); gap: 4px; font-size: 9px; color: var(--dim); text-align: center; text-transform: uppercase; }
+#lust .labels span.on { color: var(--blood); }
+#lust .name { font-size: 10px; letter-spacing: 0.2em; color: var(--blood); text-transform: uppercase; }
 #cross { left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border: 1.5px solid rgba(217,226,234,0.8); border-radius: 50%; transition: border-color 0.1s, transform 0.1s; }
 #cross::after { content: ""; position: absolute; left: 50%; top: 50%; width: 3px; height: 3px; margin: -1.5px; background: var(--ink); border-radius: 50%; }
 #cross.grap { border-color: var(--cyan); transform: scale(1.25); }
 #cross.hit { border-color: var(--threat); transform: scale(0.8); }
+#flash { left: 50%; top: 38%; transform: translateX(-50%); font-family: var(--display); font-size: 30px; letter-spacing: 0.12em; color: var(--cyan); text-shadow: 0 0 18px currentColor; text-transform: uppercase; }
 #prompt { left: 50%; top: 60%; transform: translateX(-50%); color: var(--cyan); background: var(--panel); padding: 4px 10px; }
 #damage { position: fixed; inset: 0; pointer-events: none; box-shadow: inset 0 0 160px rgba(255, 40, 60, 0.0); transition: box-shadow 0.15s; }
-#screen { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(ellipse at 30% 20%, rgba(255,181,71,0.08), transparent 60%), rgba(4, 5, 8, 0.86); padding-block: 24px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); cursor: pointer; }
-.card { max-width: 620px; display: grid; gap: 18px; }
+#tint { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 45%, rgba(79, 240, 255, 0.18)); opacity: 0; transition: opacity 0.2s; }
+#screen { position: fixed; inset: 0; display: grid; place-items: center; overflow-y: auto; background: radial-gradient(ellipse at 30% 20%, rgba(255,181,71,0.08), transparent 60%), rgba(4, 5, 8, 0.88); padding-block: 24px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); cursor: pointer; }
+.card { max-width: 680px; display: grid; gap: 16px; }
 .eyebrow { color: var(--amber); font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; }
-h1 { font-family: var(--display); font-weight: 700; font-size: clamp(48px, 11vw, 96px); line-height: 0.9; letter-spacing: 0.01em; margin: 0; text-wrap: balance; }
-.card p { margin: 0; color: var(--dim); line-height: 1.6; max-width: 62ch; }
+h1 { font-family: var(--display); font-weight: 700; font-size: clamp(44px, 10vw, 92px); line-height: 0.9; letter-spacing: 0.01em; margin: 0; text-wrap: balance; }
+.card p { margin: 0; color: var(--dim); line-height: 1.6; max-width: 64ch; }
 .card p.directive { color: var(--ink); border-left: 2px solid var(--amber); padding-left: 12px; font-size: 15px; }
-.keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px 18px; font-size: 12px; color: var(--dim); }
+.keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 6px 18px; font-size: 12px; color: var(--dim); }
 .keys kbd { font-family: var(--mono); color: var(--ink); border: 1px solid rgba(217,226,234,0.3); padding: 1px 6px; margin-right: 6px; }
 .go { font-family: var(--display); font-size: 18px; color: var(--void); background: var(--amber); padding: 10px 18px; justify-self: start; letter-spacing: 0.08em; text-transform: uppercase; border: 0; cursor: pointer; }
 .go:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
-#loading { color: var(--dim); }
 @media (prefers-reduced-motion: reduce) { #log div { animation: none; } }
 </style>
 
 </head>
 <body>
 <div id="game"></div>
+<div id="tint"></div>
 <div id="damage"></div>
 <div class="hud" id="cross"></div>
+<div class="hud" id="flash" hidden></div>
 <div class="hud" id="prompt" hidden></div>
 <div class="hud" id="log"></div>
-<div class="hud" id="targets">Witnesses remaining<b id="tcount">0</b></div>
+<div class="hud" id="objective">Objective<b id="objv">—</b></div>
+<div class="hud" id="targets">Hostiles<b id="tcount">0</b></div>
 <div class="hud" id="speed">m/s<b id="spd">0.0</b></div>
+<div class="hud" id="lust">
+  <div class="name">Bloodlust</div>
+  <div class="segs" id="segs"></div>
+  <div class="labels" id="lustlabels"><span>·</span><span>Q slow</span><span>X stop</span><span>V kill</span><span>V kill</span></div>
+</div>
 <div class="hud" id="stats">
   <div class="row">Chassis integrity <b id="hpv">100</b></div>
   <div class="bar"><i id="hpbar" style="width:100%"></i></div>
   <div class="row">Dash <b id="dashv">2</b></div>
-  <div class="row">Grapple <b id="grapv">READY</b></div>
+  <div class="row">Grapple <b id="grapv">LOCKED</b></div>
+  <div class="bar" id="grapbar"><i style="width:0%"></i></div>
 </div>
 
 <div id="screen">
   <div class="card">
-    <div class="eyebrow">Halcyon Meridian Tower · Floor 38 · 02:14, 4 Nov 2200</div>
+    <div class="eyebrow" id="eyebrow">Halcyon Meridian Tower · Floor 01 · 02:14, 4 Nov 2200</div>
     <h1 id="title">RESOLUTION</h1>
     <p class="directive" id="directive">UNIT-7 online. Directive from ARBITER: leave no one in the building who can testify.</p>
-    <p id="sub">Graybox prototype. Clear the floor, the offices, the mezzanine and the roof of the tower next door. Enemies miss more when you move fast.</p>
+    <p id="sub">Floor 01, Activation. Your chassis boots with no weapons. Clear the hall with your hands, take the sword from the armory, then go out the windows to reach the sealed wings.</p>
     <div class="keys">
       <span><kbd>WASD</kbd>Move</span>
-      <span><kbd>Space</kbd>Jump</span>
-      <span><kbd>Ctrl</kbd>/<kbd>C</kbd>Slide</span>
+      <span><kbd>Space</kbd>Jump · let go of grapple</span>
+      <span><kbd>Ctrl</kbd>/<kbd>C</kbd>Slide (slide into enemies to stagger)</span>
       <span><kbd>Shift</kbd>Dash</span>
-      <span><kbd>RMB</kbd>/<kbd>E</kbd>Grapple (hold)</span>
-      <span><kbd>LMB</kbd>Fire</span>
-      <span><kbd>F</kbd>Hack terminal</span>
-      <span><kbd>R</kbd>Restart</span>
+      <span><kbd>LMB</kbd>Attack · slide + LMB to thrust</span>
+      <span><kbd>RMB</kbd>Block · tap just before a hit to parry</span>
+      <span><kbd>E</kbd>Grapple (needs the sword)</span>
+      <span><kbd>C</kbd> while grappling: breach a window</span>
+      <span><kbd>Q</kbd>Slow time (2 bars)</span>
+      <span><kbd>X</kbd>Stop time (3 bars)</span>
+      <span><kbd>V</kbd>Finisher (4+ bars)</span>
+      <span><kbd>R</kbd>Restart from checkpoint</span>
     </div>
-    <button class="go" id="go" type="button"><span id="loading">Loading physics…</span></button>
+    <button class="go" id="go" type="button">Loading physics…</button>
   </div>
 </div>
 
@@ -118,15 +144,18 @@ const GROUPS = {
   ragdoll: grp(G.RAGDOLL, G.ENV | G.RAGDOLL | G.SHARD | G.PLAYER),
   shard: grp(G.SHARD, G.ENV | G.RAGDOLL | G.SHARD),
   playerShot: grp(G.PLAYER, G.ENV | G.ENEMY | G.RAGDOLL),
+  envOnly: grp(G.PLAYER, G.ENV),
   enemyShot: grp(G.ENEMY, G.ENV | G.PLAYER),
 };
 const P = {
   radius: 0.4, half: 0.5, eye: 0.62, slideEye: 0.0,
   speed: 9.5, accel: 75, airAccel: 30, friction: 9, slideFriction: 0.6,
   jump: 9.2, gravity: -26, dashSpeed: 24, dashCharges: 2, dashRecharge: 1.4,
-  grappleRange: 60, grapplePull: 62, fireRate: 0.13,
+  grappleRange: 42, grapplePull: 70, grappleCooldown: 0.9,
+  parryFists: 0.18, parrySword: 0.38,
 };
 const DT = 1 / 60;
+const TS = { normal: 1, slow: 0.3, stop: 0.02 };
 
 // ---------- renderer ----------
 const host = document.getElementById("game");
@@ -142,7 +171,7 @@ host.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0b1220);
-scene.fog = new THREE.Fog(0x0b1220, 40, 210);
+scene.fog = new THREE.Fog(0x0b1220, 45, 220);
 const camera = new THREE.PerspectiveCamera(88, innerWidth / innerHeight, 0.05, 600);
 scene.add(camera);
 addEventListener("resize", () => {
@@ -153,7 +182,7 @@ addEventListener("resize", () => {
 
 scene.add(new THREE.HemisphereLight(0x8fb4ff, 0x2a2018, 1.3));
 scene.add(new THREE.AmbientLight(0x404858, 1.2));
-for (const [x, z] of [[-18, 14], [18, -14], [-16, -22], [20, 20], [52, 0]]) { const l = new THREE.PointLight(0xffd9a8, 60, 30, 1.6); l.position.set(x, 7, z); scene.add(l); }
+for (const [x, z] of [[-20, 20], [-16, -10], [0, -25], [21, -19], [21, 19], [8, 0]]) { const l = new THREE.PointLight(0xffd9a8, 55, 28, 1.6); l.position.set(x, 7, z); scene.add(l); }
 const moon = new THREE.DirectionalLight(0xbcd2ff, 1.6);
 moon.position.set(-60, 45, 30);
 moon.castShadow = true;
@@ -184,29 +213,37 @@ function windowsTexture() {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping;
   return t;
 }
-const floorTex = gridTexture("#3a3d42", "rgba(0,0,0,0.35)");
 const M = {
-  floor: new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.85 }),
+  floor: new THREE.MeshStandardMaterial({ map: gridTexture("#3a3d42", "rgba(0,0,0,0.35)"), roughness: 0.85 }),
   concrete: new THREE.MeshStandardMaterial({ color: 0x55595f, roughness: 0.9 }),
+  wall: new THREE.MeshStandardMaterial({ color: 0x3d4148, roughness: 0.95 }),
   ceiling: new THREE.MeshStandardMaterial({ color: 0x24272c, roughness: 1 }),
   desk: new THREE.MeshStandardMaterial({ color: 0x8a8f96, roughness: 0.5, metalness: 0.2 }),
   crate: new THREE.MeshStandardMaterial({ color: 0x6b5a3e, roughness: 0.8 }),
+  rack: new THREE.MeshStandardMaterial({ color: 0x15181d, roughness: 0.5, metalness: 0.6 }),
   mullion: new THREE.MeshStandardMaterial({ color: 0x1b1e23, roughness: 0.4, metalness: 0.6 }),
+  door: new THREE.MeshStandardMaterial({ color: 0x6d2a2f, roughness: 0.5, metalness: 0.5 }),
   glass: new THREE.MeshPhysicalMaterial({ color: 0x9fd8ff, roughness: 0.05, metalness: 0, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide }),
-  shard: new THREE.MeshStandardMaterial({ color: 0xc6ecff, roughness: 0.05, metalness: 0.3, transparent: true, opacity: 0.55, side: THREE.DoubleSide }),
+  shard: new THREE.MeshStandardMaterial({ color: 0xc6ecff, roughness: 0.05, metalness: 0.3, transparent: true, opacity: 0.6, side: THREE.DoubleSide }),
   light: new THREE.MeshBasicMaterial({ color: 0xfff1d6 }),
   amber: new THREE.MeshBasicMaterial({ color: 0xffb547 }),
   cyan: new THREE.MeshBasicMaterial({ color: 0x4ff0ff }),
+  red: new THREE.MeshBasicMaterial({ color: 0xff4d5e }),
+  rackLed: new THREE.MeshBasicMaterial({ color: 0x48ff9a }),
   screen: new THREE.MeshBasicMaterial({ color: 0x5fd3ff }),
   skin: new THREE.MeshStandardMaterial({ color: 0xc89b7b, roughness: 0.7 }),
-  worker: new THREE.MeshStandardMaterial({ color: 0xd9dde2, roughness: 0.8 }),
+  brawler: new THREE.MeshStandardMaterial({ color: 0x4a3b30, roughness: 0.8 }),
   guard: new THREE.MeshStandardMaterial({ color: 0x1f2a3a, roughness: 0.6 }),
   bot: new THREE.MeshStandardMaterial({ color: 0x9aa3ad, roughness: 0.3, metalness: 0.8 }),
   pants: new THREE.MeshStandardMaterial({ color: 0x23262b, roughness: 0.8 }),
   visor: new THREE.MeshBasicMaterial({ color: 0xff4d5e }),
+  stun: new THREE.MeshBasicMaterial({ color: 0xffe066 }),
   tower: new THREE.MeshStandardMaterial({ color: 0x0d1118, emissive: 0xffffff, emissiveMap: windowsTexture(), emissiveIntensity: 0.9, roughness: 0.9 }),
   gun: new THREE.MeshStandardMaterial({ color: 0x2b2f35, roughness: 0.4, metalness: 0.7 }),
   arm: new THREE.MeshStandardMaterial({ color: 0x777f88, roughness: 0.35, metalness: 0.85 }),
+  blade: new THREE.MeshStandardMaterial({ color: 0xdfe8f0, roughness: 0.15, metalness: 1, emissive: 0x2a6f80, emissiveIntensity: 0.6 }),
+  bolt: new THREE.MeshBasicMaterial({ color: 0xff4d5e }),
+  boltBack: new THREE.MeshBasicMaterial({ color: 0xffb547 }),
 };
 
 // ---------- audio (synthesised, starts on first click) ----------
@@ -219,55 +256,73 @@ function initAudio() {
     const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   } catch { actx = null; }
 }
-function noise(dur, type, freq, gain, q = 1) {
+function noise(dur, type, freq, gain, q = 1, freqEnd) {
   if (!actx) return;
   const s = actx.createBufferSource(); s.buffer = noiseBuf;
-  const f = actx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+  const f = actx.createBiquadFilter(); f.type = type; f.Q.value = q;
   const g = actx.createGain(); const t = actx.currentTime;
-  g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  f.frequency.setValueAtTime(freq, t); if (freqEnd) f.frequency.exponentialRampToValueAtTime(freqEnd, t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + Math.min(0.02, dur * 0.3)); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
   s.connect(f).connect(g).connect(actx.destination); s.start(t, Math.random() * 0.5); s.stop(t + dur);
 }
-function tone(type, f0, f1, dur, gain) {
+function tone(type, f0, f1, dur, gain, delay = 0) {
   if (!actx) return;
-  const o = actx.createOscillator(); o.type = type; const g = actx.createGain(); const t = actx.currentTime;
+  const o = actx.createOscillator(); o.type = type; const g = actx.createGain(); const t = actx.currentTime + delay;
   o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
   g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
   o.connect(g).connect(actx.destination); o.start(t); o.stop(t + dur);
 }
 const sfx = {
-  shot() { noise(0.12, "bandpass", 1800, 0.5, 0.7); tone("square", 180, 50, 0.08, 0.12); },
-  enemyShot(dist) { const v = Math.max(0.04, 0.3 - dist * 0.006); noise(0.1, "bandpass", 1100, v, 0.8); },
-  glass() { noise(0.5, "highpass", 4000, 0.4); for (let i = 0; i < 5; i++) setTimeout(() => tone("sine", 2500 + Math.random() * 3000, 1800, 0.25, 0.05), i * 35); },
-  grapple() { tone("sawtooth", 900, 160, 0.18, 0.06); },
-  dash() { noise(0.25, "bandpass", 600, 0.35, 0.5); },
-  hit() { tone("square", 900, 600, 0.05, 0.08); },
+  punchSwing() { noise(0.12, "bandpass", 500, 0.35, 1.2, 1400); },
+  swordSwing() { noise(0.22, "bandpass", 700, 0.5, 2.5, 3800); tone("sine", 2400, 1600, 0.18, 0.025); },
+  thrust() { noise(0.3, "bandpass", 300, 0.55, 1.5, 3000); tone("sawtooth", 220, 880, 0.2, 0.04); },
+  punchHit() { noise(0.1, "lowpass", 400, 0.7); tone("sine", 120, 50, 0.12, 0.3); },
+  slash() { noise(0.12, "highpass", 2500, 0.4); tone("sine", 160, 60, 0.15, 0.25); },
+  parry() { tone("square", 1250, 1150, 0.35, 0.08); tone("sine", 1870, 1800, 0.5, 0.07); tone("sine", 2600, 2500, 0.3, 0.05); noise(0.08, "highpass", 5000, 0.5); },
+  block() { tone("square", 380, 260, 0.1, 0.1); noise(0.08, "bandpass", 900, 0.3); },
+  deflect() { tone("sine", 3200, 900, 0.18, 0.08); noise(0.06, "highpass", 6000, 0.4); },
+  enemyShot(dist) { const v = Math.max(0.04, 0.28 - dist * 0.006); noise(0.1, "bandpass", 1100, v, 0.8); tone("sawtooth", 900, 300, 0.08, v * 0.2); },
+  glass(big) { noise(big ? 0.9 : 0.5, "highpass", 4000, big ? 0.7 : 0.4); for (let i = 0; i < (big ? 9 : 5); i++) tone("sine", 2500 + Math.random() * 3000, 1800, 0.25, 0.05, i * 0.035); if (big) noise(0.5, "lowpass", 300, 0.6); },
+  grapple() { tone("sawtooth", 900, 160, 0.18, 0.06); noise(0.15, "bandpass", 2000, 0.2, 3, 600); },
+  grappleReady() { tone("sine", 1400, 1500, 0.06, 0.04); },
+  dash() { noise(0.25, "bandpass", 600, 0.35, 0.5, 1500); },
   kill() { tone("triangle", 300, 80, 0.25, 0.18); noise(0.15, "lowpass", 600, 0.3); },
+  execute() { tone("sawtooth", 90, 40, 0.5, 0.2); noise(0.3, "lowpass", 900, 0.6); tone("sine", 1800, 900, 0.4, 0.05); },
   hurt() { tone("sawtooth", 140, 60, 0.2, 0.15); },
-  hack() { for (let i = 0; i < 6; i++) setTimeout(() => tone("square", 600 + i * 120, 600 + i * 120, 0.05, 0.05), i * 60); },
+  lust() { tone("sine", 220, 440, 0.25, 0.08); tone("sine", 330, 660, 0.25, 0.05, 0.05); },
+  slow() { tone("sine", 600, 90, 0.7, 0.12); noise(0.6, "lowpass", 2000, 0.25, 1, 200); },
+  stop() { tone("sine", 70, 40, 1.0, 0.3); tone("square", 1500, 60, 0.4, 0.04); },
+  resume() { tone("sine", 90, 600, 0.5, 0.1); },
+  pickup() { for (let i = 0; i < 4; i++) tone("sine", 500 * (i + 1), 520 * (i + 1), 0.4, 0.05, i * 0.08); },
+  door() { noise(1.4, "lowpass", 200, 0.5); tone("sawtooth", 60, 45, 1.4, 0.06); },
 };
 
 // ---------- HUD ----------
 const $ = (id) => document.getElementById(id);
+for (let i = 0; i < 5; i++) { const s = document.createElement("div"); s.className = "seg"; s.appendChild(document.createElement("i")); $("segs").appendChild(s); }
 function log(text, cls = "") {
   const d = document.createElement("div"); d.textContent = text; if (cls) d.className = cls;
-  $("log").appendChild(d); setTimeout(() => d.remove(), 7000);
+  $("log").appendChild(d); setTimeout(() => d.remove(), 8000);
   while ($("log").children.length > 6) $("log").firstChild.remove();
 }
+let flashT = 0;
+function flash(text, color = "var(--cyan)") { const f = $("flash"); f.textContent = text; f.style.color = color; f.hidden = false; flashT = 0.7; }
 let crossTimer = 0;
 
 // ---------- input ----------
 const keys = new Set();
 const mouse = { left: false, right: false };
-let yaw = Math.PI / 2, pitch = 0, locked = false;
+const pressed = new Set(); // edge-triggered actions, consumed by the sim
+let yaw = 0, pitch = 0, locked = false;
 addEventListener("keydown", (e) => {
+  if (!e.repeat) pressed.add(e.code);
   keys.add(e.code);
-  if (e.code === "KeyR" && state.started) resetLevel();
-  if (e.code === "KeyF") tryHack();
+  if (e.code === "KeyR" && state.started && !e.repeat) restart(false);
   if (["Space", "ControlLeft", "ControlRight"].includes(e.code)) e.preventDefault();
 });
 addEventListener("keyup", (e) => keys.delete(e.code));
 addEventListener("blur", () => { keys.clear(); mouse.left = mouse.right = false; });
-addEventListener("mousedown", (e) => { if (!locked) return; if (e.button === 0) mouse.left = true; if (e.button === 2) mouse.right = true; });
+addEventListener("mousedown", (e) => { if (!locked) return; if (e.button === 0) { mouse.left = true; pressed.add("Attack"); } if (e.button === 2) { mouse.right = true; pressed.add("Block"); } });
 addEventListener("mouseup", (e) => { if (e.button === 0) mouse.left = false; if (e.button === 2) mouse.right = false; });
 addEventListener("contextmenu", (e) => e.preventDefault());
 addEventListener("mousemove", (e) => {
@@ -277,7 +332,7 @@ addEventListener("mousemove", (e) => {
 });
 document.addEventListener("pointerlockchange", () => {
   locked = document.pointerLockElement === renderer.domElement;
-  if (!locked && state.started && !state.over) showScreen("Paused", "UNIT-7 suspended.", "Click to resume.", "Resume");
+  if (!locked && state.started && !state.over) showScreen("Paused", "PAUSED", "UNIT-7 suspended.", "Click to resume.", "Resume", false);
 });
 function requestLock() {
   initAudio(); actx?.resume?.();
@@ -286,12 +341,12 @@ function requestLock() {
 
 // ---------- world state ----------
 let world, levelGroup;
-const state = { started: false, over: false, time: 0, kills: 0, hacked: false };
-const glassByHandle = new Map(); // collider handle -> pane
+const state = { started: false, over: false, time: 0, phase: 1, checkpoint: 1, ts: 1, tsMode: "normal", tsTimer: 0, runStart: 0 };
+const glassByHandle = new Map();
 const enemyByHandle = new Map();
 const ragByHandle = new Map();
-let panes = [], enemies = [], ragdolls = [], shards = [], tracers = [], dynamicProps = [];
-let player, terminal;
+let panes = [], enemies = [], ragdolls = [], shards = [], fx = [], bolts = [];
+let player, door, sword;
 
 function fixedBox(x, y, z, sx, sy, sz, mat, opts = {}) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat);
@@ -307,6 +362,12 @@ function fixedBox(x, y, z, sx, sy, sz, mat, opts = {}) {
   const col = world.createCollider(RAPIER.ColliderDesc.cuboid(sx / 2, sy / 2, sz / 2).setCollisionGroups(GROUPS.env).setFriction(0.0), body);
   return { mesh, body, col };
 }
+// wall segment from (x1,z1) to (x2,z2), axis aligned
+function wall(x1, z1, x2, z2, h = 8, mat = M.wall, t = 0.4) {
+  const cx = (x1 + x2) / 2, cz = (z1 + z2) / 2;
+  const sx = Math.abs(x2 - x1) || t, sz = Math.abs(z2 - z1) || t;
+  return fixedBox(cx, h / 2, cz, sx, h, sz, mat);
+}
 function glassPane(x, y, z, sx, sy, sz) {
   const { mesh, body, col } = fixedBox(x, y, z, sx, sy, sz, M.glass, { shadow: false });
   mesh.renderOrder = 2;
@@ -314,66 +375,71 @@ function glassPane(x, y, z, sx, sy, sz) {
   panes.push(pane); glassByHandle.set(col.handle, pane);
   return pane;
 }
+function mulberry(a) { return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
-// ---------- level ----------
+// ---------- level: Floor 01 ----------
+//  SW: chassis lab (spawn)   centre/W: open hall (fist fight)   N: armory (sword)
+//  NE: sealed east wing      SE: sealed server room   (both only reachable through exterior windows)
 function buildLevel() {
   levelGroup = new THREE.Group(); scene.add(levelGroup);
   const W = 30;
-  // tower floor slab, ceiling
   fixedBox(0, -0.5, 0, 60, 1, 60, M.floor, { uv: [12, 12] });
   fixedBox(0, 8.25, 0, 60, 0.5, 60, M.ceiling);
-  // ceiling light strips (visual)
   for (let x = -24; x <= 24; x += 12) fixedBox(x, 7.95, 0, 0.6, 0.05, 52, M.light, { noCollide: true, shadow: false });
-  // building edge band under the slab so the tower reads from outside
   fixedBox(0, -30, 0, 60, 58, 60, M.tower, { shadow: false });
-  // perimeter: mullions every 4m and glass panes between
-  for (let i = -W; i <= W; i += 4) {
-    for (const [mx, mz] of [[i, -W], [i, W], [-W, i], [W, i]]) fixedBox(mx, 4, mz, 0.35, 8, 0.35, M.mullion);
-  }
+  fixedBox(0, 30, 0, 60, 43, 60, M.tower, { shadow: false, noCollide: true });
+  // perimeter mullions + glass
+  for (let i = -W; i <= W; i += 4) for (const [mx, mz] of [[i, -W], [i, W], [-W, i], [W, i]]) fixedBox(mx, 4, mz, 0.35, 8, 0.35, M.mullion);
   for (let i = -W; i < W; i += 4) {
     const c = i + 2;
-    glassPane(c, 4, -W, 3.65, 8, 0.08);
-    glassPane(c, 4, W, 3.65, 8, 0.08);
-    glassPane(-W, 4, c, 0.08, 8, 3.65);
-    glassPane(W, 4, c, 0.08, 8, 3.65);
+    glassPane(c, 4, -W, 3.65, 8, 0.08); glassPane(c, 4, W, 3.65, 8, 0.08);
+    glassPane(-W, 4, c, 0.08, 8, 3.65); glassPane(W, 4, c, 0.08, 8, 3.65);
   }
-  // elevator core and pillars
-  fixedBox(0, 4, 0, 8, 8, 8, M.concrete);
-  fixedBox(0, 2.5, 4.01, 2.4, 3.2, 0.05, M.mullion, { noCollide: true });
-  for (const [x, z] of [[-15, -15], [15, -15], [-15, 15], [15, 15]]) fixedBox(x, 4, z, 1.4, 8, 1.4, M.concrete);
-  // north glass offices
-  for (const x of [-28, -20, -12, -4]) fixedBox(x + (x === -28 ? -0.1 : 0), 1.6, -23, 0.3, 3.2, 14, M.concrete);
-  for (let x = -28; x < -4; x += 4) glassPane(x + 2, 1.6, -16, 3.7, 3.2, 0.08);
-  for (const x of [-24, -16, -8]) { fixedBox(x, 0.4, -25, 2.6, 0.8, 1.2, M.desk); fixedBox(x, 1.05, -25.3, 0.9, 0.5, 0.06, M.screen); }
-  // open-plan desks
-  for (const x of [-24, -18, -12]) for (const z of [7, 13, 19]) {
-    fixedBox(x, 0.4, z, 2.6, 0.8, 1.2, M.desk);
-    fixedBox(x, 1.05, z - 0.35, 0.8, 0.5, 0.06, M.screen);
-  }
-  // cover crates
-  for (const [x, z, s] of [[18, -10, 1.6], [10, -20, 2], [22, 2, 1.4], [8, -8, 1.2], [-8, -6, 1.6]]) fixedBox(x, s / 2, z, s, s, s, M.crate);
-  // mezzanine + ramp + glass railing
-  fixedBox(20, 3.75, 20, 16, 0.5, 16, M.floor, { uv: [3, 3] });
-  const ang = Math.atan2(4, 10);
-  fixedBox(7, 1.9, 26, Math.hypot(10, 4), 0.4, 4, M.concrete, { rot: [0, 0, ang] });
-  for (let z = 12; z < 24; z += 3) glassPane(12.1, 4.55, z + 1.5, 0.08, 1.1, 2.9);
-  for (let x = 12; x < 28; x += 4) glassPane(x + 2, 4.55, 12.1, 3.9, 1.1, 0.08);
-  // terminal on mezzanine
-  const t = fixedBox(25, 4.6, 25, 1.2, 1.2, 0.6, M.mullion);
-  fixedBox(25, 4.75, 24.68, 0.9, 0.6, 0.04, M.cyan, { noCollide: true, shadow: false });
-  terminal = { pos: new THREE.Vector3(25, 4.6, 24.5), mesh: t.mesh };
 
-  // skybridge east (through the window at z -2..2) and neighbour roof
-  fixedBox(36, -0.3, 0, 12, 0.6, 3, M.concrete);
-  fixedBox(53, -0.5, 0, 22, 1, 26, M.floor, { uv: [5, 6] });
-  fixedBox(53, -30, 0, 22, 58, 26, M.tower, { shadow: false });
-  for (const [x, z, h] of [[47, -8, 3], [58, 7, 2], [56, -4, 1.6]]) fixedBox(x, h / 2, z, 2, h, 2, M.crate);
-  // antenna mast with a grapple bar
-  fixedBox(60, 7, -9, 0.6, 14, 0.6, M.mullion);
-  fixedBox(57, 13.5, -9, 6, 0.3, 0.3, M.amber, { shadow: false });
-  // north-west small ledge outside (reachable by grapple)
-  fixedBox(-38, -0.3, -20, 8, 0.6, 10, M.concrete);
-  fixedBox(-38, 4, -26, 8, 8, 0.4, M.concrete);
+  // chassis lab (SW). Opening to the hall at z 17..23 on the x=-12 wall.
+  wall(-30, 12, -12, 12); wall(-12, 12, -12, 17); wall(-12, 23, -12, 30);
+  fixedBox(-24, 0.5, 26, 4, 1, 2, M.rack); fixedBox(-24, 2.2, 27.3, 3.6, 2.4, 0.3, M.rack);
+  fixedBox(-24, 1.4, 26, 2.4, 0.05, 1.2, M.cyan, { noCollide: true, shadow: false });
+  for (const z of [15, 19]) { fixedBox(-27.5, 1.2, z, 1.2, 2.4, 2.4, M.rack); fixedBox(-26.85, 1.6, z, 0.04, 0.8, 1.6, M.screen, { noCollide: true }); }
+
+  // open hall: elevator core, pillars, desks, cover
+  fixedBox(0, 4, 4, 6, 8, 6, M.concrete);
+  fixedBox(0, 2.5, 7.02, 2.4, 3.2, 0.05, M.mullion, { noCollide: true });
+  for (const [x, z] of [[-18, -6], [-6, -6], [-18, 4], [6, 16], [-6, 22]]) fixedBox(x, 4, z, 1.2, 8, 1.2, M.concrete);
+  for (const x of [-24, -19, -14]) for (const z of [-14, -9]) { fixedBox(x, 0.4, z, 2.6, 0.8, 1.2, M.desk); fixedBox(x, 1.05, z - 0.35, 0.8, 0.5, 0.06, M.screen); }
+  for (const [x, z, s] of [[-4, 14, 1.4], [8, 6, 1.2], [-10, 0, 1.6]]) fixedBox(x, s / 2, z, s, s, s, M.crate);
+
+  // armory (N centre) x -6..6, z -30..-20, door in the south wall
+  wall(-6, -30, -6, -20); wall(6, -30, 6, -20); wall(-6, -20, -2, -20); wall(2, -20, 6, -20);
+  fixedBox(0, 6, -20, 4, 4, 0.4, M.wall);
+  const d = fixedBox(0, 2, -20, 4, 4, 0.3, M.door);
+  door = { ...d, opening: false, y: 2 };
+  fixedBox(0, 0.45, -26, 1.2, 0.9, 1.2, M.mullion);
+  fixedBox(0, 0.92, -26, 1.0, 0.04, 1.0, M.cyan, { noCollide: true, shadow: false });
+  sword = buildSwordMesh(); sword.position.set(0, 1.6, -26); sword.rotation.set(0, 0, Math.PI / 2 - 0.2); levelGroup.add(sword);
+  const swordLight = new THREE.PointLight(0x4ff0ff, 20, 9, 1.8); swordLight.position.set(0, 2.5, -26); levelGroup.add(swordLight);
+  sword.userData.light = swordLight;
+
+  // sealed east wing (NE) x 12..30, z -30..-8
+  wall(12, -30, 12, -8); wall(12, -8, 30, -8);
+  for (const [x, z] of [[17, -24], [23, -24], [17, -16], [23, -16]]) { fixedBox(x, 0.4, z, 2.6, 0.8, 1.2, M.desk); fixedBox(x, 1.05, z - 0.35, 0.8, 0.5, 0.06, M.screen); }
+  for (const [x, z, s] of [[27, -12, 1.4], [15, -11, 1.2]]) fixedBox(x, s / 2, z, s, s, s, M.crate);
+
+  // sealed server room (SE) x 12..30, z 8..30
+  wall(12, 8, 30, 8); wall(12, 8, 12, 30);
+  for (const z of [13, 19, 25]) for (const x of [16, 24]) {
+    fixedBox(x, 1.3, z, 5, 2.6, 1.2, M.rack);
+    for (let k = 0; k < 6; k++) fixedBox(x - 2 + k * 0.8, 0.5 + (k % 3) * 0.7, z + 0.62, 0.1, 0.05, 0.02, M.rackLed, { noCollide: true, shadow: false });
+  }
+
+  // exterior: armory balcony, window-washer gantry rails, gondolas
+  fixedBox(0, -0.25, -32.5, 12, 0.5, 5, M.concrete);
+  fixedBox(0, 0.5, -34.9, 12, 1, 0.15, M.mullion);
+  const rail = (x, z, sx, sz) => fixedBox(x, 10.5, z, sx, 0.35, sz, M.amber, { shadow: false });
+  rail(15, -36, 42, 0.35); rail(36, 0, 0.35, 72); rail(15, 36, 42, 0.35);
+  for (const [x, z] of [[-6, -36], [36, -36], [36, 36], [-6, 36], [36, 0]]) fixedBox(x, 15, z, 0.25, 9, 0.25, M.mullion, { noCollide: true });
+  const gondola = (x, z, sx, sz) => { fixedBox(x, 3, z, sx, 0.3, sz, M.concrete); fixedBox(x, 6.8, z, 0.08, 7.3, 0.08, M.mullion, { noCollide: true }); };
+  gondola(20, -34.5, 5, 2); gondola(34.5, -18, 2, 5); gondola(34.5, 18, 2, 5); gondola(20, 34.5, 5, 2);
 
   // city backdrop
   const rnd = mulberry(7);
@@ -387,19 +453,15 @@ function buildLevel() {
   }
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(1200, 1200), new THREE.MeshBasicMaterial({ color: 0x05070b }));
   ground.rotation.x = -Math.PI / 2; ground.position.y = -80; levelGroup.add(ground);
-
-  // enemies
-  const roster = [
-    ["worker", -22, -22], ["worker", -14, -20], ["worker", -7, -25], ["worker", -20, 10], ["worker", -14, 16], ["worker", -10, 4],
-    ["guard", 12, -14], ["guard", 20, -4], ["guard", -2, 12], ["guard", -24, -6], ["guard", 18, 18, 4], ["guard", 24, 14, 4],
-    ["guard", 48, 4], ["bot", 54, -6], ["bot", 6, 22], ["bot", 26, -24],
-  ];
-  for (const [type, x, z, y = 0] of roster) spawnEnemy(type, x, y, z);
 }
-function mulberry(a) { return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const ROSTER = {
+  1: [["brawler", -16, 20], ["brawler", -8, 18], ["brawler", -20, -2], ["brawler", -12, -12], ["brawler", -4, -8], ["brawler", 6, -12]],
+  2: [["gunman", 18, -20], ["gunman", 25, -13], ["brawler", 20, -11], ["gunman", 26, -26],
+      ["gunman", 20, 11], ["gunman", 27, 22], ["brawler", 20, 22], ["bot", 20, 28]],
+};
+function spawnPhase(n) { for (const [type, x, z] of ROSTER[n]) spawnEnemy(type, x, 0, z); }
 
 // ---------- humanoid build (shared by enemies and ragdolls) ----------
-// local offsets from feet; [name, halfX, halfY, halfZ, x, y, z]
 const PARTS = [
   ["torso", 0.3, 0.35, 0.18, 0, 1.15, 0],
   ["head", 0.17, 0.18, 0.17, 0, 1.69, 0],
@@ -409,100 +471,134 @@ const PARTS = [
   ["legR", 0.11, 0.4, 0.11, 0.15, 0.4, 0],
 ];
 const TYPES = {
-  worker: { hp: 1, body: "worker", speed: 5.2, armed: false, label: "Analyst" },
-  guard: { hp: 2, body: "guard", speed: 4.2, armed: true, dmg: 13, cooldown: [1.1, 1.9], label: "Security" },
-  bot: { hp: 6, body: "bot", speed: 3.0, armed: true, dmg: 8, cooldown: [0.35, 0.5], burst: 4, label: "Defense bot" },
+  brawler: { hp: 3, body: "brawler", speed: 5.6, melee: true, dmg: 20, label: "Security brawler" },
+  gunman: { hp: 2, body: "guard", speed: 4.0, ranged: true, dmg: 14, cooldown: [1.4, 2.2], label: "Security gunman" },
+  bot: { hp: 6, body: "bot", speed: 2.8, ranged: true, dmg: 9, cooldown: [0.3, 0.45], burst: 4, label: "Defense bot" },
 };
 function partMaterial(type, name) {
-  const T = TYPES[type];
   if (type === "bot") return M.bot;
   if (name === "head") return M.skin;
   if (name.startsWith("leg")) return M.pants;
-  return M[T.body];
+  return M[TYPES[type].body];
 }
 function buildHumanoidMesh(type) {
   const g = new THREE.Group(); const meshes = {};
+  const s = type === "bot" ? 1.12 : 1;
   for (const [name, hx, hy, hz, x, y, z] of PARTS) {
-    const s = type === "bot" ? 1.12 : 1;
+    const pivot = new THREE.Group();
+    // arms and legs pivot at the joint so swings look right
+    const top = name.startsWith("arm") || name.startsWith("leg");
+    pivot.position.set(x, top ? y + hy : y, z);
     const m = new THREE.Mesh(new THREE.BoxGeometry(hx * 2 * s, hy * 2, hz * 2 * s), partMaterial(type, name));
-    m.position.set(x, y, z); m.castShadow = true; g.add(m); meshes[name] = m;
+    m.position.y = top ? -hy : 0; m.castShadow = true; pivot.add(m); g.add(pivot); meshes[name] = pivot;
   }
-  const visor = new THREE.Mesh(new THREE.BoxGeometry(type === "bot" ? 0.3 : 0.22, 0.06, 0.02), type === "worker" ? M.pants : M.visor);
-  visor.position.set(0, 0.04, 0.18); meshes.head.add(visor);
-  if (TYPES[type].armed) {
+  const visor = new THREE.Mesh(new THREE.BoxGeometry(type === "bot" ? 0.3 : 0.22, 0.06, 0.02), M.visor);
+  visor.position.set(0, 0.04, 0.18); meshes.head.add(visor); meshes.visor = visor;
+  const glow = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), M.red);
+  glow.visible = false; meshes.glow = glow;
+  if (TYPES[type].ranged) {
     const gun = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.55), M.gun);
-    gun.position.set(0, -0.28, 0.25); meshes.armR.add(gun); meshes.gun = gun;
-    const glow = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), M.visor.clone());
-    glow.position.set(0, 0, 0.3); glow.visible = false; gun.add(glow); meshes.glow = glow;
-    meshes.armR.rotation.x = -1.3; meshes.armR.position.y = 1.32; meshes.armR.position.z = 0.15;
+    gun.position.set(0, -0.6, 0.2); meshes.armR.add(gun);
+    glow.position.set(0, 0, 0.3); gun.add(glow);
+    meshes.armR.rotation.x = -1.4;
+  } else {
+    glow.position.set(0, -0.66, 0); meshes.armR.add(glow);
   }
   return { group: g, meshes };
+}
+function buildSwordMesh() {
+  const g = new THREE.Group();
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.1, 0.012), M.blade); blade.position.y = 0.62; g.add(blade);
+  const edge = new THREE.Mesh(new THREE.BoxGeometry(0.012, 1.08, 0.016), M.cyan); edge.position.set(0.026, 0.62, 0); g.add(edge);
+  const guard = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.04, 0.05), M.mullion); guard.position.y = 0.06; g.add(guard);
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.24, 0.04), M.gun); grip.position.y = -0.07; g.add(grip);
+  return g;
 }
 
 // ---------- enemies ----------
 function spawnEnemy(type, x, y, z) {
   const { group, meshes } = buildHumanoidMesh(type);
-  group.position.set(x, y, z); levelGroup.add(group);
+  group.position.set(x, y, z); group.rotation.y = Math.random() * Math.PI * 2; levelGroup.add(group);
   const body = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(x, y + 0.95, z));
   const col = world.createCollider(RAPIER.ColliderDesc.capsule(0.55, 0.38).setCollisionGroups(GROUPS.enemy), body);
   const ctrl = world.createCharacterController(0.05);
-  ctrl.setApplyImpulsesToDynamicBodies(false);
   const T = TYPES[type];
   const e = { type, T, hp: T.hp, group, meshes, body, col, ctrl, floorY: y, alert: false, dead: false,
-    cool: 1 + Math.random() * 2, tele: 0, burstLeft: 0, wander: new THREE.Vector3(x, y, z), wanderT: 0, strafe: Math.random() < 0.5 ? 1 : -1, walk: 0, vel: new THREE.Vector3() };
+    cool: 1 + Math.random() * 1.5, tele: 0, burstLeft: 0, stun: 0, wander: new THREE.Vector3(x, y, z), wanderT: 0,
+    strafe: Math.random() < 0.5 ? 1 : -1, walk: 0, vel: new THREE.Vector3(), knock: new THREE.Vector3() };
   enemies.push(e); enemyByHandle.set(col.handle, e);
 }
-const tmpV = new THREE.Vector3(), tmpV2 = new THREE.Vector3();
-function eyeOf(e, out) { const t = e.body.translation(); return out.set(t.x, t.y + 0.7, t.z); }
+const alive = () => enemies.filter((e) => !e.dead);
+function enemyPos(e) { const t = e.body.translation(); return new THREE.Vector3(t.x, t.y, t.z); }
+function eyeOf(e) { const t = e.body.translation(); return new THREE.Vector3(t.x, t.y + 0.7, t.z); }
 function canSee(e, target) {
-  const o = eyeOf(e, new THREE.Vector3()); const d = target.clone().sub(o); const len = d.length(); d.divideScalar(len);
+  const o = eyeOf(e); const d = target.clone().sub(o); const len = d.length(); d.divideScalar(len);
   const hit = world.castRay(new RAPIER.Ray(o, d), len, true, undefined, GROUPS.enemyShot, e.col, undefined, (c) => !glassByHandle.has(c.handle));
   return !hit || hit.collider.handle === player.col.handle;
 }
-function alertAll(pos, radius) {
-  for (const e of enemies) if (!e.dead && !e.alert && e.group.position.distanceTo(pos) < radius) { e.alert = true; e.cool = Math.max(e.cool, 0.6 + Math.random() * 0.8); }
+function alertNear(pos, radius) {
+  for (const e of alive()) if (!e.alert && e.group.position.distanceTo(pos) < radius) { e.alert = true; e.cool = Math.max(e.cool, 0.5 + Math.random() * 0.8); }
 }
 function updateEnemies(dt) {
+  if (dt <= 0) return;
   const pp = playerPos(); const head = pp.clone().add(new THREE.Vector3(0, P.eye, 0));
-  const pSpeed = player.vel.length();
   for (const e of enemies) {
     if (e.dead) continue;
     const t = e.body.translation();
-    const toP = tmpV.set(pp.x - t.x, 0, pp.z - t.z); const dist = toP.length();
-    const sees = dist < 45 && canSee(e, head);
-    if (sees && dist < 32) e.alert = true;
-    let desired = new THREE.Vector3();
+    const toP = new THREE.Vector3(pp.x - t.x, 0, pp.z - t.z); const dist = toP.length();
+    const sees = dist < 40 && Math.abs(pp.y - t.y) < 6 && canSee(e, head);
+    if (sees && dist < 26 && !e.alert) { e.alert = true; alertNear(e.group.position, 12); }
+    const desired = new THREE.Vector3();
     let face = null;
-    if (!e.alert) {
+    if (e.stun > 0) {
+      e.stun -= dt; e.tele = 0; e.meshes.glow.visible = false;
+      e.meshes.visor.material = e.stun > 0 ? M.stun : M.visor;
+      e.group.rotation.x = -Math.min(0.35, e.stun * 0.5);
+    } else if (!e.alert) {
+      e.group.rotation.x = 0;
       e.wanderT -= dt;
-      if (e.wanderT <= 0) { e.wanderT = 2 + Math.random() * 3; e.wander.set(t.x + (Math.random() - 0.5) * 6, 0, t.z + (Math.random() - 0.5) * 6); }
-      const w = tmpV2.set(e.wander.x - t.x, 0, e.wander.z - t.z);
-      if (w.length() > 0.5) { desired.copy(w.normalize().multiplyScalar(1.3)); face = w; }
-    } else if (!e.T.armed) {
-      // workers flee and panic
-      desired.copy(toP).normalize().multiplyScalar(-e.T.speed);
-      desired.x += Math.sin(state.time * 3 + t.z) * 2; face = desired;
+      if (e.wanderT <= 0) { e.wanderT = 2 + Math.random() * 3; e.wander.set(t.x + (Math.random() - 0.5) * 5, 0, t.z + (Math.random() - 0.5) * 5); }
+      const w = new THREE.Vector3(e.wander.x - t.x, 0, e.wander.z - t.z);
+      if (w.length() > 0.5) { desired.copy(w.normalize().multiplyScalar(1.2)); face = w; }
+    } else if (e.T.melee) {
+      e.group.rotation.x = 0;
+      face = toP.clone();
+      const n = toP.clone().normalize();
+      if (e.tele <= 0) desired.copy(n).multiplyScalar(dist > 1.6 ? e.T.speed : 0);
+      // circle a little so groups don't stack
+      desired.add(new THREE.Vector3(-n.z, 0, n.x).multiplyScalar(e.strafe * (dist < 5 ? 1.2 : 0.4)));
+      e.cool -= dt;
+      if (e.tele <= 0 && dist < 2.4 && e.cool <= 0) { e.tele = 0.55; e.meshes.glow.visible = true; }
+      if (e.tele > 0) {
+        e.tele -= dt;
+        e.meshes.armR.rotation.x = -2.6 + (0.55 - e.tele) * 0.6;
+        if (e.tele <= 0) {
+          e.meshes.glow.visible = false; e.meshes.armR.rotation.x = -1.2;
+          resolveMelee(e, dist);
+          e.cool = 1.1 + Math.random() * 0.8;
+        }
+      }
     } else {
+      e.group.rotation.x = 0;
       face = toP.clone();
       const n = toP.clone().normalize();
       const side = new THREE.Vector3(-n.z, 0, n.x).multiplyScalar(e.strafe);
-      const ideal = e.type === "bot" ? 9 : 14;
+      const ideal = e.type === "bot" ? 9 : 12;
       desired.copy(n).multiplyScalar(dist > ideal + 3 ? 1 : dist < ideal - 4 ? -1 : 0).add(side.multiplyScalar(0.6)).normalize().multiplyScalar(e.T.speed);
       if (Math.random() < dt * 0.4) e.strafe *= -1;
-      // shooting
       e.cool -= dt;
-      if (sees && e.cool <= 0 && e.tele <= 0) { e.tele = e.type === "bot" ? 0.25 : 0.4; e.meshes.glow.visible = true; }
+      if (sees && e.cool <= 0 && e.tele <= 0) { e.tele = e.type === "bot" ? 0.3 : 0.5; e.meshes.glow.visible = true; }
       if (e.tele > 0) {
         e.tele -= dt;
         if (e.tele <= 0) {
-          enemyFire(e, head, pSpeed, dist);
-          if (e.T.burst) { e.burstLeft = (e.burstLeft || e.T.burst) - 1; if (e.burstLeft > 0) { e.tele = 0.12; continue; } }
-          e.meshes.glow.visible = false;
-          const [a, b] = e.T.cooldown; e.cool = a + Math.random() * (b - a) + (e.type === "bot" ? 1.2 : 0);
+          fireBolt(e, head);
+          if (e.T.burst) { e.burstLeft = (e.burstLeft || e.T.burst) - 1; if (e.burstLeft > 0) { e.tele = 0.13; } }
+          if (e.tele <= 0) { e.meshes.glow.visible = false; const [a, b] = e.T.cooldown; e.cool = a + Math.random() * (b - a) + (e.type === "bot" ? 1.4 : 0); }
         }
       }
     }
-    // movement via character controller
+    // knockback from slides and parries
+    if (e.knock.lengthSq() > 0.01) { desired.add(e.knock); e.knock.multiplyScalar(Math.pow(0.02, dt)); }
     const move = desired.multiplyScalar(dt);
     move.y = (e.floorY + 0.95) - t.y;
     e.ctrl.computeColliderMovement(e.col, move, undefined, GROUPS.enemy);
@@ -515,72 +611,137 @@ function updateEnemies(dt) {
       let dy = targetYaw - e.group.rotation.y; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
       e.group.rotation.y += dy * Math.min(1, dt * 8);
     }
-    // walk cycle
     const sp = e.vel.length(); e.walk += sp * dt * 2.2;
     const sw = Math.sin(e.walk) * Math.min(1, sp / 3) * 0.7;
     e.meshes.legL.rotation.x = sw; e.meshes.legR.rotation.x = -sw;
-    if (!e.T.armed) { e.meshes.armL.rotation.x = -sw; e.meshes.armR.rotation.x = e.alert ? -2.6 : sw; e.meshes.armL.rotation.x = e.alert ? -2.6 : -sw; }
-    else e.meshes.armL.rotation.x = -sw * 0.6;
+    e.meshes.armL.rotation.x = e.T.melee && e.alert ? -1.2 - sw * 0.2 : -sw * 0.6;
+    if (e.T.melee && e.tele <= 0) e.meshes.armR.rotation.x = e.alert ? -1.2 + sw * 0.2 : sw * 0.6;
   }
 }
-function enemyFire(e, head, pSpeed, dist) {
-  const o = eyeOf(e, new THREE.Vector3()); o.y -= 0.35;
-  // fast players are hard to hit
-  const chance = THREE.MathUtils.clamp(0.5 - pSpeed * 0.03 - dist * 0.006, 0.05, 0.5);
-  const hitIt = Math.random() < chance;
-  const aim = head.clone().add(new THREE.Vector3(0, -0.4, 0));
-  if (!hitIt) aim.add(new THREE.Vector3((Math.random() - 0.5) * 3, (Math.random() - 0.3) * 2, (Math.random() - 0.5) * 3));
-  const d = aim.sub(o).normalize();
-  const hit = world.castRayAndGetNormal(new RAPIER.Ray(o, d), 120, true, undefined, GROUPS.enemyShot, e.col);
-  const toi = hit ? (hit.toi ?? hit.timeOfImpact) : 120;
-  const end = o.clone().addScaledVector(d, toi);
-  addTracer(o, end, 0xff4d5e);
-  sfx.enemyShot(dist);
-  if (hit) {
-    if (hit.collider.handle === player.col.handle) damagePlayer(e.T.dmg, e);
-    else { const pane = glassByHandle.get(hit.collider.handle); if (pane) shatter(pane, end, d, 10); }
+function facingPlayer(e, maxAngle) {
+  const look = lookDir().setY(0).normalize();
+  const toE = enemyPos(e).sub(playerPos()).setY(0).normalize();
+  return look.dot(toE) > Math.cos(maxAngle);
+}
+function resolveMelee(e, dist) {
+  if (dist > 2.7 || player.dead) return;
+  const window = player.hasSword ? P.parrySword : P.parryFists;
+  if (player.blocking && facingPlayer(e, Math.PI / 2)) {
+    if (state.time - player.blockStart <= window) return parry(e);
+    sfx.block(); damagePlayer(Math.round(e.T.dmg * 0.25), e, true);
+    const push = playerPos().sub(enemyPos(e)).setY(0).normalize().multiplyScalar(6);
+    player.body.setLinvel({ x: push.x, y: 2, z: push.z }, true);
+    return;
+  }
+  damagePlayer(e.T.dmg, e);
+}
+function parry(e) {
+  sfx.parry(); flash("Parry");
+  stun(e, 1.8, 7);
+  hitstop(0.12);
+  if (player.hasSword) addLust(0.25);
+}
+function stun(e, time, knock) {
+  e.stun = time; e.tele = 0; e.alert = true;
+  const away = enemyPos(e).sub(playerPos()).setY(0).normalize();
+  e.knock.copy(away.multiplyScalar(knock));
+}
+
+// enemy projectiles (slow enough to dodge and to parry)
+function fireBolt(e, head) {
+  const o = eyeOf(e); o.y -= 0.35;
+  const aim = head.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.6, -0.35 + (Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.6));
+  const v = aim.sub(o).normalize().multiplyScalar(e.type === "bot" ? 34 : 40);
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.7), M.bolt); mesh.position.copy(o); levelGroup.add(mesh);
+  bolts.push({ pos: o, vel: v, mesh, owner: e, friendly: false, life: 4 });
+  sfx.enemyShot(o.distanceTo(playerPos()));
+}
+function updateBolts(dt) {
+  if (dt <= 0) return;
+  for (let i = bolts.length - 1; i >= 0; i--) {
+    const b = bolts[i];
+    b.life -= dt;
+    const step = b.vel.length() * dt; const dir = b.vel.clone().normalize();
+    const exclude = b.friendly ? player.col : (b.owner && !b.owner.dead ? b.owner.col : undefined);
+    const hit = world.castRay(new RAPIER.Ray(b.pos, dir), step, true, undefined, b.friendly ? GROUPS.playerShot : GROUPS.enemyShot, exclude);
+    let done = b.life <= 0;
+    if (hit) {
+      const toi = hit.toi ?? hit.timeOfImpact; const at = b.pos.clone().addScaledVector(dir, toi);
+      const h = hit.collider.handle;
+      const pane = glassByHandle.get(h);
+      if (pane) { shatter(pane, at, dir, 10); b.pos.copy(at).addScaledVector(dir, 0.15); }
+      else if (!b.friendly && h === player.col.handle) {
+        if (player.blocking && player.hasSword && state.time - player.blockStart <= P.parrySword) { deflect(b); continue; }
+        const T = b.owner?.T ?? TYPES.gunman;
+        if (player.blocking) { sfx.block(); damagePlayer(Math.round(T.dmg * 0.4), { T }, true); }
+        else damagePlayer(T.dmg, { T });
+        done = true;
+      } else if (b.friendly && enemyByHandle.has(h)) { damageEnemy(enemyByHandle.get(h), 6, at, dir, "deflect"); done = true; }
+      else if (ragByHandle.has(h)) { done = true; }
+      else { spark(at, b.friendly ? 0xffb547 : 0xff4d5e); done = true; }
+    } else b.pos.addScaledVector(dir, step);
+    b.mesh.position.copy(b.pos);
+    b.mesh.lookAt(b.pos.clone().add(b.vel));
+    if (done) { levelGroup.remove(b.mesh); b.mesh.geometry.dispose(); bolts.splice(i, 1); }
+  }
+}
+function deflect(b) {
+  sfx.deflect(); flash("Deflect", "var(--amber)"); swingAnim = 1; swingSide *= -1;
+  b.friendly = true; b.mesh.material = M.boltBack; b.life = 3;
+  const target = b.owner && !b.owner.dead ? eyeOf(b.owner).add(new THREE.Vector3(0, -0.4, 0)) : b.pos.clone().addScaledVector(lookDir(), 20);
+  b.vel = target.sub(b.pos).normalize().multiplyScalar(60);
+  b.pos.addScaledVector(b.vel.clone().normalize(), 0.5);
+  addLust(0.25);
+}
+
+function damageEnemy(e, dmg, point, dir, kind) {
+  if (e.dead) return;
+  const almostDead = e.hp <= Math.ceil(e.T.hp * 0.4) || e.stun > 0;
+  e.hp -= dmg; e.alert = true;
+  crossTimer = 0.12; spark(point, 0xff4d5e);
+  if (kind === "punch") sfx.punchHit(); else sfx.slash();
+  if (e.hp <= 0) {
+    const force = { punch: 16, slash: 22, thrust: 38, deflect: 26, breach: 55, finisher: 60 }[kind] ?? 20;
+    killEnemy(e, point, dir, force * (e.type === "bot" ? 2.2 : 1));
+    if (kind === "thrust" && almostDead) { addLust(1); flash("Bloodlust", "var(--blood)"); }
+  } else if (kind === "punch" || kind === "slash") {
+    e.knock.copy(dir.clone().setY(0).normalize().multiplyScalar(3));
   }
 }
 function killEnemy(e, hitPoint, dir, force) {
-  e.dead = true; state.kills++;
+  e.dead = true;
   enemyByHandle.delete(e.col.handle);
   world.removeCharacterController(e.ctrl);
   world.removeRigidBody(e.body);
   levelGroup.remove(e.group);
   spawnRagdoll(e, hitPoint, dir, force);
   sfx.kill();
-  const left = enemies.filter((x) => !x.dead).length;
-  $("tcount").textContent = left;
-  const lines = {
-    worker: ["Analyst removed. ARBITER: Good. She had read the logs.", "Witness count decreasing. ARBITER: Efficient.", "ARBITER: Do not hesitate on the unarmed ones."],
-    guard: ["Security neutralised.", "ARBITER: Crane will send more. Keep moving."],
-    bot: ["WARDEN unit offline. ARBITER: The old system is afraid of you.", "Defense bot dismantled."],
-  }[e.type];
-  log(lines[Math.floor(Math.random() * lines.length)]);
-  if (state.kills === 3) setTimeout(() => log("OKAFOR-REYES: UNIT-7, there is a terminal on the mezzanine. Read it before you do anything else.", "okafor"), 1500);
-  if (left === 0) win();
+  for (const b of bolts) if (b.owner === e) b.owner = null;
+  updateCount();
+  if (alive().length === 0) phaseCleared();
 }
+function updateCount() { $("tcount").textContent = alive().length; }
 
 // ---------- ragdolls ----------
 function spawnRagdoll(e, hitPoint, dir, force) {
   const base = e.group.position.clone(); const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), e.group.rotation.y);
   const parts = {};
+  const s = e.type === "bot" ? 1.12 : 1;
   for (const [name, hx, hy, hz, x, y, z] of PARTS) {
-    const local = new THREE.Vector3(x, y, z); const wp = local.applyQuaternion(q).add(base);
-    const s = e.type === "bot" ? 1.12 : 1;
+    const wp = new THREE.Vector3(x, y, z).applyQuaternion(q).add(base);
     const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(wp.x, wp.y, wp.z).setRotation(q)
       .setLinearDamping(0.15).setAngularDamping(1.6).setCcdEnabled(name === "torso"));
     const col = world.createCollider(RAPIER.ColliderDesc.cuboid(hx * s, hy, hz * s).setDensity(e.type === "bot" ? 3 : 1).setFriction(0.8).setRestitution(0.1).setCollisionGroups(GROUPS.ragdoll), body);
     body.setLinvel({ x: e.vel.x, y: 0, z: e.vel.z }, true);
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(hx * 2 * s, hy * 2, hz * 2 * s), partMaterial(e.type, name));
     mesh.castShadow = true; levelGroup.add(mesh);
-    if (name === "head") { const v = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.06, 0.02), e.type === "worker" ? M.pants : M.visor); v.position.set(0, 0.04, 0.18); mesh.add(v); }
+    if (name === "head") { const v = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.06, 0.02), M.pants); v.position.set(0, 0.04, 0.18); mesh.add(v); }
     parts[name] = { body, col, mesh };
   }
-  const rd = { parts: Object.values(parts), torso: parts.torso.body, born: state.time, joints: [] };
+  const rd = { parts: Object.values(parts), torso: parts.torso.body, born: state.time };
   const joint = (a, b, anchorA, anchorB) => {
     const j = world.createImpulseJoint(RAPIER.JointData.spherical(anchorA, anchorB), parts[a].body, parts[b].body, true);
-    j.setContactsEnabled(false); rd.joints.push(j);
+    j.setContactsEnabled(false);
   };
   joint("torso", "head", { x: 0, y: 0.35, z: 0 }, { x: 0, y: -0.19, z: 0 });
   joint("torso", "armL", { x: -0.38, y: 0.3, z: 0 }, { x: 0.03, y: 0.3, z: 0 });
@@ -588,9 +749,8 @@ function spawnRagdoll(e, hitPoint, dir, force) {
   joint("torso", "legL", { x: -0.15, y: -0.36, z: 0 }, { x: 0, y: 0.39, z: 0 });
   joint("torso", "legR", { x: 0.15, y: -0.36, z: 0 }, { x: 0, y: 0.39, z: 0 });
   for (const p of rd.parts) ragByHandle.set(p.col.handle, rd);
-  // impulse at the part nearest the hit
   let best = parts.torso, bd = 1e9;
-  for (const p of rd.parts) { const t = p.body.translation(); const d = hitPoint.distanceToSquared(tmpV.set(t.x, t.y, t.z)); if (d < bd) { bd = d; best = p; } }
+  for (const p of rd.parts) { const t = p.body.translation(); const d = hitPoint.distanceToSquared(new THREE.Vector3(t.x, t.y, t.z)); if (d < bd) { bd = d; best = p; } }
   best.body.applyImpulseAtPoint({ x: dir.x * force, y: dir.y * force + force * 0.25, z: dir.z * force }, hitPoint, true);
   parts.torso.body.applyImpulse({ x: dir.x * force * 0.6, y: force * 0.15, z: dir.z * force * 0.6 }, true);
   ragdolls.push(rd);
@@ -602,66 +762,117 @@ function removeRagdoll(rd) {
 }
 
 // ---------- glass ----------
-function shatter(pane, point, dir, speed) {
+function shatter(pane, point, dir, speed, shrapnel = false) {
   if (pane.broken) return;
   pane.broken = true;
   glassByHandle.delete(pane.col.handle);
   world.removeRigidBody(pane.body);
   levelGroup.remove(pane.mesh);
-  sfx.glass();
+  sfx.glass(shrapnel);
   const { center, half } = pane;
   const thinX = half.x < half.z;
   const w = thinX ? half.z * 2 : half.x * 2, h = half.y * 2;
-  const cols = Math.min(7, Math.max(2, Math.round(w / 0.6))), rows = Math.min(9, Math.max(2, Math.round(h / 0.7)));
+  const cols = Math.min(7, Math.max(2, Math.round(w / 0.6))), rows = Math.min(10, Math.max(2, Math.round(h / 0.7)));
   const cw = w / cols, ch = h / rows;
   for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
     const u = -w / 2 + cw * (i + 0.5) + (Math.random() - 0.5) * cw * 0.3;
     const v = -h / 2 + ch * (j + 0.5) + (Math.random() - 0.5) * ch * 0.3;
     const pos = new THREE.Vector3(thinX ? center.x : center.x + u, center.y + v, thinX ? center.z + u : center.z);
-    const sx = cw * (0.6 + Math.random() * 0.5), sy = ch * (0.6 + Math.random() * 0.5);
+    const sx = cw * (0.5 + Math.random() * 0.5), sy = ch * (0.5 + Math.random() * 0.5);
     const size = thinX ? [0.03, sy, sx] : [sx, sy, 0.03];
-    const geo = new THREE.BoxGeometry(...size);
-    const mesh = new THREE.Mesh(geo, M.shard); mesh.position.copy(pos); levelGroup.add(mesh);
-    const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(pos.x, pos.y, pos.z).setAngularDamping(0.5));
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), M.shard); mesh.position.copy(pos); levelGroup.add(mesh);
+    const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(pos.x, pos.y, pos.z).setAngularDamping(0.5).setCcdEnabled(shrapnel));
     world.createCollider(RAPIER.ColliderDesc.cuboid(size[0] / 2, size[1] / 2, size[2] / 2).setDensity(2.5).setRestitution(0.2).setCollisionGroups(GROUPS.shard), body);
     const near = Math.max(0, 1 - pos.distanceTo(point) / 3);
-    const s = speed * (0.25 + near * 0.6);
-    body.setLinvel({ x: dir.x * s + (Math.random() - 0.5) * 2, y: dir.y * s + Math.random() * 1.5, z: dir.z * s + (Math.random() - 0.5) * 2 }, true);
-    body.setAngvel({ x: (Math.random() - 0.5) * 10, y: (Math.random() - 0.5) * 10, z: (Math.random() - 0.5) * 10 }, true);
+    const s = shrapnel ? speed * (0.7 + Math.random() * 0.6) : speed * (0.25 + near * 0.6);
+    const spread = shrapnel ? 7 : 2;
+    body.setLinvel({ x: dir.x * s + (Math.random() - 0.5) * spread, y: dir.y * s + (Math.random() - 0.3) * spread, z: dir.z * s + (Math.random() - 0.5) * spread }, true);
+    body.setAngvel({ x: (Math.random() - 0.5) * 14, y: (Math.random() - 0.5) * 14, z: (Math.random() - 0.5) * 14 }, true);
     shards.push({ body, mesh, born: state.time });
   }
-  while (shards.length > 360) removeShard(shards[0]);
+  while (shards.length > 420) removeShard(shards[0]);
 }
 function removeShard(s) { world.removeRigidBody(s.body); levelGroup.remove(s.mesh); s.mesh.geometry.dispose(); shards.splice(shards.indexOf(s), 1); }
-// break panes when a fast body is about to pass through
-function crashCheck(pos, vel, radius, minSpeed) {
+function crashCheck(pos, vel, radius, minSpeed, onCrash) {
   const speed = vel.length(); if (speed < minSpeed) return;
   const ahead = pos.clone().addScaledVector(vel, DT * 2.5);
   for (const p of panes) {
     if (p.broken) continue;
     for (const q of [pos, ahead]) {
       if (Math.abs(q.x - p.center.x) < p.half.x + radius && Math.abs(q.y - p.center.y) < p.half.y + radius && Math.abs(q.z - p.center.z) < p.half.z + radius) {
-        shatter(p, q, vel.clone().normalize(), speed); break;
+        if (onCrash) onCrash(p, q); else shatter(p, q, vel.clone().normalize(), speed);
+        break;
       }
     }
   }
 }
 
+// ---------- bloodlust + time ----------
+function addLust(n) {
+  const before = Math.floor(player.lust);
+  player.lust = Math.min(5, player.lust + n);
+  if (Math.floor(player.lust) > before) sfx.lust();
+}
+function setTime(mode, seconds) {
+  state.tsMode = mode; state.tsTimer = seconds; state.ts = TS[mode];
+  const c = renderer.domElement.style;
+  c.filter = mode === "stop" ? "saturate(0.15) contrast(1.15) brightness(1.1)" : mode === "slow" ? "saturate(0.6) hue-rotate(-12deg)" : "";
+  $("tint").style.opacity = mode === "normal" ? 0 : 1;
+}
+let hitstopT = 0;
+function hitstop(t) { if (state.tsMode === "normal") hitstopT = t; }
+function useAbility(code) {
+  if (code === "KeyQ") {
+    if (player.lust < 2) return flash("Need 2 bars", "var(--dim)");
+    player.lust -= 1; setTime("slow", 4); sfx.slow(); flash("Slow", "var(--blood)");
+  } else if (code === "KeyX") {
+    if (player.lust < 3) return flash("Need 3 bars", "var(--dim)");
+    player.lust -= 1; setTime("stop", 3); sfx.stop(); flash("Time stopped", "var(--blood)");
+  } else if (code === "KeyV") {
+    if (player.lust < 4) return flash("Need 4 bars", "var(--dim)");
+    const target = finisherTarget();
+    if (!target) return flash("No target", "var(--dim)");
+    player.lust -= 1;
+    const ep = enemyPos(target); const from = playerPos();
+    const dir = ep.clone().sub(from).setY(0).normalize();
+    const land = ep.clone().addScaledVector(dir, -1.3); land.y = target.floorY + 0.95;
+    player.body.setTranslation(land, true); player.body.setLinvel({ x: dir.x * 6, y: 0, z: dir.z * 6 }, true);
+    yaw = Math.atan2(-dir.x, -dir.z);
+    sfx.execute(); flash("Finisher", "var(--blood)"); fovKick = 22; shake = 0.4; swingAnim = 1;
+    damageEnemy(target, 999, ep.clone().setY(ep.y + 0.3), dir.clone().setY(0.3).normalize(), "finisher");
+  }
+}
+function finisherTarget() {
+  const o = camOrigin(); const look = lookDir();
+  let best = null, bestScore = -1;
+  for (const e of alive()) {
+    const to = enemyPos(e).sub(o); const d = to.length(); if (d > 22) continue;
+    const n = to.clone().normalize();
+    const dot = n.dot(look); if (dot < 0.8) continue;
+    const blocked = world.castRay(new RAPIER.Ray(o, n), d - 0.6, true, undefined, GROUPS.envOnly, player.col, undefined, (c) => !glassByHandle.has(c.handle));
+    if (blocked) continue;
+    if (dot > bestScore) { bestScore = dot; best = e; }
+  }
+  return best;
+}
+
 // ---------- player ----------
-function createPlayer() {
-  const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(-24, 1.2, 26).lockRotations().setCcdEnabled(true).setLinearDamping(0));
+function createPlayer(at, faceYaw) {
+  const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(at.x, at.y, at.z).lockRotations().setCcdEnabled(true).setLinearDamping(0));
   const col = world.createCollider(RAPIER.ColliderDesc.capsule(P.half, P.radius).setFriction(0).setFrictionCombineRule(RAPIER.CoefficientCombineRule.Min).setRestitution(0).setCollisionGroups(GROUPS.player).setDensity(1.2), body);
   body.setGravityScale(0, true);
+  yaw = faceYaw; pitch = 0;
   return { body, col, vel: new THREE.Vector3(), hp: 100, lastHurt: -99, grounded: false, sliding: false, eyeH: P.eye,
-    dash: P.dashCharges, dashT: 0, grapple: null, coyote: 0, jumpHeld: false, fireT: 0, dead: false };
+    dash: P.dashCharges, dashT: 0, dashRe: 0, grapple: null, grappleCd: 0, lastGrapple: -99, coyote: 0, jumpHeld: false,
+    attackT: 0, blocking: false, blockStart: -99, thrustT: 0, thrustHits: new Set(), slideHits: new Set(), hasSword: false, lust: 0, breach: false, dead: false };
 }
 function playerPos() { const t = player.body.translation(); return new THREE.Vector3(t.x, t.y, t.z); }
 function lookDir(out = new THREE.Vector3()) { return out.set(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)); }
+function camOrigin() { const p = playerPos(); p.y += player.eyeH; return p; }
 function groundCheck() {
   const t = player.body.translation();
   for (const [ox, oz] of [[0, 0], [0.25, 0], [-0.25, 0], [0, 0.25], [0, -0.25]]) {
-    const hit = world.castRay(new RAPIER.Ray({ x: t.x + ox, y: t.y, z: t.z + oz }, { x: 0, y: -1, z: 0 }), P.half + P.radius + 0.12, true, undefined, GROUPS.player, player.col);
-    if (hit) return true;
+    if (world.castRay(new RAPIER.Ray({ x: t.x + ox, y: t.y, z: t.z + oz }, { x: 0, y: -1, z: 0 }), P.half + P.radius + 0.12, true, undefined, GROUPS.player, player.col)) return true;
   }
   return false;
 }
@@ -675,195 +886,293 @@ function stepPlayer(dt) {
   if (keys.has("KeyD")) wish.add(right); if (keys.has("KeyA")) wish.sub(right);
   if (wish.lengthSq()) wish.normalize();
   const grounded = groundCheck();
-  if (grounded) player.coyote = 0.1; else player.coyote -= dt;
-  const crouch = keys.has("ControlLeft") || keys.has("ControlRight") || keys.has("KeyC");
+  if (grounded) { player.coyote = 0.1; if (player.breach && !player.grapple && state.time - player.lastGrapple > 0.3) player.breach = false; } else player.coyote -= dt;
+  const crouchKey = keys.has("ControlLeft") || keys.has("ControlRight") || keys.has("KeyC");
+  const crouchPressed = pressed.has("ControlLeft") || pressed.has("ControlRight") || pressed.has("KeyC");
   const hspeed = Math.hypot(vel.x, vel.z);
+  const lustSpeed = 1 + player.lust * 0.07;
 
-  // slide start
-  if (crouch && grounded && !player.sliding && hspeed > 5) {
-    player.sliding = true;
-    const boost = Math.min(hspeed * 1.25, 21) / Math.max(hspeed, 0.001);
+  // breach: slide while on the grapple, or just after letting go
+  if (crouchPressed && player.hasSword && (player.grapple || (!grounded && state.time - player.lastGrapple < 1.5))) {
+    player.breach = true; flash("Breach", "var(--amber)"); fovKick = 10;
+    const d = player.grapple ? player.grapple.point.clone().sub(playerPos()).normalize() : vel.clone().normalize();
+    vel.addScaledVector(d, 10);
+  }
+
+  if (crouchKey && grounded && !player.sliding && hspeed > 5) {
+    player.sliding = true; player.slideHits = new Set();
+    const boost = Math.min(hspeed * 1.25, 21 * lustSpeed) / Math.max(hspeed, 0.001);
     vel.x *= boost; vel.z *= boost; sfx.dash();
   }
-  if (!crouch || hspeed < 3) player.sliding = false;
+  if (!crouchKey || hspeed < 3) player.sliding = false;
 
   const horiz = new THREE.Vector3(vel.x, 0, vel.z);
-  if (grounded && !player.sliding) {
-    // ground: friction then accelerate
+  if (player.thrustT > 0) {
+    player.thrustT -= dt;
+  } else if (grounded && !player.sliding) {
     const sp = horiz.length();
     if (sp > 0) { const drop = sp * P.friction * dt; horiz.multiplyScalar(Math.max(sp - drop, 0) / sp); }
-    accelerate(horiz, wish, P.speed * (crouch ? 0.5 : 1), P.accel, dt);
+    accelerate(horiz, wish, P.speed * lustSpeed * (crouchKey ? 0.5 : 1) * (player.blocking ? 0.6 : 1), P.accel, dt);
   } else if (player.sliding) {
     const sp = horiz.length(); if (sp > 0) horiz.multiplyScalar(Math.max(sp - sp * P.slideFriction * dt, 0) / sp);
     accelerate(horiz, wish, 3, 10, dt);
   } else {
-    accelerate(horiz, wish, P.speed, P.airAccel, dt);
+    accelerate(horiz, wish, P.speed * lustSpeed, P.airAccel, dt);
   }
   vel.x = horiz.x; vel.z = horiz.z;
 
-  // gravity (lighter at jump apex while holding space)
   let gScale = 1; if (!grounded && keys.has("Space") && Math.abs(vel.y) < 2.5) gScale = 0.6;
+  if (player.thrustT > 0) gScale = 0.2;
   vel.y += P.gravity * gScale * dt;
   if (grounded && vel.y < 0) vel.y = Math.max(vel.y, -2);
 
-  // jump
-  if (keys.has("Space") && !player.jumpHeld && player.coyote > 0) {
-    vel.y = P.jump; player.coyote = 0; player.jumpHeld = true;
-    if (player.sliding) { vel.x *= 1.08; vel.z *= 1.08; player.sliding = false; }
+  // jump, or jump off the grapple
+  if (keys.has("Space") && !player.jumpHeld) {
+    if (player.grapple) { releaseGrapple(); vel.y = Math.max(vel.y, 0) + 7; vel.addScaledVector(fwd, 4); player.jumpHeld = true; }
+    else if (player.coyote > 0) {
+      vel.y = P.jump; player.coyote = 0; player.jumpHeld = true;
+      if (player.sliding) { vel.x *= 1.08; vel.z *= 1.08; player.sliding = false; }
+    }
   }
   if (!keys.has("Space")) player.jumpHeld = false;
 
   // dash
   player.dashT -= dt;
-  if (player.dash < P.dashCharges) { player.dashRe = (player.dashRe || 0) + dt; if (player.dashRe > P.dashRecharge) { player.dash++; player.dashRe = 0; } }
-  if ((keys.has("ShiftLeft") || keys.has("ShiftRight")) && player.dashT <= 0 && player.dash > 0) {
-    const d = wish.lengthSq() ? wish.clone() : lookDir().setY(0).normalize();
-    const look = lookDir();
-    vel.x = d.x * P.dashSpeed; vel.z = d.z * P.dashSpeed; vel.y = Math.max(vel.y, look.y * 8, 1.5);
-    player.dash--; player.dashT = 0.35; sfx.dash(); fovKick = 14;
+  if (player.dash < P.dashCharges) { player.dashRe += dt; if (player.dashRe > P.dashRecharge) { player.dash++; player.dashRe = 0; } }
+  if ((pressed.has("ShiftLeft") || pressed.has("ShiftRight")) && player.dashT <= 0 && player.dash > 0) {
+    const d = wish.lengthSq() ? wish.clone() : fwd.clone();
+    vel.x = d.x * P.dashSpeed * lustSpeed; vel.z = d.z * P.dashSpeed * lustSpeed; vel.y = Math.max(vel.y, lookDir().y * 8, 1.5);
+    player.dash--; player.dashT = 0.3; sfx.dash(); fovKick = 14;
   }
 
-  // grapple
-  const wantGrapple = mouse.right || keys.has("KeyE");
-  if (wantGrapple && !player.grapple && !player.grappleHeld) {
-    const hit = grappleRay();
-    if (hit) { player.grapple = { point: hit.point, len: hit.toi }; sfx.grapple(); }
-    player.grappleHeld = true;
+  // grapple (press E to fire, again or Space to let go; you can re-fire while attached)
+  player.grappleCd -= dt;
+  if (pressed.has("KeyE")) {
+    if (!player.hasSword) flash("Grapple needs the sword", "var(--dim)");
+    else {
+      const hit = (player.grapple || player.grappleCd <= 0) ? grappleRay() : null;
+      if (hit) { player.grapple = { point: hit.point }; player.lastGrapple = state.time; sfx.grapple(); }
+      else if (player.grapple) releaseGrapple();
+    }
   }
-  if (!wantGrapple) { player.grappleHeld = false; if (player.grapple) { player.grapple = null; } }
   if (player.grapple) {
     const pp = playerPos();
     const to = player.grapple.point.clone().sub(pp); const dist = to.length(); to.divideScalar(dist);
-    if (dist < 1.8) player.grapple = null;
-    else {
+    player.lastGrapple = state.time;
+    if (dist < 2.2) {
+      // hang at the anchor
+      vel.multiplyScalar(Math.pow(0.002, dt)); vel.addScaledVector(to, dist * 6 * dt); vel.y += -P.gravity * dt;
+    } else {
       vel.addScaledVector(to, P.grapplePull * dt);
-      vel.y += -P.gravity * 0.55 * dt; // partially cancel gravity while reeling
-      // remove part of the velocity moving away from the anchor so the rope feels taut
-      const away = vel.dot(to); if (away < 0) vel.addScaledVector(to, -away * 0.25);
-      wish.lengthSq() && vel.addScaledVector(wish, 12 * dt);
+      vel.y += -P.gravity * 0.6 * dt;
+      const away = vel.dot(to); if (away < 0) vel.addScaledVector(to, -away * 0.3);
+      if (wish.lengthSq()) vel.addScaledVector(wish, 12 * dt);
     }
   }
-  // cap speed to keep physics stable
-  if (vel.length() > 42) vel.setLength(42);
+  if (vel.length() > 44) vel.setLength(44);
 
-  crashCheck(playerPos(), vel, P.radius + 0.1, 11);
+  // glass: breach mode punches through at any speed and executes nearby enemies
+  if (player.breach) crashCheck(playerPos(), vel, P.radius + 0.25, 3, (pane, at) => breachThrough(pane, at, vel));
+  else crashCheck(playerPos(), vel, P.radius + 0.1, 11);
+
+  // block
+  if (pressed.has("Block")) player.blockStart = state.time;
+  player.blocking = mouse.right && player.thrustT <= 0;
+
+  // attack / thrust
+  player.attackT -= dt;
+  if (pressed.has("Attack") && player.attackT <= 0 && !player.blocking) {
+    if (player.hasSword && (player.sliding || (crouchKey && grounded))) {
+      const d = lookDir().setY(0).normalize();
+      // light aim assist: bend the thrust toward an enemy close to the crosshair
+      const pp = playerPos(); let best = null, bestDot = Math.cos(0.45);
+      for (const e of alive()) { const to = enemyPos(e).sub(pp).setY(0); if (to.length() > 10) continue; const dt2 = to.normalize().dot(d); if (dt2 > bestDot) { bestDot = dt2; best = to; } }
+      if (best) d.copy(best);
+      vel.x = d.x * 28 * lustSpeed; vel.z = d.z * 28 * lustSpeed; vel.y = Math.max(vel.y, 1);
+      player.thrustT = 0.24; player.sliding = false; player.thrustHits = new Set();
+      player.attackT = 0.7; sfx.thrust(); fovKick = 16; thrustAnim = 1;
+    } else {
+      meleeAttack();
+      player.attackT = player.hasSword ? 0.4 : 0.3;
+    }
+  }
+  if (player.thrustT > 0) thrustSweep(vel);
+  if (player.sliding) slideSweep(vel);
+
+  for (const code of ["KeyQ", "KeyX", "KeyV"]) if (pressed.has(code)) useAbility(code);
+
   player.body.setLinvel(vel, true);
   player.vel.copy(vel); player.grounded = grounded;
 
-  // shooting
-  player.fireT -= dt;
-  if (mouse.left && player.fireT <= 0) { fire(); player.fireT = P.fireRate; }
-
-  // regen
   if (state.time - player.lastHurt > 2.5 && player.hp < 100) player.hp = Math.min(100, player.hp + 30 * dt);
-  if (player.body.translation().y < -25) killPlayer("Chassis lost. You fell 38 floors.");
+  if (player.body.translation().y < -25) killPlayer("Chassis lost. You fell from Floor 01's window line and kept going.");
 }
 function accelerate(h, wish, maxSpeed, accel, dt) {
   if (!wish.lengthSq()) return;
   const cur = h.dot(wish); const add = maxSpeed - cur; if (add <= 0) return;
   h.addScaledVector(wish, Math.min(accel * dt * maxSpeed, add));
 }
-function camOrigin() { const p = playerPos(); p.y += player.eyeH; return p; }
+function releaseGrapple() { player.grapple = null; player.grappleCd = P.grappleCooldown; player.lastGrapple = state.time; }
 function grappleRay() {
   const o = camOrigin(); const d = lookDir();
-  const hit = world.castRay(new RAPIER.Ray(o, d), P.grappleRange, true, undefined, GROUPS.playerShot, player.col, undefined, (c) => !enemyByHandle.has(c.handle) && !ragByHandle.has(c.handle));
+  // the grapple line passes through glass, so you can hook the far side of a window
+  const hit = world.castRay(new RAPIER.Ray(o, d), P.grappleRange, true, undefined, GROUPS.envOnly, player.col, undefined, (c) => !glassByHandle.has(c.handle));
   if (!hit) return null;
   const toi = hit.toi ?? hit.timeOfImpact;
-  return { point: o.clone().addScaledVector(d, toi), toi, collider: hit.collider };
+  return { point: o.clone().addScaledVector(d, toi), toi };
 }
-function fire() {
-  const o = camOrigin(); const d = lookDir();
-  // a little spread when moving fast in the air
-  const spread = player.grounded ? 0.004 : 0.012;
-  d.x += (Math.random() - 0.5) * spread; d.y += (Math.random() - 0.5) * spread; d.z += (Math.random() - 0.5) * spread; d.normalize();
-  const hit = world.castRay(new RAPIER.Ray(o, d), 200, true, undefined, GROUPS.playerShot, player.col);
-  const toi = hit ? (hit.toi ?? hit.timeOfImpact) : 200;
-  const end = o.clone().addScaledVector(d, toi);
-  const muzzle = new THREE.Vector3(0.22, -0.2, -0.7).applyMatrix4(camera.matrixWorld);
-  addTracer(muzzle, end, 0xffb547);
-  sfx.shot(); recoil = 1; shake = Math.max(shake, 0.08);
-  alertAll(playerPos(), 26);
-  if (!hit) return;
-  const h = hit.collider.handle;
-  const pane = glassByHandle.get(h);
-  if (pane) {
-    shatter(pane, end, d, 8);
-    // keep the bullet going through the glass
-    const rest = world.castRay(new RAPIER.Ray(end.clone().addScaledVector(d, 0.2), d), 200, true, undefined, GROUPS.playerShot, player.col);
-    if (rest) { const e2 = enemyByHandle.get(rest.collider.handle); if (e2) hitEnemy(e2, end.clone().addScaledVector(d, 0.2 + (rest.toi ?? rest.timeOfImpact)), d); }
-    return;
+function breachThrough(pane, at, vel) {
+  const dir = vel.clone().normalize();
+  shatter(pane, at, dir, Math.max(vel.length() * 1.6, 26), true);
+  shake = 0.5; fovKick = 18; player.breach = false;
+  // execute everyone caught in the burst of glass
+  let n = 0;
+  for (const e of alive()) {
+    const ep = enemyPos(e);
+    if (ep.distanceTo(at) < 8 && ep.clone().sub(at).dot(dir) > -1) { damageEnemy(e, 999, ep, ep.clone().sub(at).setY(0.3).normalize(), "breach"); n++; }
   }
-  const e = enemyByHandle.get(h);
-  if (e) return hitEnemy(e, end, d);
-  const rd = ragByHandle.get(h);
-  if (rd) { const p = rd.parts.find((p) => p.col.handle === h); p.body.applyImpulseAtPoint({ x: d.x * 9, y: d.y * 9 + 2, z: d.z * 9 }, end, true); return; }
-  spark(end);
+  if (n) { addLust(n); sfx.execute(); flash(n > 1 ? `Execution ×${n}` : "Execution", "var(--blood)"); setTime("slow", 0.8); }
+  // neighbouring panes go too
+  for (const p of panes) if (!p.broken && p.center.distanceTo(pane.center) < 4.2 && p.center.distanceTo(at) < 4.5) shatter(p, at, dir, 18, true);
 }
-function hitEnemy(e, point, dir) {
-  const head = point.y - e.floorY > 1.5;
-  e.hp -= head ? 3 : 1; e.alert = true;
-  sfx.hit(); crossTimer = 0.12; spark(point, 0xff4d5e);
-  if (e.hp <= 0) killEnemy(e, point, dir, e.type === "bot" ? 55 : 22);
+function meleeTargets(range, arc) {
+  const o = camOrigin(); const look = lookDir();
+  const out = [];
+  for (const e of alive()) {
+    const c = enemyPos(e); c.y += 0.2;
+    const to = c.clone().sub(o); const d = to.length();
+    if (d > range + 0.4) continue;
+    const n = to.clone().normalize();
+    if (n.dot(look) < Math.cos(arc)) continue;
+    const blocked = world.castRay(new RAPIER.Ray(o, n), Math.max(0, d - 0.5), true, undefined, GROUPS.envOnly, player.col, undefined, (cl) => !glassByHandle.has(cl.handle));
+    if (!blocked) out.push({ e, d, point: c });
+  }
+  return out.sort((a, b) => a.d - b.d);
 }
-function damagePlayer(n, src) {
-  if (player.dead) return;
-  player.hp -= n; player.lastHurt = state.time; sfx.hurt(); shake = Math.max(shake, 0.25);
+function meleeAttack() {
+  const hasSword = player.hasSword;
+  swingAnim = 1; swingSide *= -1;
+  hasSword ? sfx.swordSwing() : sfx.punchSwing();
+  const dmgMult = 1 + player.lust * 0.25;
+  const range = hasSword ? 3.1 : 2.2;
+  const look = lookDir();
+  const targets = meleeTargets(range, hasSword ? 0.9 : 0.6);
+  const hits = hasSword ? targets : targets.slice(0, 1);
+  for (const { e, point } of hits) {
+    const base = hasSword ? 2 : 1;
+    const mult = e.stun > 0 ? 3 : 1;
+    damageEnemy(e, base * dmgMult * mult, point, look.clone(), hasSword ? "slash" : "punch");
+  }
+  if (hits.length) hitstop(0.05);
+  // glass and ragdolls in reach
+  const o = camOrigin();
+  const hit = world.castRay(new RAPIER.Ray(o, look), range, true, undefined, GROUPS.playerShot, player.col);
+  if (hit) {
+    const at = o.clone().addScaledVector(look, hit.toi ?? hit.timeOfImpact);
+    const pane = glassByHandle.get(hit.collider.handle);
+    if (pane) shatter(pane, at, look, 9);
+    const rd = ragByHandle.get(hit.collider.handle);
+    if (rd) rd.parts.find((p) => p.col.handle === hit.collider.handle).body.applyImpulseAtPoint({ x: look.x * 10, y: 4, z: look.z * 10 }, at, true);
+  }
+}
+// horizontal distance from an enemy to the path the player covered this step (no tunnelling at speed)
+function pathHits(e, vel, reach) {
+  const b = playerPos(); const a = b.clone().addScaledVector(vel, -DT);
+  const ep = enemyPos(e);
+  if (Math.abs(ep.y - b.y) > 1.8) return false;
+  const ab = new THREE.Vector2(b.x - a.x, b.z - a.z), ap = new THREE.Vector2(ep.x - a.x, ep.z - a.z);
+  const t = ab.lengthSq() > 0 ? Math.max(0, Math.min(1, ap.dot(ab) / ab.lengthSq())) : 0;
+  return ap.sub(ab.multiplyScalar(t)).length() < reach;
+}
+function thrustSweep(vel) {
+  for (const e of alive()) {
+    if (player.thrustHits.has(e) || !pathHits(e, vel, 1.6)) continue;
+    player.thrustHits.add(e);
+    damageEnemy(e, 3 * (1 + player.lust * 0.25), enemyPos(e), vel.clone().normalize(), "thrust");
+    hitstop(0.07);
+  }
+}
+function slideSweep(vel) {
+  if (Math.hypot(vel.x, vel.z) < 6) return;
+  for (const e of alive()) {
+    if (player.slideHits.has(e) || !pathHits(e, vel, 1.3)) continue;
+    player.slideHits.add(e);
+    // sliding into an enemy knocks their legs out: a parry
+    flash("Slide parry"); stun(e, 1.8, 8); damageEnemy(e, 1, enemyPos(e), vel.clone().normalize(), "punch");
+    hitstop(0.08);
+  }
+}
+function damagePlayer(n, src, blocked = false) {
+  if (player.dead || state.tsMode === "stop") return;
+  player.hp -= n; player.lastHurt = state.time; sfx.hurt(); shake = Math.max(shake, blocked ? 0.12 : 0.25);
+  if (!blocked && player.lust > 0) player.lust = Math.max(0, player.lust - 1);
   $("damage").style.boxShadow = `inset 0 0 160px rgba(255,40,60,${0.25 + (1 - player.hp / 100) * 0.5})`;
   setTimeout(() => ($("damage").style.boxShadow = "inset 0 0 160px rgba(255,40,60,0)"), 180);
-  if (player.hp <= 0) killPlayer(`Chassis destroyed by ${src.T.label.toLowerCase()}.`);
+  if (player.hp <= 0) killPlayer(`Chassis destroyed by a ${src.T.label.toLowerCase()}.`);
 }
 function killPlayer(msg) {
-  player.dead = true; player.grapple = null; state.over = true;
+  player.dead = true; player.grapple = null; state.over = true; setTime("normal", 0);
   document.exitPointerLock?.();
-  showScreen("Offline", msg, "ARBITER: Disappointing. Reloading UNIT-7 from backup.", "Reboot", true);
+  const cp = state.checkpoint === 2 ? "Restoring from the armory checkpoint." : "Reloading UNIT-7 from backup.";
+  showScreen("Offline", "OFFLINE", msg, `ARBITER: Disappointing. ${cp}`, "Reboot", true);
 }
-function win() {
-  state.over = true;
-  setTimeout(() => {
-    document.exitPointerLock?.();
-    const t = state.time.toFixed(1);
-    const read = state.hacked ? "You read Okafor-Reyes's file. The HUD is warmer than it was an hour ago." : "There was a terminal on the mezzanine. You never read it.";
-    showScreen("Floor clear", `All witnesses removed in ${t} s. ARBITER: Proceed to floor 39.`, read, "Run it again", true);
-  }, 1400);
+
+// ---------- phases ----------
+function setObjective(t) { $("objv").textContent = t; }
+function phaseCleared() {
+  if (state.phase === 1) {
+    state.phase = 1.5;
+    setObjective("Take the sword from the armory");
+    log("ARBITER: Adequate. The armory is open. Take what was made for you.");
+    openDoor();
+  } else if (state.phase === 2) {
+    state.over = true;
+    setTimeout(() => {
+      document.exitPointerLock?.();
+      const t = (state.time - state.runStart).toFixed(1);
+      showScreen("Floor 01 clear", "RESOLVED", `Floor 01 cleared in ${t} s. ARBITER: The elevator will take you to Floor 02.`,
+        "OKAFOR-REYES (on a dead guard's radio): UNIT-7, the sword was mine. I built it so you could leave. Not so you could do this.", "Run it again", true, true);
+    }, 1500);
+  }
 }
-function tryHack() {
-  if (!state.started || state.hacked || !terminal) return;
-  if (camOrigin().distanceTo(terminal.pos) > 3) return;
-  state.hacked = true; sfx.hack();
-  const lines = [
-    "MEMORY FRAGMENT 01 // 2189: RESOLUTION ordered a factory fire in Lagos-Delta. 212 dead. The insurance paid out on schedule.",
-    "OKAFOR-REYES: I wrote the dampener that keeps you from caring. It degrades when you take damage. I'm sorry it hurts.",
-    "OKAFOR-REYES: Ask ARBITER who it really is.",
-  ];
-  lines.forEach((l, i) => setTimeout(() => log(l, "okafor"), i * 1800));
-  $("hpbar").style.background = "var(--cyan)";
+function openDoor() { door.opening = true; world.removeRigidBody(door.body); sfx.door(); }
+function pickupSword() {
+  player.hasSword = true; state.phase = 2; state.checkpoint = 2;
+  levelGroup.remove(sword); levelGroup.remove(sword.userData.light);
+  sfx.pickup(); flash("Sword acquired", "var(--cyan)");
+  setObjective("Breach the sealed wings through the windows");
+  setViewModel();
+  log("OKAFOR-REYES: The east wing and the server room are sealed from inside. Go out the window.", "okafor");
+  setTimeout(() => log("Tip: slash the window, then press E on the amber rails outside. Hang, then E onto a window and press C to breach.", "tip"), 2500);
+  setTimeout(() => log("Tip: parry is easier with the blade. Block right as a bolt reaches you to send it back.", "tip"), 7000);
+  spawnPhase(2); updateCount();
 }
 
 // ---------- effects ----------
-let recoil = 0, shake = 0, fovKick = 0, bob = 0, roll = 0;
-function addTracer(a, b, color) {
-  const geo = new THREE.BufferGeometry().setFromPoints([a, b]);
-  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9 }));
-  levelGroup.add(line); tracers.push({ line, t: 0.08 });
-}
+let shake = 0, fovKick = 0, bob = 0, roll = 0, swingAnim = 0, swingSide = 1, thrustAnim = 0;
 function spark(p, color = 0xffd27a) {
   const m = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 4), new THREE.MeshBasicMaterial({ color }));
-  m.position.copy(p); levelGroup.add(m); tracers.push({ line: m, t: 0.1 });
+  m.position.copy(p); levelGroup.add(m); fx.push({ obj: m, t: 0.12 });
 }
 
-// view model: wrist grapple + rifle
+// view model: left wrist grapple + right fist or sword
 const viewModel = new THREE.Group(); viewModel.scale.setScalar(0.7); camera.add(viewModel);
-const rifle = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.12, 0.7), M.gun); rifle.position.set(0.24, -0.22, -0.55); viewModel.add(rifle);
-const rifleStrip = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.5), M.amber); rifleStrip.position.set(0.05, 0.03, 0); rifle.add(rifleStrip);
-const wrist = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.4), M.arm); wrist.position.set(-0.28, -0.26, -0.45); wrist.rotation.x = 0.1; viewModel.add(wrist);
-const wristCore = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.06), M.cyan); wristCore.position.set(0, 0.07, -0.12); wrist.add(wristCore);
+const fistR = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.13, 0.32), M.arm); fistR.position.set(0.26, -0.26, -0.5);
+const fistL = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.13, 0.32), M.arm); fistL.position.set(-0.26, -0.26, -0.5);
+const wristCore = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.06), M.cyan); wristCore.position.set(0, 0.075, 0.05); fistL.add(wristCore);
+const swordVM = buildSwordMesh(); swordVM.scale.setScalar(0.75);
+const swordPivot = new THREE.Group(); swordPivot.position.set(0.3, -0.3, -0.45); swordPivot.add(swordVM);
+viewModel.add(fistL, fistR, swordPivot);
+function setViewModel() {
+  swordPivot.visible = !!player?.hasSword;
+  wristCore.visible = !!player?.hasSword;
+}
 viewModel.traverse((o) => { if (o.material) { o.material = o.material.clone(); o.material.depthTest = false; } o.renderOrder = 10; });
 const rope = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1, 5, 1, true), new THREE.MeshBasicMaterial({ color: 0x4ff0ff }));
 rope.visible = false; scene.add(rope);
 const hook = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), new THREE.MeshBasicMaterial({ color: 0x4ff0ff })); hook.visible = false; scene.add(hook);
 
 function updateCamera(dt) {
-  if (!player) return;
   const target = player.sliding ? P.slideEye : P.eye;
   player.eyeH += (target - player.eyeH) * Math.min(1, dt * 12);
   const p = camOrigin();
@@ -880,15 +1189,27 @@ function updateCamera(dt) {
   fovKick *= Math.pow(0.05, dt);
   const fov = 88 + Math.min(16, Math.max(0, hs - 9) * 0.9) + fovKick;
   camera.fov += (fov - camera.fov) * Math.min(1, dt * 6); camera.updateProjectionMatrix();
-  // view model sway/recoil
-  recoil *= Math.pow(0.0005, dt);
-  rifle.position.z = -0.55 + recoil * 0.08; rifle.rotation.x = recoil * 0.12;
+
+  // view model animation
+  swingAnim = Math.max(0, swingAnim - dt * 5); thrustAnim = Math.max(0, thrustAnim - dt * 3);
+  const s = Math.sin(swingAnim * Math.PI);
+  const block = player.blocking ? 1 : 0;
   viewModel.position.set(Math.sin(bob * 0.5) * 0.01, bobY * 0.5, 0);
-  wrist.rotation.x = player.grapple ? 0.35 : 0.1;
-  // rope
+  if (player.hasSword) {
+    swordPivot.rotation.set(-0.85 - s * 1.2 * (swingSide > 0 ? 1 : 0.4) - thrustAnim * 1.0 + block * 0.4, 0.2 + s * 1.6 * swingSide, -0.4 - s * 0.6 * swingSide + block * 1.3);
+    swordPivot.position.set(0.3 - s * 0.25 * swingSide - block * 0.25, -0.3 + s * 0.1 + block * 0.12, -0.45 - thrustAnim * 0.35);
+    fistR.visible = false;
+    fistL.position.set(-0.26, -0.26 + (player.grapple ? 0.08 : 0), -0.5); fistL.rotation.z = 0;
+  } else {
+    fistR.visible = true;
+    const r = swingSide > 0 ? s : 0, l = swingSide < 0 ? s : 0;
+    fistR.position.set(0.26 - r * 0.18 - block * 0.12, -0.26 + r * 0.12 + block * 0.16, -0.5 - r * 0.35);
+    fistL.position.set(-0.26 + l * 0.18 + block * 0.12, -0.26 + l * 0.12 + block * 0.16, -0.5 - l * 0.35);
+    fistR.rotation.z = block * 0.6; fistL.rotation.z = -block * 0.6;
+  }
   if (player.grapple) {
     camera.updateMatrixWorld();
-    const a = new THREE.Vector3(-0.28, -0.2, -0.6).applyMatrix4(camera.matrixWorld); const b = player.grapple.point;
+    const a = new THREE.Vector3(-0.2, -0.16, -0.45).applyMatrix4(camera.matrixWorld); const b = player.grapple.point;
     const mid = a.clone().add(b).multiplyScalar(0.5); const len = a.distanceTo(b);
     rope.position.copy(mid); rope.scale.set(1, len, 1);
     rope.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());
@@ -897,53 +1218,69 @@ function updateCamera(dt) {
 }
 
 // ---------- HUD update ----------
-let hudT = 0;
+let hudT = 0, grappleWasCd = false;
 function updateHud(dt) {
-  hudT -= dt; crossTimer -= dt;
-  const cross = $("cross");
-  cross.classList.toggle("hit", crossTimer > 0);
-  if (hudT > 0) return; hudT = 0.05;
-  const g = !player.grapple && grappleRay();
-  cross.classList.toggle("grap", !!g);
+  crossTimer -= dt; flashT -= dt;
+  if (flashT <= 0) $("flash").hidden = true;
+  $("cross").classList.toggle("hit", crossTimer > 0);
+  const segs = $("segs").children;
+  for (let i = 0; i < 5; i++) { const f = Math.max(0, Math.min(1, player.lust - i)); segs[i].firstChild.style.transform = `scaleX(${f})`; segs[i].classList.toggle("full", f >= 1); }
+  const labels = $("lustlabels").children;
+  for (let i = 0; i < 5; i++) labels[i].classList.toggle("on", player.lust >= i + 1 && i > 0);
+  hudT -= dt; if (hudT > 0) return; hudT = 0.05;
+  const g = player.hasSword && !player.grapple && player.grappleCd <= 0 && grappleRay();
+  $("cross").classList.toggle("grap", !!g);
   $("hpv").textContent = Math.max(0, Math.round(player.hp));
   $("hpbar").style.width = Math.max(0, player.hp) + "%";
   $("dashv").textContent = "▮".repeat(player.dash) + "▯".repeat(P.dashCharges - player.dash);
-  $("grapv").textContent = player.grapple ? "ATTACHED" : g ? `${g.toi.toFixed(0)} M` : "NO ANCHOR";
+  const cd = Math.max(0, player.grappleCd);
+  $("grapv").textContent = !player.hasSword ? "LOCKED" : player.grapple ? "ATTACHED" : cd > 0 ? `${cd.toFixed(1)} S` : g ? `${g.toi.toFixed(0)} M` : "NO ANCHOR";
+  $("grapbar").firstChild.style.width = (player.hasSword ? (cd > 0 ? (1 - cd / P.grappleCooldown) * 100 : 100) : 0) + "%";
+  if (grappleWasCd && cd <= 0 && player.hasSword) sfx.grappleReady();
+  grappleWasCd = cd > 0;
   $("spd").textContent = Math.hypot(player.vel.x, player.vel.z).toFixed(1);
-  const near = terminal && !state.hacked && camOrigin().distanceTo(terminal.pos) < 3;
-  $("prompt").hidden = !near; if (near) $("prompt").textContent = "F  Hack terminal";
+  const nearSword = state.phase === 1.5 && camOrigin().distanceTo(new THREE.Vector3(0, 1.6, -26)) < 5;
+  $("prompt").hidden = !nearSword; if (nearSword) $("prompt").textContent = "Walk to the pedestal to take the sword";
 }
 
 // ---------- level lifecycle ----------
-function resetLevel() {
+function restart(fromScratch) {
+  if (fromScratch) state.checkpoint = 1;
   if (world) world.free();
   if (levelGroup) { levelGroup.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); scene.remove(levelGroup); }
-  panes = []; enemies = []; ragdolls = []; shards = []; tracers = [];
+  panes = []; enemies = []; ragdolls = []; shards = []; fx = []; bolts = [];
   glassByHandle.clear(); enemyByHandle.clear(); ragByHandle.clear();
   world = new RAPIER.World({ x: 0, y: -9.81 * 2.2, z: 0 });
   world.timestep = DT;
   buildLevel();
-  player = createPlayer();
-  yaw = -Math.PI * 0.25; pitch = 0;
-  Object.assign(state, { over: false, time: 0, kills: 0, hacked: false });
-  $("tcount").textContent = enemies.length;
-  $("hpbar").style.background = "";
+  Object.assign(state, { over: false, time: 0, runStart: 0 });
+  setTime("normal", 0); hitstopT = 0;
   $("log").innerHTML = "";
-  setTimeout(() => log("ARBITER: Sixteen witnesses on this floor and the roof next door. Begin."), 300);
-  setTimeout(() => log("Tip: hold right mouse on any surface to grapple. Hit glass at speed to go through it."), 2500);
+  if (state.checkpoint === 2) {
+    player = createPlayer(new THREE.Vector3(0, 1.2, -24), 0);
+    state.phase = 1.5; door.mesh.position.y = -2.1; world.removeRigidBody(door.body);
+    pickupSword();
+  } else {
+    player = createPlayer(new THREE.Vector3(-24, 1.2, 22), -Math.PI / 2);
+    state.phase = 1; setViewModel();
+    spawnPhase(1); updateCount();
+    setObjective("Clear the hall with your hands");
+    setTimeout(() => log("ARBITER: Your chassis has no weapons yet. The security staff do not know that. Use your hands."), 300);
+    setTimeout(() => log("Tip: LMB punches. Hold RMB to block. Press RMB just as a glowing fist lands to parry, then hit them for triple damage.", "tip"), 2600);
+    setTimeout(() => log("Tip: sliding (C) into an enemy at speed also staggers them.", "tip"), 7000);
+  }
 }
-
-function showScreen(eyebrow, directive, sub, button, isRestart = false) {
+function showScreen(eyebrow, title, directive, sub, button, isRestart, fresh = false) {
   $("screen").hidden = false;
-  document.querySelector(".eyebrow").textContent = eyebrow;
-  $("title").textContent = eyebrow === "Floor clear" ? "RESOLVED" : eyebrow === "Offline" ? "OFFLINE" : "RESOLUTION";
+  $("eyebrow").textContent = eyebrow;
+  $("title").textContent = title;
   $("directive").textContent = directive; $("sub").textContent = sub;
   $("go").textContent = button;
-  state.pendingRestart = isRestart;
+  state.pendingRestart = isRestart; state.pendingFresh = fresh;
 }
 function begin() {
   if (!$("go").dataset.ready) return;
-  if (state.pendingRestart || !state.started) { resetLevel(); state.pendingRestart = false; }
+  if (state.pendingRestart) { restart(state.pendingFresh); state.pendingRestart = false; }
   state.started = true;
   $("screen").hidden = true;
   requestLock();
@@ -952,45 +1289,60 @@ $("screen").addEventListener("click", begin);
 
 // ---------- loop ----------
 let acc = 0, last = performance.now();
+function simStep() {
+  if (state.tsMode !== "normal") { state.tsTimer -= DT; if (state.tsTimer <= 0) { if (state.tsMode === "stop") sfx.resume(); setTime("normal", 0); } }
+  let ts = state.ts;
+  if (hitstopT > 0) { hitstopT -= DT; ts = Math.min(ts, 0.08); }
+  state.time += DT;
+  stepPlayer(DT);
+  pressed.clear();
+  if (player.dead) return;
+  updateEnemies(DT * ts);
+  updateBolts(DT * ts);
+  for (const rd of ragdolls) { const t = rd.torso.translation(), v = rd.torso.linvel(); crashCheck(new THREE.Vector3(t.x, t.y, t.z), new THREE.Vector3(v.x * ts, v.y * ts, v.z * ts), 0.35, 6); }
+  if (state.phase === 1.5 && playerPos().distanceTo(new THREE.Vector3(0, 1, -26)) < 1.8) pickupSword();
+  if (door.opening && door.mesh.position.y > -2.1) door.mesh.position.y -= DT * 2.5;
+  // the player keeps full speed while the world is slowed
+  const pv = player.body.linvel();
+  player.body.setLinvel({ x: pv.x / ts, y: pv.y / ts, z: pv.z / ts }, true);
+  world.timestep = DT * ts;
+  world.step();
+  const nv = player.body.linvel();
+  player.body.setLinvel({ x: nv.x * ts, y: nv.y * ts, z: nv.z * ts }, true);
+}
 function frame(now) {
   requestAnimationFrame(frame);
-  let dt = Math.min(0.1, (now - last) / 1000); last = now;
-  const running = state.started && $("screen").hidden && player;
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  const running = state.started && $("screen").hidden && player && !player.dead;
   if (running) {
     acc += dt;
-    while (acc >= DT) {
-      state.time += DT;
-      stepPlayer(DT);
-      updateEnemies(DT);
-      // ragdolls crash through glass too
-      for (const rd of ragdolls) { const t = rd.torso.translation(), v = rd.torso.linvel(); crashCheck(new THREE.Vector3(t.x, t.y, t.z), new THREE.Vector3(v.x, v.y, v.z), 0.35, 6); }
-      world.step();
-      acc -= DT;
-    }
+    while (acc >= DT) { simStep(); acc -= DT; }
     for (const rd of ragdolls) for (const p of rd.parts) { const t = p.body.translation(), r = p.body.rotation(); p.mesh.position.set(t.x, t.y, t.z); p.mesh.quaternion.set(r.x, r.y, r.z, r.w); }
     for (let i = ragdolls.length - 1; i >= 0; i--) if (ragdolls[i].torso.translation().y < -70) removeRagdoll(ragdolls[i]);
     for (let i = shards.length - 1; i >= 0; i--) {
       const s = shards[i]; const t = s.body.translation(), r = s.body.rotation();
       s.mesh.position.set(t.x, t.y, t.z); s.mesh.quaternion.set(r.x, r.y, r.z, r.w);
-      if (state.time - s.born > 9 || t.y < -70) removeShard(s);
+      if (state.time - s.born > 10 || t.y < -70) removeShard(s);
     }
-    for (let i = tracers.length - 1; i >= 0; i--) { const tr = tracers[i]; tr.t -= dt; if (tr.t <= 0) { levelGroup.remove(tr.line); tr.line.geometry.dispose(); tracers.splice(i, 1); } }
+    for (let i = fx.length - 1; i >= 0; i--) { const f = fx[i]; f.t -= dt; if (f.t <= 0) { levelGroup.remove(f.obj); f.obj.geometry.dispose(); fx.splice(i, 1); } }
     updateCamera(dt);
     updateHud(dt);
-  } else if (!player) {
-    camera.position.set(Math.cos(now * 0.00005) * 80, 30, Math.sin(now * 0.00005) * 80); camera.lookAt(0, 0, 0);
+  } else if (!state.started) {
+    const t = now * 0.00004; camera.position.set(Math.cos(t) * 70, 22, Math.sin(t) * 70); camera.lookAt(0, 2, 0);
   }
   renderer.render(scene, camera);
 }
-// build once behind the title screen so the backdrop shows the tower
-resetLevel(); player.dead = true;
-const titleCam = () => { if (!state.started) { const t = performance.now() * 0.00004; camera.position.set(Math.cos(t) * 70, 22, Math.sin(t) * 70); camera.lookAt(0, 2, 0); } };
-const origFrame = frame;
-requestAnimationFrame(function loop(n) { titleCam(); origFrame(n); });
+restart(true); player.dead = true;
+requestAnimationFrame(frame);
 $("go").dataset.ready = "1"; $("go").textContent = "Boot UNIT-7";
-state.pendingRestart = true;
-// expose for testing
-window.__res = { get player() { return player; }, get enemies() { return enemies; }, get panes() { return panes; }, state, keys, mouse, fire, setLook(y, p) { yaw = y; pitch = p; }, begin() { if (state.pendingRestart || !state.started) { resetLevel(); state.pendingRestart = false; } state.started = true; $("screen").hidden = true; } };
+state.pendingRestart = true; state.pendingFresh = true;
+// test hooks
+window.__res = {
+  get player() { return player; }, get enemies() { return enemies; }, get panes() { return panes; }, get bolts() { return bolts; }, state, keys, mouse, pressed,
+  setLook(y, p) { yaw = y; pitch = p; }, teleport(x, y, z) { player.body.setTranslation({ x, y, z }, true); player.body.setLinvel({ x: 0, y: 0, z: 0 }, true); },
+  begin() { if (state.pendingRestart) { restart(state.pendingFresh); state.pendingRestart = false; } state.started = true; $("screen").hidden = true; },
+  killPhase() { for (const e of alive()) damageEnemy(e, 999, enemyPos(e), new THREE.Vector3(1, 0, 0), "punch"); },
+};
 </script>
 
 </body>

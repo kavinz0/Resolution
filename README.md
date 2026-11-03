@@ -17,22 +17,25 @@ You can also turn on GitHub Pages (Settings → Pages → Deploy from branch →
 | Key | Action |
 | --- | --- |
 | WASD | Move |
-| Space | Jump |
-| Ctrl / C | Slide |
+| Space | Jump, or let go of the grapple |
+| Ctrl / C | Slide. Sliding into an enemy staggers them |
 | Shift | Dash (2 charges) |
-| Right mouse / E (hold) | Grapple |
-| Left mouse | Fire |
-| F | Hack terminal |
-| R | Restart |
+| Left mouse | Punch or slash. Slide + attack with the sword is a thrust |
+| Right mouse | Block. Press it just before a hit lands to parry |
+| E | Grapple (unlocked by the sword). Press again to switch anchors |
+| C while grappling | Breach: crash through the window and execute enemies behind it |
+| Q | Slow time (needs 2 bloodlust bars, costs 1) |
+| X | Stop time (needs 3 bars, costs 1) |
+| V | Finisher on the enemy under your crosshair (needs 4+ bars, costs 1) |
+| R | Restart from the last checkpoint |
 
-## What's in the prototype
+## Floor 01: Activation
 
-- Momentum movement: ground friction, air strafing, slide boost, dash, and slide-jumps.
-- Grappling wrist that anchors to any surface within 60 m.
-- Breakable glass that shatters into physics shards from bullets, or when you or a ragdoll hit it fast.
-- Jointed ragdolls that keep the momentum of the killing shot.
-- Workers who flee, guards who strafe and telegraph shots, and armored defense bots. Enemies miss more when you move fast.
-- One graybox floor, a mezzanine with a story terminal, and a skybridge to the next tower.
+1. **Fists.** You boot in the chassis lab with no weapons. Six brawlers in the hall telegraph punches with a glowing fist. Block to take chip damage, parry (block in the last 0.18 s) to stagger them, or slide into them. A staggered enemy takes triple damage.
+2. **The sword.** Clearing the hall opens the armory. The sword widens the parry window to 0.38 s, lets you deflect bolts back at the shooter, and unlocks the grappling wrist. The grapple line passes through glass.
+3. **The windows.** The east wing and server room are sealed from inside. Break out of the armory window, grapple to the amber window-washer rails, hang, then grapple onto a window and press C to breach. The glass bursts inward as shrapnel and executes anyone near the impact, each kill adding a bloodlust bar.
+
+**Bloodlust** (max 5 bars) raises your speed and damage and drops a bar whenever you take a clean hit. You gain bars from breach executions, from thrust kills on enemies that are nearly dead or staggered, and in small amounts from sword parries and deflects.
 
 ## Tech stack
 
