@@ -61,7 +61,7 @@ You can also turn on GitHub Pages (Settings → Pages → Deploy from branch →
 ## Destruction
 
 - Drywall partitions in the hall and east wing break into rubble when ragdolls are slammed into them, or when you thrust or breach through them.
-- Explosive barrels: punch or slash one and it blinks, then goes off; bolts and flying bodies set them off at once. Explosions kill or stun enemies nearby, hurt you, throw bodies and debris, shatter glass, break partitions, and chain into other barrels.
+- Explosive barrels (five on Floor 1): punch or slash one and it blinks, then goes off; bolts and flying bodies set them off at once. Explosions kill or stun enemies nearby, hurt you, throw bodies and debris, shatter glass, break partitions, and chain into other barrels.
 - Enemies, ragdolls and debris are interpolated between physics steps for smooth motion at any frame rate.
 
 ## Look and feel
@@ -82,3 +82,9 @@ Three.js for rendering and Rapier (WebAssembly) for physics. The plan is to move
 ## Story and plan
 
 See [docs/story-and-plan.md](docs/story-and-plan.md).
+
+## Performance
+
+- Fixed the explosion freeze: stunning an enemy the blast had already killed touched a removed physics body and crashed the physics engine.
+- Floor 1 has five barrels. Explosions, glass and wall debris use shared geometry, pooled sparks and one pooled blast light, with caps on shards (140), effects and simulated ragdolls (7 newest; older bodies settle as corpses).
+- Render resolution adapts to frame time, and the simulation catches up at most 4 steps per frame so a slow frame never snowballs.
