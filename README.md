@@ -108,3 +108,21 @@ See [docs/story-and-plan.md](docs/story-and-plan.md).
 - The work lights are brighter, two of them are failing tubes that stutter, and the red emergency light breathes. The light count never changes at runtime.
 - The floor is glossy tile that reflects the lights and the neon environment. The walls and ceiling are tiled panels with LED skirting strips.
 - The resolution governor runs before the frame is drawn, so a resize never flashes an empty frame.
+
+## Testing ground
+
+Main menu, then 04 Testing ground. It needs an access code; ask Kavin for it. Only a hash of the code is stored in the page.
+
+The testing ground is a 120 m grid inside the city with:
+- Ten dummies (brawlers, gunmen and bots) that face you, never attack, show damage numbers and respawn 3 s after they die.
+- A glass gallery, and a glass cube with a dummy inside for breach tests.
+- Drywall partitions to slam bodies through, grapple towers with beams to swing from, and parkour steps and a ramp.
+
+Keys: K fills bloodlust, J spawns three live hostiles, L respawns dummies now, H toggles god mode, R resets the level.
+
+Every new weapon or feature gets added to the testing ground too.
+
+## Bloodlust
+
+- Kill streaks fill it. Each kill within 4 s of the last is worth more (0.4, 0.7, 1.0 and up to 1.5 bars), and the HUD shows the streak.
+- At a full meter, hold B to charge a Frenzy. For 8 s the world runs at half speed, hits do 2.6x damage, the sword reaches further, the finisher is free, and each kill adds 1.2 s.
