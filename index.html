@@ -268,7 +268,7 @@ const GROUPS = {
   player: grp(G.PLAYER, G.ENV | G.ENEMY | G.RAGDOLL),
   enemy: grp(G.ENEMY, G.ENV | G.PLAYER),
   ragdoll: grp(G.RAGDOLL, G.ENV | G.RAGDOLL | G.SHARD | G.PLAYER),
-  shard: grp(G.SHARD, G.ENV | G.RAGDOLL | G.SHARD),
+  shard: grp(G.SHARD, G.ENV | G.RAGDOLL),
   playerShot: grp(G.PLAYER, G.ENV | G.ENEMY | G.RAGDOLL),
   envOnly: grp(G.PLAYER, G.ENV),
   enemyShot: grp(G.ENEMY, G.ENV | G.PLAYER),
@@ -286,7 +286,9 @@ const TS = { normal: 1, slow: 0.3, stop: 0.02 };
 // ---------- renderer ----------
 const host = document.getElementById("game");
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 1.75));
+const PR_MAX = Math.min(devicePixelRatio, 1.5), PR_MIN = Math.min(PR_MAX, 0.75);
+let prNow = PR_MAX;
+renderer.setPixelRatio(prNow);
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -352,6 +354,7 @@ const postQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), postMat); postQua
 const postScene = new THREE.Scene(); postScene.add(postQuad);
 // glitch: a base level from low health or time powers, plus decaying spikes from big moments
 const GL = { spike: 0, base: 0, blip: 0 };
+const PERF = { ft: 16, cool: 2 };
 function glitch(a) { GL.spike = Math.max(GL.spike, a); }
 addEventListener("resize", () => {
   renderer.setSize(innerWidth, innerHeight);
@@ -382,7 +385,7 @@ for (const [x, z] of [[-20, 20], [-16, -10], [0, -25], [21, -19], [21, 19], [8, 
 const sun = new THREE.DirectionalLight(0xffa070, 2.6);
 sun.position.set(-80, 22, -55);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.mapSize.set(1536, 1536);
 Object.assign(sun.shadow.camera, { left: -70, right: 70, top: 70, bottom: -70, near: 1, far: 260 });
 sun.shadow.bias = -0.0006;
 scene.add(sun);
@@ -422,6 +425,8 @@ function rbox(w, h, d, round = 0.3, maxR = 0.12) {
   if (!g) { g = new RoundedBoxGeometry(w, h, d, mn < 0.1 ? 2 : 3, r); g.userData.rounded = true; g.userData.cached = true; g.userData.min = mn; geoCache.set(key, g); }
   return g;
 }
+const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1); UNIT_BOX.userData.cached = true;
+const UNIT_RBOX = new RoundedBoxGeometry(1, 1, 1, 2, 0.12); UNIT_RBOX.userData.cached = true;
 function dispGeo(g) { if (g && !g.userData.cached) g.dispose(); }
 // Ink: hard-edged shapes get edge lines; rounded ones get an inverted hull pushed out along the normals.
 const hullMats = new Map();
@@ -668,7 +673,7 @@ function buildLevel() {
 
   // destructibles: drywall partitions that break when bodies hit them hard, and explosive barrels
   for (const [x, z, sx, sz] of [[-8, 9, 3.2, 0.25], [-15.5, 9, 3.2, 0.25], [4, -5, 0.25, 3.2], [-10, -18, 3.2, 0.25], [8.5, 21, 0.25, 3.2], [20, -13, 3.2, 0.25], [26.5, -20, 0.25, 3.2]]) breakableWall(x, z, sx, sz);
-  for (const [x, z] of [[-6, 11.5], [-18.5, -3.5], [-2, -14], [7, -10], [9.5, 14], [-21, 2.5], [25, -17], [14.8, -20], [20, 16], [20, 22], [-7, -18.5]]) spawnBarrel(x, z);
+  for (const [x, z] of [[-6, 11.5], [-18.5, -3.5], [7, -10], [25, -17], [20, 19]]) spawnBarrel(x, z);
 
   // armory (N centre) x -6..6, z -30..-20, door in the south wall
   wall(-6, -30, -6, -20); wall(6, -30, 6, -20); wall(-6, -20, -2, -20); wall(2, -20, 6, -20);
@@ -761,7 +766,7 @@ function breakWall(w, at, dir, speed) {
   breakByHandle.delete(w.col.handle); world.removeRigidBody(w.body); levelGroup.remove(w.mesh);
   sfx.crumble(); shake = Math.max(shake, 0.35 * Math.max(0.2, 1 - camOrigin().distanceTo(at) / 20)); glitch(0.2);
   const along = w.half.x > w.half.z; const len = (along ? w.half.x : w.half.z) * 2, h = w.half.y * 2, th = Math.min(w.half.x, w.half.z) * 2;
-  const cols = Math.round(len / 0.55), rows = Math.round(h / 0.55);
+  const cols = Math.round(len / 0.8), rows = Math.round(h / 0.8);
   for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
     const u = -len / 2 + (len / cols) * (i + 0.5), v = -h / 2 + (h / rows) * (j + 0.5);
     const pos = new THREE.Vector3(w.center.x + (along ? u : 0), w.center.y + v, w.center.z + (along ? 0 : u));
@@ -769,7 +774,7 @@ function breakWall(w, at, dir, speed) {
     if (Math.random() > 0.35 + near) continue; // the edges partly survive as rubble on the floor
     const a = (len / cols) * (0.6 + Math.random() * 0.5), b = (h / rows) * (0.6 + Math.random() * 0.5);
     const size = along ? [a, b, th] : [th, b, a];
-    const mesh = new THREE.Mesh(rbox(...size.map((q) => +q.toFixed(2)), 0.2, 0.04), Math.random() < 0.3 ? M.rubble : M.drywall); mesh.position.copy(pos); mesh.castShadow = true; levelGroup.add(mesh);
+    const mesh = new THREE.Mesh(UNIT_RBOX, Math.random() < 0.3 ? M.rubble : M.drywall); mesh.scale.set(...size); mesh.position.copy(pos); levelGroup.add(mesh);
     const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(pos.x, pos.y, pos.z).setAngularDamping(0.8).setLinearDamping(0.1));
     world.createCollider(RAPIER.ColliderDesc.cuboid(size[0] / 2, size[1] / 2, size[2] / 2).setDensity(1.6).setFriction(0.9).setRestitution(0.05).setCollisionGroups(GROUPS.shard), body);
     const sp = speed * (0.15 + near * 0.7);
@@ -777,8 +782,8 @@ function breakWall(w, at, dir, speed) {
     body.setAngvel({ x: (Math.random() - 0.5) * 8, y: (Math.random() - 0.5) * 8, z: (Math.random() - 0.5) * 8 }, true);
     shards.push({ body, mesh, born: state.time + 4 });
   }
-  dust(at, 10, 0x9a94a8);
-  while (shards.length > 420) removeShard(shards[0]);
+  dust(at, 5, 0x9a94a8);
+  trimShards();
 }
 function wallCheck(pos, vel, radius, minSpeed) {
   const speed = vel.length(); if (speed < minSpeed) return false;
@@ -821,19 +826,19 @@ function explosion(at, radius) {
   // one pooled light, so an explosion never adds a light to the scene (which would recompile every shader)
   boomLight.position.copy(at); boomLight.distance = radius * 3.2;
   booms.push({ obj: boomLight, t: 0, life: 0.45, kind: "light" });
-  for (let i = 0; i < 16; i++) {
+  for (let i = 0; i < 9; i++) {
     const sp = new THREE.Sprite(M.fire.clone()); sp.material.map = steamTex; sp.material.color.setHSL(0.05 + Math.random() * 0.06, 1, 0.55 + Math.random() * 0.15);
     sp.position.copy(at).add(new THREE.Vector3((Math.random() - 0.5) * 1.2, Math.random() * 0.8, (Math.random() - 0.5) * 1.2)); sp.scale.setScalar(0.6);
     levelGroup.add(sp); booms.push({ obj: sp, t: 0, life: 0.5 + Math.random() * 0.35, kind: "fire", v: new THREE.Vector3((Math.random() - 0.5) * 7, 2 + Math.random() * 5, (Math.random() - 0.5) * 7), grow: 4.5 + Math.random() * 3 });
   }
-  dust(at, 14, 0x2a2430);
-  for (let i = 0; i < 18; i++) spark(at.clone().add(new THREE.Vector3((Math.random() - 0.5) * 2.5, Math.random() * 2, (Math.random() - 0.5) * 2.5)), 0xffc060);
+  dust(at, 6, 0x2a2430);
+  for (let i = 0; i < 8; i++) spark(at.clone().add(new THREE.Vector3((Math.random() - 0.5) * 2.5, Math.random() * 2, (Math.random() - 0.5) * 2.5)), 0xffc060);
   impactFx(at, "breach");
   // damage and push everything nearby
   for (const e of alive()) {
     const ep = enemyPos(e); const d = ep.distanceTo(at); if (d > radius) continue;
     const dir = ep.clone().sub(at).setY(0).normalize().setY(0.8).normalize();
-    if (d < radius * 0.6) damageEnemy(e, 999, ep, dir, "explosion"); else { damageEnemy(e, 3, ep, dir, "slash"); stun(e, 1.2, 9); }
+    if (d < radius * 0.6) damageEnemy(e, 999, ep, dir, "explosion"); else { damageEnemy(e, 3, ep, dir, "slash"); if (!e.dead) stun(e, 1.2, 9); }
   }
   if (pd < radius) {
     damagePlayer(Math.round(38 * (1 - pd / radius)), { T: { label: "explosive barrel" } });
@@ -846,9 +851,11 @@ function explosion(at, radius) {
     p.body.applyImpulse({ x: n.x * k, y: n.y * k, z: n.z * k }, true);
   }
   for (const s2 of shards) { const t = s2.body.translation(); const d = Math.hypot(t.x - at.x, t.y - at.y, t.z - at.z); if (d > radius) continue; const n = new THREE.Vector3(t.x - at.x, t.y - at.y + 0.5, t.z - at.z).normalize().multiplyScalar(14 * (1 - d / radius)); const v = s2.body.linvel(); s2.body.setLinvel({ x: v.x + n.x, y: v.y + n.y, z: v.z + n.z }, true); }
-  for (const p of panes) if (!p.broken && p.center.distanceTo(at) < radius * 0.8) shatter(p, at, p.center.clone().sub(at).normalize(), 22, true);
+  let glassBudget = 3;
+  for (const p of panes) if (!p.broken && glassBudget > 0 && p.center.distanceTo(at) < radius * 0.6) { glassBudget--; shatter(p, at, p.center.clone().sub(at).normalize(), 18, false); }
   for (const w of breakables) if (!w.broken && w.center.distanceTo(at) < radius * 0.75) breakWall(w, w.center.clone().lerp(at, 0.5), w.center.clone().sub(at).setY(0.3).normalize(), 22);
-  for (const b of barrels) if (!b.dead && b.pos.distanceTo(at) < radius * 0.75) hitBarrel(b, 0.12 + Math.random() * 0.12);
+  let chain = 0.18;
+  for (const b of barrels) if (!b.dead && b.pos.distanceTo(at) < radius * 0.75) { hitBarrel(b, chain); chain += 0.22; }
 }
 function dust(at, n, color) {
   for (let i = 0; i < n; i++) {
@@ -858,6 +865,7 @@ function dust(at, n, color) {
   }
 }
 function updateBooms(dt) {
+  while (booms.length > 60) { const f = booms.shift(); if (f.kind === "light") f.obj.intensity = 0; else { levelGroup.remove(f.obj); f.obj.material.dispose(); } }
   for (let i = pendingBooms.length - 1; i >= 0; i--) { const pb = pendingBooms[i]; pb.t -= dt; pb.b.led.visible = Math.sin(state.time * 60) > 0; if (pb.t <= 0) { pendingBooms.splice(i, 1); explodeBarrel(pb.b); } }
   for (let i = booms.length - 1; i >= 0; i--) {
     const f = booms[i]; f.t += dt; const q = Math.min(1, f.t / f.life);
@@ -1080,6 +1088,7 @@ function parry(e) {
   if (player.hasSword) addLust(0.25);
 }
 function stun(e, time, knock) {
+  if (e.dead) return; // a dead enemy's physics body is gone; touching it crashes the physics engine
   e.stun = time; e.tele = 0; e.alert = true;
   const away = enemyPos(e).sub(playerPos()).setY(0).normalize();
   e.knock.copy(away.multiplyScalar(knock));
@@ -1193,7 +1202,12 @@ function spawnRagdoll(e, hitPoint, dir, force) {
   best.body.applyImpulseAtPoint({ x: dir.x * force, y: dir.y * force + force * 0.25, z: dir.z * force }, hitPoint, true);
   parts.torso.body.applyImpulse({ x: dir.x * force * 0.6, y: force * 0.15, z: dir.z * force * 0.6 }, true);
   ragdolls.push(rd);
-  while (ragdolls.length > 14) removeRagdoll(ragdolls[0]);
+  while (ragdolls.length > 7) freezeRagdoll(ragdolls[0]);
+}
+// keep the body where it lies but drop its physics, so corpses cost nothing
+function freezeRagdoll(rd) {
+  for (const p of rd.parts) { ragByHandle.delete(p.col.handle); world.removeRigidBody(p.body); }
+  ragdolls.splice(ragdolls.indexOf(rd), 1);
 }
 function removeRagdoll(rd) {
   for (const p of rd.parts) { ragByHandle.delete(p.col.handle); world.removeRigidBody(p.body); levelGroup.remove(p.mesh); dispGeo(p.mesh.geometry); }
@@ -1211,7 +1225,7 @@ function shatter(pane, point, dir, speed, shrapnel = false) {
   const { center, half } = pane;
   const thinX = half.x < half.z;
   const w = thinX ? half.z * 2 : half.x * 2, h = half.y * 2;
-  const cols = Math.min(7, Math.max(2, Math.round(w / 0.6))), rows = Math.min(10, Math.max(2, Math.round(h / 0.7)));
+  const cols = Math.min(4, Math.max(2, Math.round(w / 0.9))), rows = Math.min(6, Math.max(2, Math.round(h / 1.2)));
   const cw = w / cols, ch = h / rows;
   for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
     const u = -w / 2 + cw * (i + 0.5) + (Math.random() - 0.5) * cw * 0.3;
@@ -1219,8 +1233,8 @@ function shatter(pane, point, dir, speed, shrapnel = false) {
     const pos = new THREE.Vector3(thinX ? center.x : center.x + u, center.y + v, thinX ? center.z + u : center.z);
     const sx = cw * (0.5 + Math.random() * 0.5), sy = ch * (0.5 + Math.random() * 0.5);
     const size = thinX ? [0.03, sy, sx] : [sx, sy, 0.03];
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), M.shard); mesh.position.copy(pos); levelGroup.add(mesh);
-    const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(pos.x, pos.y, pos.z).setAngularDamping(0.5).setCcdEnabled(shrapnel));
+    const mesh = new THREE.Mesh(UNIT_BOX, M.shard); mesh.scale.set(...size); mesh.position.copy(pos); levelGroup.add(mesh);
+    const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setTranslation(pos.x, pos.y, pos.z).setAngularDamping(0.5));
     world.createCollider(RAPIER.ColliderDesc.cuboid(size[0] / 2, size[1] / 2, size[2] / 2).setDensity(2.5).setRestitution(0.2).setCollisionGroups(GROUPS.shard), body);
     const near = Math.max(0, 1 - pos.distanceTo(point) / 3);
     const s = shrapnel ? speed * (0.7 + Math.random() * 0.6) : speed * (0.25 + near * 0.6);
@@ -1229,9 +1243,12 @@ function shatter(pane, point, dir, speed, shrapnel = false) {
     body.setAngvel({ x: (Math.random() - 0.5) * 14, y: (Math.random() - 0.5) * 14, z: (Math.random() - 0.5) * 14 }, true);
     shards.push({ body, mesh, born: state.time });
   }
-  while (shards.length > 420) removeShard(shards[0]);
+  trimShards();
 }
-function removeShard(s) { world.removeRigidBody(s.body); levelGroup.remove(s.mesh); s.mesh.geometry.dispose(); shards.splice(shards.indexOf(s), 1); }
+// debris budget: the oldest pieces go first, so a big moment never piles up hundreds of bodies
+const SHARD_CAP = 140;
+function trimShards() { while (shards.length > SHARD_CAP) removeShard(shards[0]); }
+function removeShard(s) { world.removeRigidBody(s.body); levelGroup.remove(s.mesh); dispGeo(s.mesh.geometry); shards.splice(shards.indexOf(s), 1); }
 function crashCheck(pos, vel, radius, minSpeed, onCrash) {
   const speed = vel.length(); if (speed < minSpeed) return;
   const ahead = pos.clone().addScaledVector(vel, DT * 2.5);
@@ -1675,9 +1692,13 @@ function pickupSword() {
 
 // ---------- effects ----------
 let shake = 0, fovKick = 0, bob = 0, roll = 0, swingAnim = 0, swingSide = 1, thrustAnim = 0;
+const SPARK_GEO = new THREE.SphereGeometry(0.08, 6, 4); SPARK_GEO.userData.cached = true;
+const sparkMats = new Map();
 function spark(p, color = 0xffd27a) {
-  const m = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 4), new THREE.MeshBasicMaterial({ color }));
+  let mat = sparkMats.get(color); if (!mat) { mat = new THREE.MeshBasicMaterial({ color }); sparkMats.set(color, mat); }
+  const m = new THREE.Mesh(SPARK_GEO, mat);
   m.position.copy(p); levelGroup.add(m); fx.push({ obj: m, t: 0.12 });
+  while (fx.length > 80) { const f = fx.shift(); levelGroup.remove(f.obj); if (f.life) f.obj.material.dispose(); }
 }
 
 // ---------- first-person rig: robot arms (own pass) ----------
@@ -2112,12 +2133,13 @@ const starTex = (() => {
   star(54, 10); g.fillStyle = "#ffffff"; g.fill();
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 })();
+const RING_GEO = new THREE.RingGeometry(0.28, 0.36, 32); RING_GEO.userData.cached = true;
 function impactFx(point, kind) {
   const big = kind === "breach" || kind === "finisher" || kind === "thrust" || kind === "heavy";
   const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex, depthTest: false, transparent: true, color: kind === "punch" || kind === "heavy" ? 0xffffff : player.lust >= 2 ? 0xffb0bc : 0xd8fbff }));
   sp.material.rotation = Math.random() * Math.PI; sp.position.copy(point); sp.renderOrder = 15; levelGroup.add(sp);
   fx.push({ obj: sp, t: 0.13, life: 0.13, grow: big ? 1.8 : 1.0, kind: "star" });
-  const ring = new THREE.Mesh(new THREE.RingGeometry(0.28, 0.36, 32), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, side: THREE.DoubleSide, depthTest: false }));
+  const ring = new THREE.Mesh(RING_GEO, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, side: THREE.DoubleSide, depthTest: false }));
   ring.position.copy(point); ring.renderOrder = 15; levelGroup.add(ring);
   fx.push({ obj: ring, t: 0.2, life: 0.2, grow: big ? 5 : 2.6, kind: "ring" });
 }
@@ -2339,6 +2361,19 @@ function showScreen(eyebrow, title, directive, sub, button, isRestart, fresh = f
   $("go").textContent = button;
   state.pendingRestart = isRestart; state.pendingFresh = fresh;
 }
+function warmup() {
+  const g = new THREE.Group(); g.position.set(0, -150, 0);
+  const add = (o) => { g.add(o); return o; };
+  const f = add(new THREE.Sprite(M.fire.clone())); f.material.map = steamTex;
+  add(new THREE.Sprite(new THREE.SpriteMaterial({ map: steamTex, transparent: true, depthWrite: false })));
+  add(new THREE.Mesh(UNIT_BOX, M.shard)); add(new THREE.Mesh(UNIT_RBOX, M.rubble)); add(new THREE.Mesh(UNIT_RBOX, M.drywall));
+  add(new THREE.Mesh(SPARK_GEO, new THREE.MeshBasicMaterial({ color: 0xffc060 }))); add(new THREE.Mesh(UNIT_BOX, M.hitFlash));
+  add(new THREE.Mesh(RING_GEO, new THREE.MeshBasicMaterial({ transparent: true, side: THREE.DoubleSide, depthTest: false })));
+  add(new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex, depthTest: false, transparent: true })));
+  scene.add(g);
+  try { renderer.compile(scene, camera); renderer.compile(vmScene, vmCamera); } catch {}
+  scene.remove(g);
+}
 function begin() {
   if (!$("go").dataset.ready) return;
   $("menu").hidden = true; if (!state.boot) document.body.classList.remove("cine");
@@ -2548,7 +2583,9 @@ function frame(now) {
   if (booting) { updateBoot(dt); if (player.dead === false) updateCamera(dt); }
   if (running) {
     acc += dt;
-    while (acc >= DT) { simStep(); acc -= DT; }
+    let steps = 0;
+    while (acc >= DT && steps < 4) { simStep(); acc -= DT; steps++; }
+    if (acc >= DT) acc = DT * 0.5;
     state.alpha = acc / DT;
     const al = state.alpha, _q = new THREE.Quaternion();
     for (const rd of ragdolls) for (const p of rd.parts) { const t = p.body.translation(), r = p.body.rotation(); p.mesh.position.set(t.x, t.y, t.z); p.mesh.quaternion.set(r.x, r.y, r.z, r.w); if (p.pp) { p.mesh.position.lerpVectors(p.pp, p.mesh.position, al); p.mesh.quaternion.copy(_q.copy(p.pq).slerp(p.mesh.quaternion, al)); } }
@@ -2558,7 +2595,7 @@ function frame(now) {
       const s = shards[i]; const t = s.body.translation(), r = s.body.rotation();
       s.mesh.position.set(t.x, t.y, t.z); s.mesh.quaternion.set(r.x, r.y, r.z, r.w);
       if (s.pp) { s.mesh.position.lerpVectors(s.pp, s.mesh.position, al); s.mesh.quaternion.copy(_q.copy(s.pq).slerp(s.mesh.quaternion, al)); }
-      if (state.time - s.born > 10 || t.y < -70) removeShard(s);
+      if (state.time - s.born > 7 || t.y < -70) removeShard(s);
     }
     for (let i = fx.length - 1; i >= 0; i--) {
       const f = fx[i]; f.t -= dt;
@@ -2567,7 +2604,7 @@ function frame(now) {
         if (f.kind === "star") f.obj.scale.setScalar(f.grow * Math.sin(Math.min(1, q) * Math.PI));
         else { f.obj.scale.setScalar(1 + q * f.grow); f.obj.material.opacity = 1 - q; f.obj.lookAt(camera.position); }
       }
-      if (f.t <= 0) { levelGroup.remove(f.obj); f.obj.geometry?.dispose(); if (f.life) f.obj.material.dispose(); fx.splice(i, 1); }
+      if (f.t <= 0) { levelGroup.remove(f.obj); dispGeo(f.obj.geometry); if (f.life) f.obj.material.dispose(); fx.splice(i, 1); }
     }
     updateCamera(dt);
     updateHud(dt);
@@ -2591,11 +2628,19 @@ function frame(now) {
   GL.base = hpLow + (state.tsMode === "stop" ? 0.22 : state.tsMode === "slow" ? 0.08 : 0);
   postMat.uniforms.uAmt.value = Math.min(1, GL.base + GL.spike + (GL.blip > 0 ? 0.18 : 0) + (state.started ? 0 : 0.06));
   postMat.uniforms.uTime.value = now / 1000;
+  // frame-time governor: keep a smoothed frame time and nudge the resolution to hold ~60 fps
+  PERF.ft += (dt * 1000 - PERF.ft) * 0.08; PERF.cool -= dt;
+  if (PERF.cool <= 0 && live) {
+    let next = prNow;
+    if (PERF.ft > 19) next = Math.max(PR_MIN, prNow - 0.125); else if (PERF.ft < 13 && prNow < PR_MAX) next = Math.min(PR_MAX, prNow + 0.125);
+    if (next !== prNow) { prNow = next; renderer.setPixelRatio(prNow); renderer.setSize(innerWidth, innerHeight); const sz = rtSize(); rt.setSize(sz.x, sz.y); PERF.cool = 1.2; } else PERF.cool = 0.5;
+  }
   renderer.render(postScene, postCam);
 }
 restart(true); player.dead = true;
 requestAnimationFrame(frame);
 $("go").dataset.ready = "1"; $("go").textContent = "Boot UNIT-7";
+warmup();
 document.body.classList.add("cine");
 for (const b of document.querySelectorAll("#mnav button")) b.disabled = false;
 $("mstatus").innerHTML = '<i class="m-dot"></i>Chassis ready · awaiting directive';
@@ -2622,6 +2667,5 @@ window.__res = {
   killPhase() { for (const e of alive()) damageEnemy(e, 999, enemyPos(e), new THREE.Vector3(1, 0, 0), "punch"); },
 };
 </script>
-
 </body>
 </html>
