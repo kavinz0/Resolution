@@ -55,6 +55,8 @@ body { background: var(--void); color: var(--ink); font-family: var(--mono); ove
 #cross { left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border: 1.5px solid rgba(217,226,234,0.8); border-radius: 50%; transition: border-color 0.1s, transform 0.1s; }
 #cross::after { content: ""; position: absolute; left: 50%; top: 50%; width: 3px; height: 3px; margin: -1.5px; background: var(--ink); border-radius: 50%; }
 #cross.grap { border-color: var(--cyan); transform: scale(1.25); }
+#lock { left: 0; top: 0; width: 34px; height: 34px; margin: -17px 0 0 -17px; border: 2px solid var(--blood); box-shadow: 0 0 12px rgba(255,42,74,0.6); pointer-events: none; }
+#lock.held { border-style: dashed; border-width: 3px; }
 #cross.hit { border-color: var(--threat); transform: scale(0.8); }
 #flash { left: 50%; top: 38%; transform: translateX(-50%); font-family: var(--display); font-size: 30px; letter-spacing: 0.12em; color: var(--cyan); text-shadow: 0 0 18px currentColor; text-transform: uppercase; }
 #flash.glitch { animation: glitchText 0.42s steps(1) 1; }
@@ -173,6 +175,7 @@ body.cine .hud { opacity: 0 !important; }
 <div id="damage"></div>
 <div id="impact"></div>
 <div class="hud" id="cross"></div>
+<div class="hud" id="lock" hidden></div>
 <div class="hud" id="flash" hidden></div>
 <div class="hud" id="prompt" hidden></div>
 <div class="hud" id="log"></div>
@@ -231,10 +234,12 @@ body.cine .hud { opacity: 0 !important; }
       <span><kbd>WASD</kbd>Move</span>
       <span><kbd>Space</kbd>Jump · let go of grapple</span>
       <span><kbd>Ctrl</kbd>/<kbd>C</kbd>Slide (slide into enemies to stagger)</span>
-      <span><kbd>Shift</kbd>Dash</span>
+      <span><kbd>Shift</kbd>Dash · hold to sprint</span>
+      <span><kbd>1</kbd>/<kbd>2</kbd> or wheel: fists or sword</span>
       <span><kbd>LMB</kbd>Attack · slide + LMB to thrust</span>
       <span><kbd>RMB</kbd>Block · tap just before a hit to parry</span>
       <span><kbd>E</kbd>Hold to grapple, let go to fling (needs the sword)</span>
+      <span><kbd>G</kbd>Grapple mode: swing or sling (locks onto enemies; let go to be shot at them)</span>
       <span><kbd>C</kbd> while grappling: breach a window</span>
       <span><kbd>Q</kbd>Slow time (2 bars)</span>
       <span><kbd>X</kbd>Stop time (3 bars)</span>
@@ -275,7 +280,7 @@ const GROUPS = {
 };
 const P = {
   radius: 0.4, half: 0.5, eye: 0.62, slideEye: 0.0,
-  speed: 8.2, accel: 62, airAccel: 26, friction: 9, slideFriction: 0.6,
+  speed: 8.2, sprint: 1.38, accel: 62, airAccel: 26, friction: 9, slideFriction: 0.6,
   jump: 8.9, gravity: -25, dashSpeed: 20.5, dashCharges: 2, dashRecharge: 1.5,
   grappleRange: 42, grapplePull: 60, grappleCooldown: 0.45,
   parryFists: 0.18, parrySword: 0.38,
@@ -292,7 +297,7 @@ renderer.setPixelRatio(prNow);
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.9;
+renderer.toneMappingExposure = 1.05;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.autoClear = false;
@@ -300,7 +305,7 @@ host.appendChild(renderer.domElement);
 
 // Art direction: cel-shaded night. Flat toon bands, black ink edges, polished metal, a black sky bleeding red at the horizon.
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x0c0912, 26, 170);
+scene.fog = new THREE.Fog(0x0e0b16, 40, 240);
 const camera = new THREE.PerspectiveCamera(88, innerWidth / innerHeight, 0.05, 900);
 scene.add(camera);
 // the arms render in their own pass so they never clip into walls
@@ -381,15 +386,29 @@ const sky = new THREE.Mesh(new THREE.SphereGeometry(800, 32, 16), new THREE.Shad
 }));
 scene.add(sky);
 
-scene.add(new THREE.HemisphereLight(0x5a5a8a, 0x14060c, 0.5));
-scene.add(new THREE.AmbientLight(0x241626, 0.4));
-// a few hard work lights and red emergency strobes; the strobes breathe so the dark never sits still
-const alarmLights = [];
-for (const [x, z, red] of [[-20, 20, 0], [0, -25, 1], [21, -19, 0], [21, 19, 1], [8, 0, 1]]) {
-  const l = new THREE.PointLight(red ? 0xff2236 : 0xa8d8ff, red ? 34 : 30, 24, 1.7); l.position.set(x, 7, z); scene.add(l);
-  if (red) alarmLights.push({ l, base: 34, ph: x * 0.37 + z * 0.21 });
+scene.add(new THREE.HemisphereLight(0x8a8cc0, 0x1a0c14, 0.95));
+scene.add(new THREE.AmbientLight(0x2c2236, 0.55));
+// Bright cold work lights (two of them are failing tubes that stutter) and one red emergency light that breathes.
+// The light count never changes at runtime, so no shader ever recompiles mid-fight.
+const alarmLights = [], flickerLights = [];
+const LIGHT_SPOTS = [[-20, 20, "work"], [0, -25, "flick"], [21, -19, "work"], [21, 19, "flick"], [-14, -6, "work"], [8, 2, "red"]];
+for (const [x, z, kind] of LIGHT_SPOTS) {
+  const red = kind === "red";
+  const l = new THREE.PointLight(red ? 0xff2236 : 0xe4ecff, red ? 48 : 72, red ? 24 : 30, 1.5); l.position.set(x, 7.2, z); scene.add(l);
+  if (red) alarmLights.push({ l, base: 48, ph: x * 0.37 + z * 0.21 });
+  if (kind === "flick") flickerLights.push({ l, base: 72, x, z, on: 1, burst: 0, next: 1 + Math.random() * 3, mat: null });
 }
-const sun = new THREE.DirectionalLight(0x8270b0, 1.0); // moonlight
+// fluorescent stutter: steady most of the time, then a burst of rapid drop-outs, the tube's panel dimming with it
+function updateFlicker(dt) {
+  for (const f of flickerLights) {
+    f.next -= dt;
+    if (f.burst > 0) { f.burst -= dt; if (Math.random() < dt * 22) f.on = Math.random() < 0.45 ? 0.08 + Math.random() * 0.2 : 1; }
+    else { f.on += (1 - f.on) * Math.min(1, dt * 20); if (f.next <= 0) { f.burst = 0.25 + Math.random() * 0.7; f.next = 2.5 + Math.random() * 5; } }
+    f.l.intensity = f.base * f.on;
+    if (f.mat) f.mat.color.setRGB(1, 0.95, 0.88).multiplyScalar(0.25 + f.on * 1.35);
+  }
+}
+const sun = new THREE.DirectionalLight(0x9a8ccc, 1.5); // moonlight
 sun.position.set(-80, 22, -55);
 sun.castShadow = true;
 sun.shadow.mapSize.set(1024, 1024);
@@ -437,6 +456,31 @@ const brushTex = (() => {
   g.globalAlpha = 1;
   const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; return t;
 })();
+// Tiles and wall panels: a colour map with grout and per-tile variation, plus a roughness map where the tiles are
+// glossy and the grout is matte, so the floor catches the lights and the neon environment as soft reflections.
+function tileSet({ size = 512, cols = 4, rows = 4, base = [44, 48, 60], vary = 10, grout = "#0d0f15", gw = 5, gloss = 70, seed = 3 }) {
+  const rnd = mulberry(seed);
+  const cm = document.createElement("canvas"), rm = document.createElement("canvas"); cm.width = rm.width = cm.height = rm.height = size;
+  const c = cm.getContext("2d"), r = rm.getContext("2d");
+  c.fillStyle = grout; c.fillRect(0, 0, size, size); r.fillStyle = "#f0f0f0"; r.fillRect(0, 0, size, size);
+  const tw = size / cols, th = size / rows;
+  for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
+    const k = (rnd() - 0.5) * vary; const x = i * tw + gw / 2, y = j * th + gw / 2, w = tw - gw, h = th - gw;
+    const g = c.createLinearGradient(x, y, x + w, y + h);
+    g.addColorStop(0, `rgb(${base[0] + k + 6},${base[1] + k + 6},${base[2] + k + 8})`); g.addColorStop(1, `rgb(${base[0] + k - 4},${base[1] + k - 4},${base[2] + k - 3})`);
+    c.fillStyle = g; c.fillRect(x, y, w, h);
+    c.fillStyle = "rgba(255,255,255,0.07)"; c.fillRect(x, y, w, 2); c.fillRect(x, y, 2, h); // bevel catch-light
+    const gv = gloss + (rnd() - 0.5) * 30; r.fillStyle = `rgb(${gv},${gv},${gv})`; r.fillRect(x, y, w, h);
+    for (let n = 0; n < 40; n++) { const sv = gv + 40 + rnd() * 60; r.fillStyle = `rgba(${sv},${sv},${sv},0.5)`; r.fillRect(x + rnd() * w, y + rnd() * h, 2 + rnd() * 18, 1 + rnd() * 2); } // scuffs
+  }
+  for (let n = 0; n < 1800; n++) { c.fillStyle = `rgba(255,255,255,${rnd() * 0.035})`; c.fillRect(rnd() * size, rnd() * size, 2, 2); }
+  const mk = (cv, srgb) => { const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t; };
+  return { map: mk(cm, true), rough: mk(rm, false) };
+}
+const TILE_FLOOR = tileSet({ cols: 4, rows: 4, base: [46, 50, 62], seed: 3 });
+const TILE_WALL = tileSet({ cols: 2, rows: 3, base: [70, 74, 88], vary: 6, grout: "#1a1c24", gw: 4, gloss: 120, seed: 9 });
+const TILE_CEIL = tileSet({ cols: 3, rows: 3, base: [26, 24, 32], vary: 4, grout: "#08070b", gw: 6, gloss: 190, seed: 5 });
+const surf = (color, set, roughness, o = {}) => new THREE.MeshStandardMaterial({ color, map: set.map, roughnessMap: set.rough, roughness, metalness: 0.15, envMap: envTex, envMapIntensity: 0.8, ...o });
 const metal = (color, roughness, o = {}) => new THREE.MeshStandardMaterial({ color, metalness: 0.9, roughness, roughnessMap: brushTex, envMap: envTex, envMapIntensity: 1.3, ...o });
 const INK = new THREE.LineBasicMaterial({ color: 0x0b0612 });
 const GLASS_INK = new THREE.LineBasicMaterial({ color: 0xe6f8ff, transparent: true, opacity: 0.55 });
@@ -470,16 +514,18 @@ function ink(mesh, mat = INK) {
   const l = new THREE.LineSegments(new THREE.EdgesGeometry(g, 30), mat); l.raycast = () => {}; mesh.add(l); return mesh;
 }
 const M = {
-  floor: toon(0xffffff, { map: gridTexture("#4b4f66", "rgba(20,10,30,0.55)") }),
-  concrete: toon(0x8a90a8),
-  wall: toon(0x5d6178),
-  ceiling: toon(0x24202e),
-  desk: toon(0xd8d4dc),
-  crate: toon(0xe0873a),
+  floor: surf(0xffffff, TILE_FLOOR, 1, { envMapIntensity: 1.1 }),
+  // walls and ceiling keep cheap toon lighting with real tile maps; the floor is the one big glossy surface
+  concrete: toon(0xb8bccb, { map: TILE_WALL.map }),
+  wall: toon(0xffffff, { map: TILE_WALL.map }),
+  ceiling: toon(0xffffff, { map: TILE_CEIL.map }),
+  desk: new THREE.MeshStandardMaterial({ color: 0xd4d2da, roughness: 0.35, metalness: 0.1, envMap: envTex, envMapIntensity: 0.7 }),
+  crate: new THREE.MeshStandardMaterial({ color: 0xd8742c, roughness: 0.5, metalness: 0.2, roughnessMap: brushTex, envMap: envTex }),
+  trim: new THREE.MeshBasicMaterial({ color: 0x4ff0ff }),
   rack: metal(0x262433, 0.55),
   mullion: metal(0x1c1826, 0.45),
   door: toon(0xd8344a),
-  glass: new THREE.MeshBasicMaterial({ color: 0xbfefff, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }),
+  glass: new THREE.MeshBasicMaterial({ color: 0x7ac8e8, transparent: true, opacity: 0.018, depthWrite: false, side: THREE.DoubleSide }),
   shard: new THREE.MeshBasicMaterial({ color: 0xeefcff, transparent: true, opacity: 0.8, side: THREE.DoubleSide }),
   light: new THREE.MeshBasicMaterial({ color: 0xfff1d6 }),
   amber: new THREE.MeshBasicMaterial({ color: 0xff8a3d }),
@@ -496,7 +542,7 @@ const M = {
   pants: toon(0x2a2433),
   visor: new THREE.MeshBasicMaterial({ color: 0xff3d5a }),
   stun: new THREE.MeshBasicMaterial({ color: 0xffe066 }),
-  tower: toon(0x0c0912, { emissive: 0xffffff, emissiveMap: windowsTexture(), emissiveIntensity: 0.55 }),
+  tower: toon(0x0c0912, { emissive: 0xffffff, emissiveMap: windowsTexture(), emissiveIntensity: 0.8 }),
   gun: metal(0x2b2836, 0.42),
   robo: metal(0xb4bcc8, 0.3),
   roboDark: metal(0x24262f, 0.4),
@@ -606,6 +652,7 @@ addEventListener("blur", () => { keys.clear(); mouse.left = mouse.right = false;
 addEventListener("mousedown", (e) => { if (!locked) return; if (e.button === 0) { mouse.left = true; pressed.add("Attack"); } if (e.button === 2) { mouse.right = true; pressed.add("Block"); } });
 addEventListener("mouseup", (e) => { if (e.button === 0) mouse.left = false; if (e.button === 2) mouse.right = false; });
 addEventListener("contextmenu", (e) => e.preventDefault());
+addEventListener("wheel", (e) => { if (locked && Math.abs(e.deltaY) > 4) pressed.add("Swap"); }, { passive: true });
 addEventListener("mousemove", (e) => {
   if (!locked || state.boot) return;
   yaw -= e.movementX * 0.0022; pitch -= e.movementY * 0.0022;
@@ -652,7 +699,13 @@ function fixedBox(x, y, z, sx, sy, sz, mat, opts = {}) {
 function wall(x1, z1, x2, z2, h = 8, mat = M.wall, t = 0.4) {
   const cx = (x1 + x2) / 2, cz = (z1 + z2) / 2;
   const sx = Math.abs(x2 - x1) || t, sz = Math.abs(z2 - z1) || t;
-  return fixedBox(cx, h / 2, cz, sx, h, sz, mat);
+  const len = Math.max(sx, sz);
+  // a thin LED skirting strip on both faces keeps the rooms reading clean in the dark
+  for (const sd of [-1, 1]) {
+    const ox = sx < sz ? sd * (t / 2 + 0.012) : 0, oz = sx < sz ? 0 : sd * (t / 2 + 0.012);
+    fixedBox(cx + ox, 0.12, cz + oz, sx < sz ? 0.02 : len - 0.2, 0.035, sx < sz ? len - 0.2 : 0.02, M.trim, { noCollide: true, shadow: false, ink: false, round: false });
+  }
+  return fixedBox(cx, h / 2, cz, sx, h, sz, mat, { uv: [len / 4, h / 4] });
 }
 function glassPane(x, y, z, sx, sy, sz) {
   const { mesh, body, col } = fixedBox(x, y, z, sx, sy, sz, M.glass, { shadow: false });
@@ -670,8 +723,13 @@ function buildLevel() {
   levelGroup = new THREE.Group(); scene.add(levelGroup);
   const W = 30;
   fixedBox(0, -0.5, 0, 60, 1, 60, M.floor, { uv: [12, 12] });
-  fixedBox(0, 8.25, 0, 60, 0.5, 60, M.ceiling);
+  fixedBox(0, 8.25, 0, 60, 0.5, 60, M.ceiling, { uv: [15, 15] });
   for (let x = -24; x <= 24; x += 12) fixedBox(x, 7.95, 0, 0.6, 0.05, 52, M.light, { noCollide: true, shadow: false });
+  for (const [x, z, kind] of LIGHT_SPOTS) {
+    const fl = flickerLights.find((f) => f.x === x && f.z === z);
+    const mat = kind === "red" ? M.red : fl ? (fl.mat = M.light.clone()) : M.light;
+    fixedBox(x, 7.97, z, 2.4, 0.05, 0.7, mat, { noCollide: true, shadow: false, ink: false });
+  }
   fixedBox(0, -30, 0, 60, 58, 60, M.tower, { shadow: false });
   fixedBox(0, 30, 0, 60, 43, 60, M.tower, { shadow: false, noCollide: true });
   // perimeter mullions + glass
@@ -733,18 +791,100 @@ function buildLevel() {
   const gondola = (x, z, sx, sz) => { fixedBox(x, 3, z, sx, 0.3, sz, M.concrete); fixedBox(x, 6.8, z, 0.08, 7.3, 0.08, M.mullion, { noCollide: true }); };
   gondola(20, -34.5, 5, 2); gondola(34.5, -18, 2, 5); gondola(34.5, 18, 2, 5); gondola(20, 34.5, 5, 2);
 
-  // city backdrop
+  buildCity();
+}
+// ---------- the city outside ----------
+// Everything out here is unlit (basic materials, no fog) and instanced, so a skyline of hundreds of lit
+// windows, neon bands, signs and traffic costs a handful of draw calls.
+const CITY = { traffic: null, lanes: [], beacons: null, search: [] };
+function signTexture(text, color, sub) {
+  const c = document.createElement("canvas"); c.width = 512; c.height = 160; const g = c.getContext("2d");
+  g.fillStyle = "#050308"; g.fillRect(0, 0, 512, 160);
+  g.strokeStyle = color; g.lineWidth = 6; g.shadowColor = color; g.shadowBlur = 24; g.strokeRect(14, 14, 484, 132);
+  g.font = "700 76px 'Chakra Petch', sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#fff"; g.shadowBlur = 30;
+  g.fillText(text, 256, sub ? 70 : 82);
+  if (sub) { g.font = "600 22px 'IBM Plex Mono', monospace"; g.fillStyle = color; g.shadowBlur = 10; g.fillText(sub, 256, 124); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+function buildCity() {
   const rnd = mulberry(7);
-  const towerGeo = new THREE.BoxGeometry(1, 1, 1);
-  for (let i = 0; i < 70; i++) {
-    const a = rnd() * Math.PI * 2, r = 110 + rnd() * 160;
-    const w = 14 + rnd() * 26, h = 60 + rnd() * 160;
-    const m = new THREE.Mesh(towerGeo, M.tower);
-    m.scale.set(w, h, w); m.position.set(Math.cos(a) * r, h / 2 - 80, Math.sin(a) * r);
-    levelGroup.add(m);
+  const box = new THREE.BoxGeometry(1, 1, 1);
+  const winTex = windowsTexture(); winTex.repeat.set(1, 2);
+  const towerMat = new THREE.MeshBasicMaterial({ map: winTex, fog: false });
+  const N = 120; const towers = new THREE.InstancedMesh(box, towerMat, N);
+  const bandMat = new THREE.MeshBasicMaterial({ fog: false }), bands = new THREE.InstancedMesh(box, bandMat, 120);
+  const spireMat = new THREE.MeshBasicMaterial({ color: 0x0a0a12, fog: false }), spires = new THREE.InstancedMesh(box, spireMat, 60);
+  const beaconMat = new THREE.MeshBasicMaterial({ color: 0xff2a3a, fog: false }), beacons = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 6), beaconMat, 60);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), col = new THREE.Color();
+  const neon = [0x4ff0ff, 0xff2a8a, 0xffb547, 0x9a6bff, 0x4ff0ff];
+  let nb = 0, ns = 0; const tops = [];
+  for (let i = 0; i < N; i++) {
+    const a = rnd() * Math.PI * 2, r = 70 + Math.pow(rnd(), 0.7) * 230;
+    const w = 12 + rnd() * 24, d = 12 + rnd() * 24, h = 70 + rnd() * 200 + (r < 120 ? 40 : 0);
+    const x = Math.cos(a) * r, z = Math.sin(a) * r, y = h / 2 - 90;
+    q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.round(rnd() * 3) * 0.3);
+    towers.setMatrixAt(i, m4.compose(ps.set(x, y, z), q, sc.set(w, h, d)));
+    const far = THREE.MathUtils.clamp((r - 70) / 230, 0, 1);
+    col.setHSL(0.6 + rnd() * 0.12 - (rnd() < 0.2 ? 0.55 : 0), 0.35, 0.9 - far * 0.45); towers.setColorAt(i, col);
+    // neon bands around some towers
+    const nBands = rnd() < 0.55 ? 1 + Math.floor(rnd() * 3) : 0;
+    for (let k = 0; k < nBands && nb < 120; k++, nb++) {
+      bands.setMatrixAt(nb, m4.compose(ps.set(x, -90 + h * (0.3 + rnd() * 0.65), z), q, sc.set(w + 0.6, 0.6 + rnd() * 1.2, d + 0.6)));
+      bands.setColorAt(nb, col.setHex(neon[Math.floor(rnd() * neon.length)]).multiplyScalar(1.4 - far * 0.6));
+    }
+    if (rnd() < 0.45 && ns < 60) {
+      const sh = 12 + rnd() * 40; const top = h - 90;
+      spires.setMatrixAt(ns, m4.compose(ps.set(x, top + sh / 2, z), q, sc.set(1.2, sh, 1.2)));
+      beacons.setMatrixAt(ns, m4.compose(ps.set(x, top + sh + 0.8, z), q, sc.setScalar(1.3)));
+      ns++;
+    }
+    if (r < 150) tops.push({ x, z, w, d, h, a });
   }
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(1200, 1200), new THREE.MeshBasicMaterial({ color: 0x05070b }));
-  ground.rotation.x = -Math.PI / 2; ground.position.y = -80; levelGroup.add(ground);
+  towers.instanceColor.needsUpdate = true; bands.count = nb; bands.instanceColor.needsUpdate = true; spires.count = beacons.count = ns;
+  for (const o of [towers, bands, spires, beacons]) { o.frustumCulled = false; levelGroup.add(o); }
+  CITY.beacons = beaconMat;
+  // holo signs on the nearer towers, facing the building
+  const signs = [["KAIROS", "#4ff0ff", "ARCOLOGY · 2200"], ["NULL//SKY", "#ff2a8a", "SLEEP IS A SUBSCRIPTION"], ["SYNAPSE", "#ffb547", "UPLINK 24/7"], ["HALCYON", "#9a6bff"], ["OKU-RYO", "#4ff0ff", "NOODLES · REPAIRS"], ["VANTA", "#ff2a8a"]];
+  tops.sort((p, q2) => Math.hypot(p.x, p.z) - Math.hypot(q2.x, q2.z));
+  for (let i = 0; i < signs.length && i < tops.length; i++) {
+    const t = tops[i]; const [txt, c, sub] = signs[i];
+    const mat = new THREE.MeshBasicMaterial({ map: signTexture(txt, c, sub), fog: false, side: THREE.DoubleSide });
+    const sw = Math.min(t.w, t.d) * 1.3, m = new THREE.Mesh(new THREE.PlaneGeometry(sw, sw * 0.31), mat);
+    const toC = new THREE.Vector3(-t.x, 0, -t.z).normalize();
+    m.position.set(t.x + toC.x * (Math.max(t.w, t.d) / 2 + 1.5), -90 + t.h * (0.45 + (i % 3) * 0.15), t.z + toC.z * (Math.max(t.w, t.d) / 2 + 1.5));
+    m.lookAt(0, m.position.y, 0); levelGroup.add(m);
+  }
+  // sky traffic: streams of lights circling the tower on a few lanes
+  const tMat = new THREE.MeshBasicMaterial({ fog: false }); const TN = 96; const traffic = new THREE.InstancedMesh(box, tMat, TN);
+  CITY.lanes = [];
+  for (let i = 0; i < TN; i++) {
+    const lane = i % 4; const ln = { r: 62 + lane * 26 + rnd() * 6, y: 6 + lane * 14 + rnd() * 4, a: rnd() * Math.PI * 2, sp: (lane % 2 ? 1 : -1) * (0.05 + rnd() * 0.04) * (90 / (62 + lane * 26)) };
+    CITY.lanes.push(ln); traffic.setColorAt(i, col.setHex(ln.sp > 0 ? 0xfff2dd : 0xff3040).multiplyScalar(1.6));
+  }
+  traffic.instanceColor.needsUpdate = true; traffic.frustumCulled = false; levelGroup.add(traffic); CITY.traffic = traffic;
+  // searchlights sweeping the clouds
+  CITY.search = [];
+  const sMat = new THREE.MeshBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.07, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide });
+  const coneGeo = new THREE.ConeGeometry(14, 260, 20, 1, true); coneGeo.translate(0, -130, 0);
+  for (const [x, z, ph] of [[-150, -120, 0], [170, -60, 2], [60, 190, 4]]) { const c = new THREE.Mesh(coneGeo, sMat); c.position.set(x, -80, z); levelGroup.add(c); CITY.search.push({ c, ph }); }
+  // street grid far below
+  const gc = document.createElement("canvas"); gc.width = gc.height = 256; const gg = gc.getContext("2d");
+  gg.fillStyle = "#04050a"; gg.fillRect(0, 0, 256, 256); gg.fillStyle = "#ff9a3a"; gg.globalAlpha = 0.55; gg.fillRect(0, 124, 256, 3); gg.fillRect(124, 0, 3, 256); gg.fillStyle = "#4ff0ff"; gg.globalAlpha = 0.25; gg.fillRect(0, 60, 256, 1); gg.fillRect(60, 0, 1, 256);
+  const gt = new THREE.CanvasTexture(gc); gt.wrapS = gt.wrapT = THREE.RepeatWrapping; gt.repeat.set(24, 24); gt.colorSpace = THREE.SRGBColorSpace;
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(1400, 1400), new THREE.MeshBasicMaterial({ map: gt, fog: false }));
+  ground.rotation.x = -Math.PI / 2; ground.position.y = -90; levelGroup.add(ground);
+}
+const _tm = new THREE.Matrix4(), _tq = new THREE.Quaternion(), _ts = new THREE.Vector3(2.2, 0.35, 0.6), _tp = new THREE.Vector3(), _ty = new THREE.Vector3(0, 1, 0);
+function updateCity(t, dt) {
+  if (!CITY.traffic) return;
+  for (let i = 0; i < CITY.lanes.length; i++) {
+    const L = CITY.lanes[i]; L.a += L.sp * dt;
+    _tp.set(Math.cos(L.a) * L.r, L.y, Math.sin(L.a) * L.r); _tq.setFromAxisAngle(_ty, -L.a + (L.sp > 0 ? 0 : Math.PI));
+    CITY.traffic.setMatrixAt(i, _tm.compose(_tp, _tq, _ts));
+  }
+  CITY.traffic.instanceMatrix.needsUpdate = true;
+  CITY.beacons.color.setRGB(1, 0.16, 0.22).multiplyScalar(Math.sin(t * 2.2) > 0.6 ? 1.8 : 0.25);
+  for (const s of CITY.search) s.c.rotation.set(Math.sin(t * 0.21 + s.ph) * 0.35, 0, Math.cos(t * 0.17 + s.ph) * 0.35 + Math.PI);
 }
 // the charging capsule UNIT-7 wakes up in; its doors slide apart during the boot sequence
 let pod = null;
@@ -905,7 +1045,7 @@ function updateBooms(dt) {
     if (q >= 1) { if (f.kind === "light") f.obj.intensity = 0; else { levelGroup.remove(f.obj); f.obj.material.dispose(); } booms.splice(i, 1); }
   }
 }
-const boomLight = new THREE.PointLight(0xff9a40, 0, 20, 1.6); scene.add(boomLight);
+const boomLight = new THREE.PointLight(0xff9a40, 0, 20, 1.6); // not in the scene while barrels are off
 function barrelsNear(pos, reach, look, arc) {
   return barrels.filter((b) => { if (b.dead) return false; const to = b.pos.clone().sub(pos); const d = to.length(); return d < reach + 0.4 && (!look || to.normalize().dot(look) > Math.cos(arc)); });
 }
@@ -1372,7 +1512,11 @@ function createPlayer(at, faceYaw) {
   yaw = faceYaw; pitch = 0;
   return { body, col, vel: new THREE.Vector3(), hp: 100, lastHurt: -99, grounded: false, sliding: false, eyeH: P.eye,
     dash: P.dashCharges, dashT: 0, dashRe: 0, grapple: null, grappleCd: 0, lastGrapple: -99, coyote: 0, jumpHeld: false,
-    attackT: 0, blocking: false, blockStart: -99, thrustT: 0, thrustHits: new Set(), slideHits: new Set(), hasSword: false, lust: 0, breach: false, dead: false };
+    attackT: 0, blocking: false, blockStart: -99, thrustT: 0, thrustHits: new Set(), slideHits: new Set(), lust: 0, breach: false, dead: false,
+    // ownsSword: picked up from the armory. weapon: what is in your hand (1 / 2 / mouse wheel switch).
+    ownsSword: false, weapon: "sword", swapTo: null, swapT: 0, grapMode: "swing", sling: null, sprinting: false,
+    get hasSword() { return this.ownsSword && this.weapon === "sword"; },
+    set hasSword(v) { this.ownsSword = !!v; if (v) this.weapon = "sword"; } };
 }
 function playerPos() { const t = player.body.translation(); return new THREE.Vector3(t.x, t.y, t.z); }
 function lookDir(out = new THREE.Vector3()) { return out.set(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)); }
@@ -1399,9 +1543,13 @@ function stepPlayer(dt) {
   const crouchPressed = pressed.has("ControlLeft") || pressed.has("ControlRight") || pressed.has("KeyC");
   const hspeed = Math.hypot(vel.x, vel.z);
   const lustSpeed = 1 + player.lust * 0.07;
+  // sprint: keep Shift held (the press still dashes) while running forward on the ground
+  const shiftHeld = keys.has("ShiftLeft") || keys.has("ShiftRight");
+  player.sprinting = shiftHeld && keys.has("KeyW") && grounded && !crouchKey && !player.blocking && !player.grapple && player.dashT < 0.1;
+  updateSwap(dt);
 
   // breach: slide while on the grapple, or just after letting go
-  if (crouchPressed && player.hasSword && (player.grapple || (!grounded && state.time - player.lastGrapple < 1.5))) {
+  if (crouchPressed && player.ownsSword && (player.grapple || (!grounded && state.time - player.lastGrapple < 1.5))) {
     player.breach = true; flash("Breach", "var(--amber)"); fovKick = 10;
     const d = player.grapple ? player.grapple.point.clone().sub(playerPos()).normalize() : vel.clone().normalize();
     vel.addScaledVector(d, 10);
@@ -1420,7 +1568,7 @@ function stepPlayer(dt) {
   } else if (grounded && !player.sliding) {
     const sp = horiz.length();
     if (sp > 0) { const drop = sp * P.friction * dt; horiz.multiplyScalar(Math.max(sp - drop, 0) / sp); }
-    accelerate(horiz, wish, P.speed * lustSpeed * (crouchKey ? 0.5 : 1) * (player.blocking ? 0.6 : 1), P.accel, dt);
+    accelerate(horiz, wish, P.speed * lustSpeed * (crouchKey ? 0.5 : 1) * (player.blocking ? 0.6 : 1) * (player.sprinting ? P.sprint : 1), P.accel, dt);
   } else if (player.sliding) {
     const sp = horiz.length(); if (sp > 0) horiz.multiplyScalar(Math.max(sp - sp * P.slideFriction * dt, 0) / sp);
     accelerate(horiz, wish, 3, 10, dt);
@@ -1451,6 +1599,7 @@ function stepPlayer(dt) {
     const d = wish.lengthSq() ? wish.clone() : fwd.clone();
     vel.x = d.x * P.dashSpeed * lustSpeed; vel.z = d.z * P.dashSpeed * lustSpeed; vel.y = Math.max(vel.y, lookDir().y * 8, 1.5);
     player.dash--; player.dashT = 0.3; sfx.dash(); fovKick = 14; speedLines(0.6);
+    CAM.rollV -= d.dot(right) * 5; CAM.kickV -= 2;
   }
 
   // grapple: hold E to fire and stay on the line, let go to release and keep your momentum.
@@ -1458,12 +1607,22 @@ function stepPlayer(dt) {
   // if the cooldown finishes or an anchor comes into view a moment later.
   player.grappleCd -= dt;
   const eDown = keys.has("KeyE");
-  if (pressed.has("KeyE")) { if (!player.hasSword) flash("Grapple needs the sword", "var(--dim)"); else player.grapBuf = 0.2; }
-  player.grapBuf = eDown ? (player.grapBuf || 0) - dt : 0;
-  if (eDown && player.hasSword && !player.grapple && player.grappleCd <= 0 && player.grapBuf > 0) {
-    const hit = grappleRay(); if (hit) { fireGrapple(hit); player.grapBuf = 0; }
+  if (pressed.has("KeyE")) { if (!player.ownsSword) flash("Grapple needs the sword", "var(--dim)"); else player.grapBuf = 0.2; }
+  if (pressed.has("KeyG") && player.ownsSword) {
+    player.grapMode = player.grapMode === "swing" ? "sling" : "swing";
+    flash(player.grapMode === "sling" ? "Grapple · Sling" : "Grapple · Swing", player.grapMode === "sling" ? "var(--blood)" : "var(--cyan)"); sfx.grappleReady();
   }
-  if (player.grapple && !eDown) {
+  player.grapBuf = eDown ? (player.grapBuf || 0) - dt : 0;
+  if (eDown && player.ownsSword && !player.grapple && player.grappleCd <= 0 && player.grapBuf > 0) {
+    if (player.grapMode === "sling") {
+      const lock = slingTarget(); const hit = lock || grappleRay();
+      if (hit) { fireGrapple(hit); player.grapple.mode = "sling"; player.grapple.enemy = lock ? lock.e : null; player.grapple.charge = 0; player.grapBuf = 0; }
+    } else { const hit = grappleRay(); if (hit) { fireGrapple(hit); player.grapBuf = 0; } }
+  }
+  if (player.grapple && !eDown && player.grapple.mode === "sling") {
+    const g = player.grapple; const attached = g.phase === "attached"; releaseGrapple();
+    if (attached) slingLaunch(vel, g);
+  } else if (player.grapple && !eDown) {
     const attached = player.grapple.phase === "attached"; releaseGrapple();
     if (attached) {
       // fling: keep the swing's speed, add a little more, and pop off the anchor if you were hanging still
@@ -1473,7 +1632,19 @@ function stepPlayer(dt) {
       fovKick = Math.max(fovKick, 7); speedLines(0.45); sfx.dash();
     }
   }
-  if (player.grapple) {
+  if (player.grapple?.enemy) {
+    const g = player.grapple;
+    if (g.enemy.dead) g.enemy = null; // never touch a dead enemy's body
+    else { g.point.copy(enemyPos(g.enemy)).y += 0.3; g.enemy.stun = Math.max(g.enemy.stun, 0.35); }
+  }
+  if (player.grapple?.mode === "sling") {
+    const g = player.grapple; player.lastGrapple = state.time;
+    if (g.phase === "fly") { g.t += dt; if (g.t >= g.dur) { g.phase = "attached"; g.latchAt = state.time; g.ramp = 1; sfx.grappleLatch(); shake = Math.max(shake, 0.12); if (g.enemy) flash("Locked", "var(--blood)"); } }
+    else {
+      g.charge = Math.min(1, g.charge + dt / 0.55);
+      vel.multiplyScalar(Math.pow(0.06, dt)); vel.y += -P.gravity * 0.9 * dt; // braced on the taut line
+    }
+  } else if (player.grapple) {
     const g = player.grapple; const pp = playerPos();
     const to = g.point.clone().sub(pp); const dist = to.length(); to.divideScalar(Math.max(dist, 1e-3));
     player.lastGrapple = state.time;
@@ -1497,6 +1668,7 @@ function stepPlayer(dt) {
       }
     }
   }
+  if (player.sling) slingFlight(vel, dt);
   if (vel.length() > 44) vel.setLength(44);
 
   // glass: breach mode punches through at any speed and executes nearby enemies
@@ -1550,6 +1722,65 @@ function fireGrapple(hit) {
 function releaseGrapple() {
   if (player.grapple) { hookFx.from.copy(hookHead()); hookFx.state = "retract"; hookFx.t = 0; sfx.grappleRetract(); }
   player.grapple = null; player.grappleCd = P.grappleCooldown; player.lastGrapple = state.time;
+}
+// ---------- weapon switch ----------
+function updateSwap(dt) {
+  let want = null;
+  if (pressed.has("Digit1")) want = "fists"; else if (pressed.has("Digit2")) want = "sword";
+  else if (pressed.has("Swap")) want = (player.swapTo || player.weapon) === "sword" ? "fists" : "sword";
+  if (want) {
+    if (!player.ownsSword) { if (want === "sword") flash("No sword yet", "var(--dim)"); }
+    else if (want !== (player.swapTo || player.weapon) && !VM.attack) { player.swapTo = want; player.swapT = 0; VM.inspect = null; sfx.servo(); }
+  }
+  if (!player.swapTo) return;
+  player.swapT += dt; player.attackT = Math.max(player.attackT, 0.04);
+  if (player.swapT >= 0.17 && player.weapon !== player.swapTo) { player.weapon = player.swapTo; setViewModel(); sfx.clunk(); if (player.weapon === "sword") tone("sine", 2600, 2550, 0.5, 0.03); }
+  if (player.swapT >= 0.36) player.swapTo = null;
+}
+function swapDip() { return player?.swapTo ? Math.sin(Math.PI * Math.min(1, player.swapT / 0.36)) : 0; }
+
+// ---------- sling grapple: lock onto an enemy (or any surface), hold to charge, let go to be shot at it ----------
+function slingTarget() {
+  const o = camOrigin(), look = lookDir(); let best = null, bestScore = 1e9;
+  for (const e of alive()) {
+    const c = enemyPos(e); c.y += 0.3; const to = c.clone().sub(o); const d = to.length();
+    if (d > P.grappleRange || d < 2.5) continue;
+    const ang = Math.acos(THREE.MathUtils.clamp(to.dot(look) / d, -1, 1)); if (ang > 0.22) continue;
+    const blocked = world.castRay(new RAPIER.Ray(o, to.clone().divideScalar(d)), d - 0.7, true, undefined, GROUPS.envOnly, player.col, undefined, (cl) => !glassByHandle.has(cl.handle));
+    if (blocked) continue;
+    const score = ang * 40 + d * 0.04; if (score < bestScore) { bestScore = score; best = { e, point: c, toi: d }; }
+  }
+  return best;
+}
+function slingLaunch(vel, g) {
+  const pp = playerPos(); const to = g.point.clone().sub(pp); const dist = to.length(); to.divideScalar(Math.max(dist, 1e-3));
+  const sp = 21 + g.charge * 17;
+  vel.copy(to).multiplyScalar(sp); vel.y += Math.min(6, dist * 0.09); // a little lift so the arc lands on target
+  player.sling = { e: g.enemy, t: Math.min(1.4, dist / sp + 0.35), dmg: 2 + g.charge * 3, dir: to.clone() };
+  fovKick = Math.max(fovKick, 12 + g.charge * 8); speedLines(0.8); sfx.dash(); tone("sawtooth", 120, 900, 0.18, 0.05);
+  CAM.kickV -= 3 + g.charge * 3; glitch(0.25);
+}
+function slingFlight(vel, dt) {
+  const S = player.sling; S.t -= dt;
+  const pp = playerPos();
+  if (S.e && !S.e.dead) {
+    const ep = enemyPos(S.e); const to = ep.clone().sub(pp);
+    // homing: the line is locked, so the shot bends toward the target
+    if (to.length() > 0.5) { const want = to.clone().normalize().multiplyScalar(Math.max(vel.length(), 18)); vel.lerp(want, Math.min(1, dt * 7)); }
+  }
+  for (const e of alive()) {
+    const ep = enemyPos(e); if (ep.distanceTo(pp) > 1.9) continue;
+    const dir = vel.clone().normalize();
+    const mult = (1 + player.lust * 0.25) * (e === S.e ? 1 : 0.6);
+    damageEnemy(e, S.dmg * mult, ep, dir.clone().setY(0.35).normalize(), S.dmg >= 4 ? "heavy" : "punch");
+    if (!e.dead) stun(e, 1.1, 10);
+    sfx.punchHit(true); impactFrame(50); shake = Math.max(shake, 0.45); hitstop(0.07); CAM.kickV += 4;
+    flash(e.dead ? "Sling kill" : "Sling strike", "var(--blood)");
+    if (e.dead) addLust(0.5);
+    vel.copy(dir).multiplyScalar(-4); vel.y = 6.5; // bounce off the body
+    player.sling = null; return;
+  }
+  if (S.t <= 0 || player.grounded && S.t < 0.2) player.sling = null;
 }
 function grappleRay() {
   const o = camOrigin(); const d = lookDir();
@@ -1731,7 +1962,7 @@ function phaseCleared() {
 }
 function openDoor() { door.opening = true; world.removeRigidBody(door.body); sfx.door(); }
 function pickupSword() {
-  player.hasSword = true; state.phase = 2; state.checkpoint = 2;
+  player.ownsSword = true; player.weapon = "sword"; state.phase = 2; state.checkpoint = 2;
   levelGroup.remove(sword); sword.userData.light.intensity = 0;
   sfx.pickup(); flash("Sword acquired", "var(--cyan)"); glitch(0.7);
   setObjective("Breach the sealed wings through the windows");
@@ -1915,7 +2146,16 @@ function updateRig(dt) {
     p.p[2] += Math.cos(ph) * 0.025 * move;
     p.curl += Math.sin(t * 0.9 + side) * 0.05;
     if (!player.grounded && !player.grapple) { p.r[0] += 0.2; p.p[1] += 0.03; p.r[1] -= side * 0.1; }
-    if (hs > 13 && player.grounded && !player.sliding) { p.r[0] -= 0.2; p.p[2] += 0.05; }
+    if (hs > 13 && player.grounded && !player.sliding) { p.r[0] -= 0.2 * (1 - CAM.sprint); p.p[2] += 0.05 * (1 - CAM.sprint); }
+    // sprint: a full arm pump in time with the stride, elbows bent, fists driving forward and back
+    const sp = CAM.sprint; if (sp > 0.01) {
+      const swingA = Math.sin(ph);
+      if (sword && side > 0) { p.p[1] -= 0.012 * sp; p.p[2] += 0.015 * sp + swingA * 0.025 * sp; p.r[0] -= 0.1 * sp - swingA * 0.06 * sp; p.r[1] += 0.12 * sp; p.w[2] -= 0.2 * sp; }
+      else {
+        p.p[0] -= side * 0.03 * sp; p.p[1] += (-0.06 + Math.max(0, -swingA) * 0.05) * sp; p.p[2] += swingA * 0.1 * sp;
+        p.r[0] += swingA * 0.32 * sp; p.r[1] += side * 0.12 * sp; p.el += (0.55 + Math.max(0, swingA) * 0.25) * sp; p.curl = THREE.MathUtils.lerp(p.curl, 1.2, sp);
+      }
+    }
   }
   if (player.sliding) { L.p[0] -= 0.06; L.r[1] -= 0.45; L.r[0] += 0.35; L.el = 0.15; L.curl = 0.15; }
   if (player.blocking) {
@@ -1972,7 +2212,7 @@ function updateRig(dt) {
   const k = 1 - Math.exp(-dt * 10);
   VM.lagX += (THREE.MathUtils.clamp(dy / Math.max(dt, 1e-3) * 0.012, -0.1, 0.1) - VM.lagX) * k;
   VM.lagY += (THREE.MathUtils.clamp(dp / Math.max(dt, 1e-3) * 0.012, -0.08, 0.08) - VM.lagY) * k;
-  rig.rotation.set(VM.lagY, VM.lagX, 0);
+  rig.rotation.set(VM.lagY - swapDip() * 0.5, VM.lagX, 0);
 }
 
 // ---------- sword tricks and inspect ----------
@@ -2268,13 +2508,16 @@ for (const side of [-1, 1]) {
 }
 function updateSelfBody(dt) {
   const p = renderPos(); selfBody.position.copy(p); selfBody.rotation.y = yaw;
-  const hs = Math.hypot(player.vel.x, player.vel.z); const move = Math.min(1, hs / 9);
+  const hs = Math.hypot(player.vel.x, player.vel.z); const move = Math.min(1, hs / 9); const sp = CAM.sprint;
   selfTorso.visible = !player.sliding;
+  selfTorso.rotation.x += (-0.32 * sp - selfTorso.rotation.x) * Math.min(1, dt * 10);
+  selfTorso.rotation.y = Math.sin(bob) * 0.16 * sp;
+  selfBody.position.y += Math.abs(Math.sin(bob)) * 0.05 * sp;
   for (const L of selfLegs) {
     let hip = 0, knee = 0;
     if (player.sliding) { hip = 1.4; knee = L.side > 0 ? -0.1 : -0.7; }
     else if (!player.grounded) { hip = 0.6 + L.side * 0.15; knee = -1.0; }
-    else { const ph = bob + (L.side > 0 ? 0 : Math.PI); hip = Math.sin(ph) * 0.65 * move; knee = -Math.max(0, Math.cos(ph)) * 0.9 * move; }
+    else { const ph = bob + (L.side > 0 ? 0 : Math.PI); hip = Math.sin(ph) * (0.65 + 0.45 * sp) * move + 0.25 * sp; knee = -Math.max(0, Math.cos(ph)) * (0.9 + 0.7 * sp) * move - 0.2 * sp; }
     L.hip.rotation.x += (hip - L.hip.rotation.x) * Math.min(1, dt * 18);
     L.knee.rotation.x += (knee - L.knee.rotation.x) * Math.min(1, dt * 18);
   }
@@ -2288,6 +2531,7 @@ const hookMesh = new THREE.Group(); scene.add(hookMesh); hookMesh.visible = fals
   for (let i = 0; i < 3; i++) { const prong = new THREE.Mesh(rbox(0.022, 0.022, 0.14, 0.45), M.roboDark); const a = (i / 3) * Math.PI * 2; prong.position.set(Math.cos(a) * 0.06, Math.sin(a) * 0.06, -0.02); prong.rotation.set(Math.sin(a) * 0.6, -Math.cos(a) * 0.6, 0); ink(prong); hookMesh.add(prong); }
 }
 const ropeMat = toon(0x4ff0ff, { emissive: 0x1a6070 });
+const ROPE_SWING = new THREE.Color(0x4ff0ff), ROPE_SLING = new THREE.Color(0xff2a4a);
 const ropeMesh = new THREE.Mesh(new THREE.BufferGeometry(), ropeMat); ropeMesh.visible = false; ropeMesh.frustumCulled = false; scene.add(ropeMesh);
 // The rope starts at the left fist. The fist lives in the arm pass (its own camera and FOV), so its screen position
 // is projected through the arm camera and unprojected through the world camera at the same distance.
@@ -2326,10 +2570,12 @@ function updateGlove(dt) {
 function updateRope(dt) {
   const w = wristWorld(); const g = player.grapple;
   let amp = 0;
-  if (g) amp = g.phase === "fly" ? 0.3 * (1 - g.t / g.dur) : Math.min(0.45, Math.max(0, g.L - w.distanceTo(g.point) * 0.98) * 0.12);
+  if (g) amp = g.phase === "fly" ? 0.3 * (1 - g.t / g.dur) : g.mode === "sling" ? Math.sin(state.time * 60) * 0.015 * g.charge : Math.min(0.45, Math.max(0, g.L - w.distanceTo(g.point) * 0.98) * 0.12);
   else if (hookFx.state === "retract") { hookFx.t += dt; amp = 0.35 * Math.sin(Math.min(1, hookFx.t / hookFx.dur) * Math.PI); }
   const show = !!g || hookFx.state === "retract";
   ropeMesh.visible = hookMesh.visible = show; updateVmCord(show);
+  const slingC = g?.mode === "sling" || (!g && player.grapMode === "sling");
+  ropeMat.color.copy(slingC ? ROPE_SLING : ROPE_SWING); ropeMat.emissive.copy(slingC ? ROPE_SLING : ROPE_SWING).multiplyScalar(0.35 + (g?.charge || 0) * 0.6);
   if (!show) return;
   const head = hookHead();
   if (!g && hookFx.t >= hookFx.dur) { hookFx.state = "idle"; VM.gloveBlink = 1; ropeMesh.visible = hookMesh.visible = false; return; }
@@ -2347,7 +2593,7 @@ function updateRope(dt) {
 }
 
 // smoothed camera state: bob strength, landing spring, fall speed tracking
-const CAM = { bobAmt: 0, landX: 0, landV: 0, fallV: 0, wasGrounded: true, kick: 0, kickV: 0, roll: 0, rollV: 0 };
+const CAM = { bobAmt: 0, landX: 0, landV: 0, fallV: 0, wasGrounded: true, kick: 0, kickV: 0, roll: 0, rollV: 0, sprint: 0, lastStep: 0, yawV: 0, lastYaw: 0, sway: 0 };
 function renderPos() { const c = playerPos(); return player.prev ? player.prev.clone().lerp(c, state.alpha ?? 1) : c; }
 function updateCamera(dt) {
   const target = player.sliding ? P.slideEye : P.eye;
@@ -2357,10 +2603,16 @@ function updateCamera(dt) {
   const walking = player.grounded && !player.sliding;
   if (walking) bob += hs * dt * 1.45;
   CAM.bobAmt += ((walking ? Math.min(1, hs / 9) : 0) - CAM.bobAmt) * (1 - Math.exp(-dt * 8));
-  const bobY = Math.sin(bob * 2) * 0.022 * CAM.bobAmt, bobX = Math.cos(bob) * 0.012 * CAM.bobAmt;
+  CAM.sprint += ((player.sprinting && hs > 6 ? 1 : 0) - CAM.sprint) * (1 - Math.exp(-dt * 7));
+  const bobY = Math.sin(bob * 2) * 0.026 * CAM.bobAmt * (1 + 0.9 * CAM.sprint), bobX = Math.cos(bob) * 0.014 * CAM.bobAmt * (1 + 0.7 * CAM.sprint);
+  // each footfall gives the view a small downward tap
+  const stepPh = Math.floor(bob / Math.PI); if (walking && stepPh !== CAM.lastStep) { CAM.landV -= (0.1 + 0.28 * CAM.sprint) * CAM.bobAmt; CAM.kickV += 0.6 * CAM.sprint; } CAM.lastStep = stepPh;
+  // turning swings the view slightly, like a head that has weight
+  const dYaw = ((yaw - CAM.lastYaw + Math.PI * 3) % (Math.PI * 2)) - Math.PI; CAM.lastYaw = yaw;
+  CAM.yawV += (THREE.MathUtils.clamp(dYaw / Math.max(dt, 1e-3), -12, 12) - CAM.yawV) * (1 - Math.exp(-dt * 10));
   // landing: a quick dip on a critically damped spring, scaled by how hard you came down
   if (!player.grounded) CAM.fallV = Math.min(CAM.fallV, player.vel.y);
-  if (player.grounded && !CAM.wasGrounded) { const hit = THREE.MathUtils.clamp((-CAM.fallV - 4) / 22, 0, 1); CAM.landV -= hit * 2.4; }
+  if (player.grounded && !CAM.wasGrounded) { const hit = THREE.MathUtils.clamp((-CAM.fallV - 4) / 22, 0, 1); CAM.landV -= hit * 3.2; CAM.kickV += hit * 5; }
   if (player.grounded) CAM.fallV = 0;
   CAM.wasGrounded = player.grounded;
   // springs are integrated in small substeps so they stay stable at any frame rate
@@ -2378,18 +2630,24 @@ function updateCamera(dt) {
   // lean into the swing while on the grapple
   let gLean = 0;
   if (player.grapple?.phase === "attached") gLean = THREE.MathUtils.clamp(player.grapple.point.clone().sub(p).dot(rightV) * 0.01, -0.08, 0.08);
-  const rollTarget = THREE.MathUtils.clamp(-strafe * 0.0024, -0.035, 0.035) + (player.sliding ? 0.05 : 0) - gLean;
-  roll += (rollTarget - roll) * (1 - Math.exp(-dt * 6));
-  camera.rotation.set(pitch + CAM.kick * 0.03, yaw, roll + CAM.roll * 0.03, "YXZ");
+  const rollTarget = THREE.MathUtils.clamp(-strafe * 0.0042, -0.055, 0.055) + (player.sliding ? 0.06 : 0) - gLean
+    + Math.sin(bob) * (0.004 * CAM.bobAmt + 0.014 * CAM.sprint) - CAM.yawV * 0.004;
+  roll += (rollTarget - roll) * (1 - Math.exp(-dt * 7));
+  // idle breathing sway when standing still
+  CAM.sway += dt; const idle = 1 - CAM.bobAmt;
+  const swayP = Math.sin(CAM.sway * 1.1) * 0.0025 * idle, swayY = Math.sin(CAM.sway * 0.7) * 0.002 * idle;
+  camera.rotation.set(pitch + CAM.kick * 0.03 + swayP - 0.012 * CAM.sprint, yaw + swayY, roll + CAM.roll * 0.03, "YXZ");
   fovKick *= Math.pow(0.05, dt);
-  const fov = 88 + Math.min(16, Math.max(0, hs - 9) * 0.9) + fovKick;
+  const charge = player.grapple?.mode === "sling" && player.grapple.phase === "attached" ? player.grapple.charge : 0;
+  const fov = 88 + Math.min(16, Math.max(0, hs - 9) * 0.9) + fovKick + 6 * CAM.sprint - 7 * charge;
   camera.fov += (fov - camera.fov) * (1 - Math.exp(-dt * 5)); camera.updateProjectionMatrix();
   camera.updateMatrixWorld();
   vmCamera.rotation.z = roll * 0.6;
   // the arms ride the bob a beat behind, sink on landings, and trail your vertical speed
   const vy = THREE.MathUtils.clamp(player.vel.y * -0.0025, -0.03, 0.03);
-  rig.position.y += (bobY * 0.5 + CAM.landX * 0.55 + vy + (VM.rise || 0) - rig.position.y) * (1 - Math.exp(-dt * 18));
-  rig.position.x += (-bobX * 0.6 - rig.position.x) * (1 - Math.exp(-dt * 18));
+  const dip = swapDip();
+  rig.position.y += (bobY * 0.5 + CAM.landX * 0.55 + vy + (VM.rise || 0) - dip * 0.34 - rig.position.y) * (1 - Math.exp(-dt * 18));
+  rig.position.x += (-bobX * 0.6 - CAM.yawV * 0.004 - rig.position.x) * (1 - Math.exp(-dt * 18));
   updateGlove(dt);
   updateRig(dt);
   updateSlashes(dt);
@@ -2400,7 +2658,24 @@ function updateCamera(dt) {
 
 // ---------- HUD update ----------
 let hudT = 0, grappleWasCd = false;
+const _lp = new THREE.Vector3(); let lockT = 0, lockCache = null;
+function updateLock(dt) {
+  const el = $("lock");
+  const g = player.grapple;
+  let tgt = null, held = false;
+  if (g?.enemy && !g.enemy.dead) { tgt = g.enemy; held = true; }
+  else if (player.grapMode === "sling" && player.ownsSword && !g && player.grappleCd <= 0) {
+    lockT -= dt; if (lockT <= 0) { lockT = 0.06; lockCache = slingTarget(); }
+    if (lockCache && !lockCache.e.dead) tgt = lockCache.e;
+  }
+  if (!tgt) { el.hidden = true; return; }
+  _lp.copy(enemyPos(tgt)); _lp.y += 0.3; _lp.project(camera);
+  if (_lp.z > 1) { el.hidden = true; return; }
+  el.hidden = false; el.classList.toggle("held", held);
+  el.style.transform = `translate(${(_lp.x * 0.5 + 0.5) * innerWidth}px, ${(-_lp.y * 0.5 + 0.5) * innerHeight}px) rotate(${held ? state.time * 240 : 45}deg) scale(${held ? 0.85 + (g.charge || 0) * 0.5 : 1})`;
+}
 function updateHud(dt) {
+  updateLock(dt);
   crossTimer -= dt; flashT -= dt;
   if (flashT <= 0) $("flash").hidden = true;
   $("cross").classList.toggle("hit", crossTimer > 0); if (crossTimer <= 0) $("cross").classList.remove("heavy");
@@ -2409,16 +2684,18 @@ function updateHud(dt) {
   const labels = $("lustlabels").children;
   for (let i = 0; i < 5; i++) labels[i].classList.toggle("on", player.lust >= i + 1 && i > 0);
   hudT -= dt; if (hudT > 0) return; hudT = 0.05;
-  const g = player.hasSword && !player.grapple && player.grappleCd <= 0 && grappleRay();
+  const g = player.ownsSword && !player.grapple && player.grappleCd <= 0 && grappleRay();
   $("cross").classList.toggle("grap", !!g);
   $("cross").classList.toggle("reach", !player.hasSword && !g && meleeTargets(PUNCH.reach, PUNCH.arc).length > 0);
   $("hpv").textContent = Math.max(0, Math.round(player.hp));
   $("hpbar").style.width = Math.max(0, player.hp) + "%";
   $("dashv").textContent = "▮".repeat(player.dash) + "▯".repeat(P.dashCharges - player.dash);
   const cd = Math.max(0, player.grappleCd);
-  $("grapv").textContent = !player.hasSword ? "LOCKED" : player.grapple ? "ATTACHED" : cd > 0 ? `${cd.toFixed(1)} S` : g ? `${g.toi.toFixed(0)} M` : "NO ANCHOR";
-  $("grapbar").firstChild.style.width = (player.hasSword ? (cd > 0 ? (1 - cd / P.grappleCooldown) * 100 : 100) : 0) + "%";
-  if (grappleWasCd && cd <= 0 && player.hasSword) sfx.grappleReady();
+  const mode = player.grapMode === "sling" ? "SLING · " : "";
+  $("grapv").textContent = !player.ownsSword ? "LOCKED" : mode + (player.grapple ? (player.grapple.enemy ? "LOCKED ON" : "ATTACHED") : cd > 0 ? `${cd.toFixed(1)} S` : g ? `${g.toi.toFixed(0)} M` : "NO ANCHOR");
+  $("grapv").style.color = player.grapMode === "sling" ? "var(--blood)" : "";
+  $("grapbar").firstChild.style.width = (player.ownsSword ? (cd > 0 ? (1 - cd / P.grappleCooldown) * 100 : 100) : 0) + "%";
+  if (grappleWasCd && cd <= 0 && player.ownsSword) sfx.grappleReady();
   grappleWasCd = cd > 0;
   $("spd").textContent = Math.hypot(player.vel.x, player.vel.z).toFixed(1);
   const nearSword = state.phase === 1.5 && camOrigin().distanceTo(new THREE.Vector3(0, 1.6, -26)) < 5;
@@ -2713,8 +2990,16 @@ function frame(now) {
   } else if (!state.started) {
     const t = now * 0.00004; camera.position.set(Math.cos(t) * 70, 22, Math.sin(t) * 70); camera.lookAt(0, 2, 0);
   }
+  // frame-time governor (runs before drawing, so a resize never shows an empty frame): keep a smoothed frame time and nudge the resolution to hold ~60 fps
+  PERF.ft += (dt * 1000 - PERF.ft) * 0.08; PERF.cool -= dt;
+  if (PERF.cool <= 0 && (running || booting)) {
+    let next = prNow;
+    if (PERF.ft > 19) next = Math.max(PR_MIN, prNow - 0.125); else if (PERF.ft < 13 && prNow < PR_MAX) next = Math.min(PR_MAX, prNow + 0.125);
+    if (next !== prNow) { prNow = next; renderer.setPixelRatio(prNow); renderer.setSize(innerWidth, innerHeight); const sz = rtSize(); rt.setSize(sz.x, sz.y); postMat.uniforms.uRes.value.copy(sz); PERF.cool = 1.2; } else PERF.cool = 0.5;
+  }
   sky.position.copy(camera.position);
   for (const a of alarmLights) a.l.intensity = a.base * (0.45 + 0.55 * Math.pow(0.5 + 0.5 * Math.sin(now * 0.0021 + a.ph), 2));
+  updateFlicker(dt); updateCity(now / 1000, dt);
   renderer.setRenderTarget(rt);
   renderer.clear();
   renderer.render(scene, camera);
@@ -2731,13 +3016,6 @@ function frame(now) {
   GL.base = hpLow + (state.tsMode === "stop" ? 0.22 : state.tsMode === "slow" ? 0.08 : 0);
   postMat.uniforms.uAmt.value = Math.min(1, GL.base + GL.spike + (GL.blip > 0 ? 0.18 : 0) + (state.started ? 0 : 0.06));
   postMat.uniforms.uTime.value = now / 1000;
-  // frame-time governor: keep a smoothed frame time and nudge the resolution to hold ~60 fps
-  PERF.ft += (dt * 1000 - PERF.ft) * 0.08; PERF.cool -= dt;
-  if (PERF.cool <= 0 && live) {
-    let next = prNow;
-    if (PERF.ft > 19) next = Math.max(PR_MIN, prNow - 0.125); else if (PERF.ft < 13 && prNow < PR_MAX) next = Math.min(PR_MAX, prNow + 0.125);
-    if (next !== prNow) { prNow = next; renderer.setPixelRatio(prNow); renderer.setSize(innerWidth, innerHeight); const sz = rtSize(); rt.setSize(sz.x, sz.y); PERF.cool = 1.2; } else PERF.cool = 0.5;
-  }
   renderer.render(postScene, postCam);
 }
 restart(true); player.dead = true;
