@@ -27,6 +27,7 @@ You can also turn on GitHub Pages (Settings → Pages → Deploy from branch →
 | Q | Slow time (needs 2 bloodlust bars, costs 1) |
 | X | Stop time (needs 3 bars, costs 1) |
 | V | Finisher on the enemy under your crosshair (needs 4+ bars, costs 1) |
+| F | Inspect your weapon |
 | R | Restart from the last checkpoint |
 
 ## Floor 01: Activation
@@ -49,6 +50,13 @@ You can also turn on GitHub Pages (Settings → Pages → Deploy from branch →
 - If an enemy is within lunge range, the punch carries you into them so it doesn't whiff.
 - The crosshair turns orange when a punch will land and flashes an X when it does.
 - Hits freeze the frame briefly, jolt the camera, flash the enemy white, and make them flinch and cancel their wind-up. Hooks and uppercuts (hits 3 and 4 of the combo) hit harder and send bodies flying.
+
+## Hands and weapons
+
+- Firing the grapple throws the hook with an open hand; the fist then closes around the cord, the arm points along the line, and the latch yanks it forward. The rope leaves from the fist, with a short cord back to the launcher on the forearm.
+- The sword sits in a real fist: thumb up, all four fingers wrapped around a grip that runs diagonally through the hand.
+- While swinging on the grapple with the sword, the hand does forward twirls and a flip-toss it catches again, blending smoothly in and out.
+- F inspects: the blade is turned in the light with an edge glow, or with fists the launcher is shown off with a finger roll and clench.
 
 ## Look and feel
 

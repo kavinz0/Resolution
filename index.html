@@ -239,6 +239,7 @@ body.cine .hud { opacity: 0 !important; }
       <span><kbd>Q</kbd>Slow time (2 bars)</span>
       <span><kbd>X</kbd>Stop time (3 bars)</span>
       <span><kbd>V</kbd>Finisher (4+ bars)</span>
+      <span><kbd>F</kbd>Inspect your weapon</span>
       <span><kbd>R</kbd>Restart from checkpoint</span>
     </div>
     <button class="go" id="go" type="button">Loading physics…</button>
@@ -455,6 +456,7 @@ const M = {
   amber: new THREE.MeshBasicMaterial({ color: 0xff8a3d }),
   cyan: new THREE.MeshBasicMaterial({ color: 0x4ff0ff }),
   glove: new THREE.MeshBasicMaterial({ color: 0x4ff0ff }),
+  edgeGlow: new THREE.MeshBasicMaterial({ color: 0x4ff0ff }),
   red: new THREE.MeshBasicMaterial({ color: 0xff3d5a }),
   rackLed: new THREE.MeshBasicMaterial({ color: 0x48ff9a }),
   screen: new THREE.MeshBasicMaterial({ color: 0x6fe0ff }),
@@ -792,7 +794,7 @@ function buildSwordMesh() {
   const es = new THREE.Shape();
   es.moveTo(0.014, 0.1); es.lineTo(0.025, 0.1); es.quadraticCurveTo(0.032, 0.75, 0.013, 1.1); es.quadraticCurveTo(0.006, 1.15, -0.003, 1.185); es.quadraticCurveTo(0.004, 1.12, 0.006, 1.08); es.quadraticCurveTo(0.022, 0.75, 0.014, 0.1);
   const edgeGeo = new THREE.ExtrudeGeometry(es, { depth: 0.016, bevelEnabled: false, curveSegments: 10 }); edgeGeo.translate(0, 0, -0.008);
-  const edge = new THREE.Mesh(edgeGeo, M.cyan); g.add(edge);
+  const edge = new THREE.Mesh(edgeGeo, M.edgeGlow); g.add(edge);
   const guard = new THREE.Mesh(rbox(0.19, 0.045, 0.06, 0.45), M.mullion); guard.position.y = 0.06; g.add(guard);
   const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.021, 0.24, 10), M.gun); grip.position.y = -0.07; g.add(grip);
   const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.027, 12, 8), M.mullion); pommel.position.y = -0.2; g.add(pommel);
@@ -1264,7 +1266,7 @@ function stepPlayer(dt) {
     player.lastGrapple = state.time;
     if (g.phase === "fly") {
       g.t += dt;
-      if (g.t >= g.dur) { g.phase = "attached"; g.L = dist; g.ramp = 0; sfx.grappleLatch(); shake = Math.max(shake, 0.08); }
+      if (g.t >= g.dur) { g.phase = "attached"; g.L = dist; g.ramp = 0; g.latchAt = state.time; sfx.grappleLatch(); shake = Math.max(shake, 0.08); }
     } else {
       g.ramp = Math.min(1, g.ramp + dt * 4);
       g.L = Math.max(1.6, g.L - 24 * dt * g.ramp);
@@ -1314,6 +1316,7 @@ function stepPlayer(dt) {
   if (player.sliding) slideSweep(vel);
 
   for (const code of ["KeyQ", "KeyX", "KeyV"]) if (pressed.has(code)) useAbility(code);
+  if (pressed.has("KeyF")) startInspect();
 
   player.body.setLinvel(vel, true);
   player.vel.copy(vel); player.grounded = grounded;
@@ -1565,7 +1568,13 @@ function buildArm(side) {
 const rig = new THREE.Group(); rig.scale.setScalar(0.82); vmCamera.add(rig);
 const armR = buildArm(1), armL = buildArm(-1);
 rig.add(armR.shoulder, armL.shoulder);
-const vmSword = buildSwordMesh(); vmSword.scale.setScalar(0.62); vmSword.position.set(0, 0, -0.07); vmSword.rotation.set(-0.55, 0, 0); armR.wrist.add(vmSword);
+// The sword sits in a fist: the grip runs diagonally through the curled fingers, the blade leaves on the thumb side,
+// and the hand rolls thumb-up while holding it. trickG is the pivot at the centre of the fist, used for twirls and tosses.
+const FIST = new THREE.Vector3(0, -0.036, -0.122);
+const SWORD_ROLL = -Math.PI / 2;
+const trickG = new THREE.Group(); trickG.position.copy(FIST); armR.wrist.add(trickG);
+const swordMount = new THREE.Group(); swordMount.quaternion.setFromEuler(new THREE.Euler(0, 0, Math.PI / 2)).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.55, 0, 0))); trickG.add(swordMount);
+const vmSword = buildSwordMesh(); vmSword.scale.setScalar(0.62); vmSword.position.set(0, 0.04, 0); swordMount.add(vmSword);
 function setViewModel() { vmSword.visible = !!player?.hasSword; }
 
 const REST_R = { p: [0.27, -0.33, -0.06], r: [0.02, 0.14, 0], el: 0.42, w: [-0.05, 0, 0], curl: 0.95 };
@@ -1581,7 +1590,7 @@ function applyPose(arm, p) {
   arm.shoulder.position.set(p.p[0], p.p[1], p.p[2]);
   arm.shoulder.rotation.set(p.r[0], p.r[1], p.r[2], "YXZ");
   arm.elbow.rotation.x = p.el;
-  arm.wrist.rotation.set(p.w[0], p.w[1], p.w[2]);
+  arm.wrist.rotation.set(p.w[0], p.w[1], p.w[2] + (arm === armR && vmSword.visible ? SWORD_ROLL : 0));
   for (const [f, f2] of arm.fingers) { f.rotation.x = -p.curl * 1.3; f2.rotation.x = -p.curl * 1.5; }
   arm.thumb.rotation.y = arm.side * p.curl * 0.9;
 }
@@ -1674,17 +1683,35 @@ function updateRig(dt) {
     if (A.arm === "L") snapL = true; else snapR = true;
     if (k >= 1) VM.attack = null;
   }
-  // grapple arm: punch the hook out, keep the arm on the line, yank back on release
+  // grapple arm: throw the hook with an open hand, then the fist closes around the cord and the arm
+  // points along it. On latch the line yanks the arm forward; on release the hand opens and reels it in.
   VM.grapFire = Math.max(0, VM.grapFire - dt * 4);
-  if (player.grapple) {
-    Object.assign(L, { p: [-0.24, -0.36, -0.08 - VM.grapFire * 0.1], r: [0.4 + VM.grapFire * 0.15, -0.08, 0], el: 0.15, w: [0, 0, 0.3], curl: 0.35 - VM.grapFire * 0.35 });
-    snapL = VM.grapFire > 0;
+  const g = player.grapple;
+  if (g) {
+    const d = g.point.clone().sub(camera.position).applyQuaternion(camera.quaternion.clone().invert()).normalize();
+    const yawA = THREE.MathUtils.clamp(Math.atan2(-d.x, -d.z), -0.9, 0.5), pitchA = THREE.MathUtils.clamp(Math.atan2(d.y, Math.hypot(d.x, d.z)), -0.5, 1.2);
+    const latched = g.phase === "attached";
+    const tug = latched ? Math.max(0, 1 - (state.time - (g.latchAt ?? state.time)) * 5) : 0;
+    const reel = latched ? Math.sin(state.time * 16) * 0.006 * g.ramp : 0;
+    Object.assign(L, {
+      p: [-0.2, -0.3 + pitchA * 0.05, -0.16 - tug * 0.07 + reel], r: [0.1 + pitchA * 0.75, yawA * 0.75 - 0.05, 0],
+      el: 0.1 + (latched ? 0.05 : 0), w: [-0.15, 0, 0.45],
+      curl: latched ? 1 : g.t < g.dur * 0.6 ? 0.05 : 0.6,
+    });
+    snapL = VM.grapFire > 0.5;
   } else if (hookFx.state === "retract") {
-    L.p[2] += 0.06; L.r[0] += 0.3; L.curl = 0.1;
+    L.p[2] += 0.04; L.r[0] += 0.25; L.curl = 0.25 + 0.5 * Math.min(1, hookFx.t / hookFx.dur);
   }
+  // sword tricks while swinging: forward twirls and a flip-toss caught back in the fist
+  updateTricks(dt, R, sword && g && g.phase === "attached" && !A && !player.blocking);
+  // inspect (F): bring the weapon up and turn it in the light
+  updateInspect(dt, R, L, sword);
+  if (sword && !VM.trick) R.curl = Math.max(R.curl, 0.97);
+  if (VM.debugR) Object.assign(R, VM.debugR); if (VM.debugL) Object.assign(L, VM.debugL);
   const kR = 1 - Math.exp(-dt * (snapR ? 60 : 13)), kL = 1 - Math.exp(-dt * (snapL ? 60 : 13));
   lerpPose(cur.R, R, kR); lerpPose(cur.L, L, kL);
   applyPose(armR, cur.R); applyPose(armL, cur.L);
+  if (VM.fingerWave >= 0) armL.fingers.forEach(([f, f2], i) => { const c = 0.15 + 0.85 * Math.max(0, Math.sin(VM.fingerWave * Math.PI * 4 - i * 0.8)); f.rotation.x = -c * 1.3; f2.rotation.x = -c * 1.5; });
   // the arms lag a little behind fast mouse turns
   let dy = yaw - VM.lastYaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
   const dp = pitch - VM.lastPitch; VM.lastYaw = yaw; VM.lastPitch = pitch;
@@ -1692,6 +1719,86 @@ function updateRig(dt) {
   VM.lagX += (THREE.MathUtils.clamp(dy / Math.max(dt, 1e-3) * 0.012, -0.1, 0.1) - VM.lagX) * k;
   VM.lagY += (THREE.MathUtils.clamp(dp / Math.max(dt, 1e-3) * 0.012, -0.08, 0.08) - VM.lagY) * k;
   rig.rotation.set(VM.lagY, VM.lagX, 0);
+}
+
+// ---------- sword tricks and inspect ----------
+const EDGE_BASE = new THREE.Color(0x4ff0ff), EDGE_HOT = new THREE.Color(0xf2ffff);
+const TRICK_POSE = { p: [0.2, -0.3, -0.06], r: [0.15, 0.5, 0], el: 0.5, w: [0, 0.6, 0], curl: 1 };
+const TRICKS = [{ kind: "twirl", dur: 0.95, dir: 1 }, { kind: "toss", dur: 1.15 }, { kind: "twirl", dur: 0.95, dir: -1 }];
+VM.trickN = 0; VM.trickWait = 0;
+const smooth = (x) => { x = Math.min(1, Math.max(0, x)); return x * x * x * (x * (x * 6 - 15) + 10); };
+function updateTricks(dt, R, allowed) {
+  if (!allowed) {
+    // put the blade back in the fist smoothly if a trick was interrupted
+    VM.trick = null; VM.trickWait = 0.35;
+    trickG.rotation.y *= Math.exp(-dt * 18); trickG.position.lerp(FIST, 1 - Math.exp(-dt * 18));
+    return;
+  }
+  if (!VM.trick) { VM.trickWait -= dt; if (VM.trickWait > 0) return; VM.trick = { ...TRICKS[VM.trickN++ % TRICKS.length], t: 0, caught: false }; }
+  const T = VM.trick; if (!VM.freeze) T.t += dt; const k = Math.min(1, T.t / T.dur);
+  // the arm lifts the blade out to the side so the trick reads, with a slow wrist circle underneath
+  const lift = smooth(Math.min(1, k * 5)) * smooth(Math.min(1, (1 - k) * 5));
+  Object.assign(R, keyPose([[0, R], [1, TRICK_POSE]], lift));
+  R.w[0] += Math.sin(k * Math.PI * 2) * 0.12 * lift; R.w[2] += Math.cos(k * Math.PI * 2) * 0.1 * lift;
+  if (T.kind === "twirl") {
+    // two forward spins around the palm; the fingers loosen into a cradle and close again
+    trickG.rotation.y = T.dir * smooth(k) * Math.PI * 4; trickG.position.copy(FIST);
+    R.curl = 1 - 0.55 * Math.sin(Math.min(1, k * 1.1) * Math.PI);
+    R.w[1] += Math.sin(k * Math.PI * 4) * 0.08;
+  } else {
+    // dip, flick it up end over end, open hand, catch, settle
+    const u = THREE.MathUtils.clamp((k - 0.18) / 0.55, 0, 1);
+    const h = 4 * 0.17 * u * (1 - u);
+    trickG.position.set(FIST.x - h, FIST.y + h * 0.25, FIST.z);
+    trickG.rotation.y = -smooth(u) * Math.PI * 2;
+    R.w[0] += k < 0.18 ? -0.35 * Math.sin(k / 0.18 * Math.PI) : 0;
+    R.curl = k < 0.16 ? 1 : k < 0.72 ? 0.12 : 1;
+    if (k >= 0.72 && !T.caught) { T.caught = true; sfx.clunk(); }
+    if (k > 0.72) { const s2 = Math.sin(Math.min(1, (k - 0.72) / 0.28) * Math.PI); R.p[1] -= 0.025 * s2; R.w[0] += 0.15 * s2; }
+  }
+  if (k >= 1) { VM.trick = null; VM.trickWait = 0.25 + Math.random() * 0.4; trickG.rotation.y = 0; trickG.position.copy(FIST); }
+}
+const lerpArr = (a, b, q) => a.map((v, i) => v + (b[i] - v) * q);
+function keyPose(keys, k) {
+  // keyframed pose with smooth (quintic) blends between keys
+  let i = 0; while (i < keys.length - 2 && k > keys[i + 1][0]) i++;
+  const [t0, A] = keys[i], [t1, B] = keys[i + 1]; const q = smooth((k - t0) / Math.max(1e-4, t1 - t0));
+  return { p: lerpArr(A.p, B.p, q), r: lerpArr(A.r, B.r, q), el: A.el + (B.el - A.el) * q, w: lerpArr(A.w, B.w, q), curl: A.curl + (B.curl - A.curl) * q };
+}
+const INSPECT_SWORD = [
+  [0, SWORD_REST],
+  [0.18, { p: [0.22, -0.32, -0.04], r: [0.2, 0.6, 0], el: 0.35, w: [0.1, 0, 1.4], curl: 1 }],
+  [0.42, { p: [0.22, -0.32, -0.05], r: [0.2, 0.6, 0], el: 0.35, w: [0.1, 0.7, 1.4], curl: 1 }],
+  [0.62, { p: [0.22, -0.31, -0.05], r: [0.2, 0.6, 0], el: 0.38, w: [0.7, 0, 1.4], curl: 1 }],
+  [0.82, { p: [0.2, -0.3, -0.06], r: [0.1, 0.35, 0], el: 0.7, w: [-0.9, 0, 0.3], curl: 1 }],
+  [1, SWORD_REST],
+];
+const INSPECT_FIST = [
+  [0, REST_L],
+  [0.2, { p: [-0.22, -0.36, 0], r: [0.35, -0.35, -1.3], el: 0.5, w: [0, 0, 0], curl: 0.3 }],
+  [0.5, { p: [-0.2, -0.33, -0.02], r: [0.25, -0.45, -0.9], el: 0.7, w: [0, 0, 0], curl: 0.3 }],
+  [0.75, { p: [-0.2, -0.33, -0.02], r: [0.25, -0.45, 0.9], el: 0.7, w: [0, 0, 0], curl: 1 }],
+  [1, REST_L],
+];
+function startInspect() { if (VM.inspect || VM.attack || player.grapple) return; VM.inspect = { t: 0, dur: player.hasSword ? 2.6 : 2.4, cues: new Set() }; sfx.servo(); }
+function updateInspect(dt, R, L, sword) {
+  VM.fingerWave = -1;
+  const I = VM.inspect; if (!I) { M.edgeGlow.color.copy(EDGE_BASE); return; }
+  if (VM.attack || player.grapple || player.blocking) { VM.inspect = null; return; }
+  if (!VM.freeze) I.t += dt; const k = Math.min(1, I.t / I.dur);
+  if (sword) {
+    Object.assign(R, keyPose(INSPECT_SWORD, k));
+    // a light sweep runs up the edge while the blade is shown
+    const sweep = Math.max(0, Math.sin(THREE.MathUtils.clamp((k - 0.15) / 0.5, 0, 1) * Math.PI));
+    M.edgeGlow.color.copy(EDGE_BASE).lerp(EDGE_HOT, sweep);
+    if (k > 0.16 && !I.cues.has("ring")) { I.cues.add("ring"); tone("sine", 2600, 2550, 0.9, 0.04); tone("sine", 3900, 3880, 0.6, 0.02); }
+  } else {
+    Object.assign(L, keyPose(INSPECT_FIST, k));
+    if (k > 0.28 && k < 0.62) VM.fingerWave = (k - 0.28) / 0.34;
+    if (k > 0.24 && !I.cues.has("blink")) { I.cues.add("blink"); VM.gloveBlink = 1; tone("square", 1500, 1600, 0.05, 0.03); }
+    if (k > 0.7 && !I.cues.has("clench")) { I.cues.add("clench"); sfx.clunk(); }
+  }
+  if (k >= 1) VM.inspect = null;
 }
 
 // ---------- sword trail (a brush stroke that follows the blade), speed lines, impact stars ----------
@@ -1847,7 +1954,25 @@ const hookMesh = new THREE.Group(); scene.add(hookMesh); hookMesh.visible = fals
 }
 const ropeMat = toon(0x4ff0ff, { emissive: 0x1a6070 });
 const ropeMesh = new THREE.Mesh(new THREE.BufferGeometry(), ropeMat); ropeMesh.visible = false; ropeMesh.frustumCulled = false; scene.add(ropeMesh);
-function wristWorld() { return new THREE.Vector3(-0.2, -0.2, -0.42).applyMatrix4(camera.matrixWorld); }
+// The rope starts at the left fist. The fist lives in the arm pass (its own camera and FOV), so its screen position
+// is projected through the arm camera and unprojected through the world camera at the same distance.
+const _pv = new THREE.Vector3(), _ndc = new THREE.Vector3();
+function wristWorld() {
+  vmCamera.updateMatrixWorld(true);
+  armL.wrist.localToWorld(_pv.copy(FIST).setX(0.005));
+  const dist = _pv.length();
+  _ndc.copy(_pv).project(vmCamera); _ndc.z = 0.5; _ndc.unproject(camera);
+  return _ndc.sub(camera.position).normalize().multiplyScalar(dist * 0.95).add(camera.position);
+}
+// short cord in the arm pass, from the launcher barrel to the fist
+const vmCord = new THREE.Mesh(new THREE.CylinderGeometry(0.0055, 0.0055, 1, 6), ropeMat); vmCord.visible = false; vmScene.add(vmCord);
+const _ca = new THREE.Vector3(), _cb = new THREE.Vector3();
+function updateVmCord(show) {
+  vmCord.visible = show; if (!show) return;
+  armL.elbow.localToWorld(_ca.set(0, 0.085, -0.3)); armL.wrist.localToWorld(_cb.copy(FIST).setX(0.005));
+  const len = _ca.distanceTo(_cb); vmCord.position.copy(_ca).add(_cb).multiplyScalar(0.5); vmCord.scale.set(1, len, 1);
+  vmCord.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), _cb.clone().sub(_ca).normalize());
+}
 function hookHead() {
   const w = wristWorld(); const g = player.grapple;
   if (g) return g.phase === "fly" ? w.lerp(g.point, easeOut(g.t / g.dur)) : g.point.clone();
@@ -1869,7 +1994,7 @@ function updateRope(dt) {
   if (g) amp = g.phase === "fly" ? 0.3 * (1 - g.t / g.dur) : Math.min(0.45, Math.max(0, g.L - w.distanceTo(g.point) * 0.98) * 0.12);
   else if (hookFx.state === "retract") { hookFx.t += dt; amp = 0.35 * Math.sin(Math.min(1, hookFx.t / hookFx.dur) * Math.PI); }
   const show = !!g || hookFx.state === "retract";
-  ropeMesh.visible = hookMesh.visible = show;
+  ropeMesh.visible = hookMesh.visible = show; updateVmCord(show);
   if (!show) return;
   const head = hookHead();
   if (!g && hookFx.t >= hookFx.dur) { hookFx.state = "idle"; VM.gloveBlink = 1; ropeMesh.visible = hookMesh.visible = false; return; }
