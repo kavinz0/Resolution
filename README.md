@@ -95,3 +95,16 @@ See [docs/story-and-plan.md](docs/story-and-plan.md).
 - Night: a black sky with a blood moon and a red horizon, thick dark fog, cold work lights, and red emergency lights that slowly breathe.
 - The arms, bots, guns, racks and window frames are polished metal with brushed texture, reflecting a baked map of neon strips.
 - The sword edge pulses neon with a sharp flicker, and every slash throws small sparks off the blade.
+
+## Movement and weapons
+
+- Hold Shift after the dash to sprint (about 38% faster). The arms pump in time with the stride, the body leans, and the camera bobs harder and widens.
+- 1 / 2 or the mouse wheel switches between fists and the sword once you own it. The grapple works with either.
+- G switches the grapple between swing and sling. Sling locks onto an enemy in your aim cone (a red marker shows it), holding E charges the shot, and letting go fires you at the target. The shot homes in on a locked enemy and hits it, killing weaker ones outright.
+
+## City and lighting
+
+- The skyline is instanced and unlit: 120 lit towers, neon bands, spires with blinking beacons, holo signs, circling sky traffic and searchlights, for a handful of draw calls.
+- The work lights are brighter, two of them are failing tubes that stutter, and the red emergency light breathes. The light count never changes at runtime.
+- The floor is glossy tile that reflects the lights and the neon environment. The walls and ceiling are tiled panels with LED skirting strips.
+- The resolution governor runs before the frame is drawn, so a resize never flashes an empty frame.
