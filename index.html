@@ -1726,8 +1726,8 @@ function spawnRagdoll(e, hitPoint, dir, force) {
   for (const p of rd.parts) { const t = p.body.translation(); const d = hitPoint.distanceToSquared(new THREE.Vector3(t.x, t.y, t.z)); if (d < bd) { bd = d; best = p; } }
   best.body.applyImpulseAtPoint({ x: dir.x * force, y: dir.y * force + force * 0.25, z: dir.z * force }, hitPoint, true);
   parts.torso.body.applyImpulse({ x: dir.x * force * 0.6, y: force * 0.15, z: dir.z * force * 0.6 }, true);
-  ragdolls.push(rd);
-  while (ragdolls.length > 7) freezeRagdoll(ragdolls[0]);
+  ragdolls.push(rd); e.rd = rd;
+  while (ragdolls.length > 7) freezeRagdoll(ragdolls.find((r) => r !== rd && !r.fin && !(state.fin && r === state.fin.rd)) || ragdolls[0]);
 }
 // keep the body where it lies but drop its physics, so corpses cost nothing
 function freezeRagdoll(rd) {
@@ -2832,7 +2832,7 @@ function applyFinPose(J, p) {
   if (J.fR) u7Hands(J, p);
 }
 function canFinish(e, kind) {
-  return state.mode === "floor" && state.phase === 2 && !state.fin && !player.dead && player.ownsSword && kind !== "finisher" && alive().length === 1 && alive()[0] === e;
+  return state.mode === "floor" && (state.phase === 1 || state.phase === 2) && !state.fin && !player.dead && kind !== "finisher" && alive().length === 1 && alive()[0] === e;
 }
 function startFinisher(e) {
   if (fin2Start(e)) return;
@@ -6474,7 +6474,7 @@ function lanceWorldStep(dtw) {
         hitstop(0.09); impactFrame(70); sfx.lanceHit(); shake = Math.max(shake, 0.4);
         emitWorldSparks(at, d.clone().negate(), 30, 1, 9); emitWorldSparks(at, d, 24, 2, 12); worldSmoke(at, 3, 0.6, 0x9aa8b8, 0.4, 0.3);
         const before = ragdolls.length; damageEnemy(e, LN.dmg, at, d.clone(), "lance");
-        if (e.dead && ragdolls.length > before) { W.carry = ragdolls[ragdolls.length - 1]; W.carried = 0; }
+        if (e.dead && e.rd && ragdolls.includes(e.rd)) { W.carry = e.rd; W.carried = 0; }
         W.vel.multiplyScalar(0.82); hit = null; break;
       }
       // a wall: bury the head and crack it wide open
@@ -6761,6 +6761,7 @@ function wireCut(e, dir) {
   hitstop(0.05); impactFrame(40); shake = Math.max(shake, 0.25);
   emitWorldSparks(at, dir, 40, 2, 10); emitWorldSparks(at, dir.clone().negate(), 16, 0, 6); worldSmoke(at, 2, 0.4, 0xff9fb8, 0.3, 0.3);
   if (state.mode === "test") popDamage(at, 99, true);
+  if (canFinish(e, "wire")) { e.hp = 0; startFinisher(e); return; }
   e.killKind = "wire"; sliceEnemy(e, dir, "wire"); sfx.wireCut();
 }
 function wireYank() {
@@ -6951,8 +6952,9 @@ function gauntletGrab() {
   let rd = P.rd;
   if (P.e) {
     const e = P.e; const d = P.p.clone().sub(camOrigin()).normalize();
+    if (canFinish(e, "gauntlet")) { e.hp = 0; W.grabT = state.time; startFinisher(e); return; }
     e.killKind = "gauntlet"; const before = ragdolls.length; killEnemy(e, P.p, d.clone().negate(), 6);
-    if (ragdolls.length > before) rd = ragdolls[ragdolls.length - 1];
+    if (e.rd && ragdolls.includes(e.rd)) rd = e.rd;
     if (state.mode === "test") popDamage(P.p, 99, true);
   }
   if (!rd) return;
@@ -7019,7 +7021,7 @@ function gauntletWorld(dtw) {
     if (!ragdolls.includes(T.rd) || T.t > 2) { W.thrown.splice(i, 1); continue; }
     const tr = T.rd.torso.translation(); const p = _gp.set(tr.x, tr.y, tr.z); const lv = T.rd.torso.linvel(); const sp = Math.hypot(lv.x, lv.y, lv.z);
     // bowling: anyone it passes through goes down with it
-    if (sp > 10) for (const e of alive()) { if (T.hit.has(e)) continue; const ep = enemyPos(e); ep.y = e.floorY + 1; if (ep.distanceTo(p) < 1.2) { T.hit.add(e); const d = _gv.set(lv.x, 0, lv.z).normalize().clone(); e.killKind = "gauntlet"; killEnemy(e, ep, d, 40); ev("gauntletBowl", {}); hitstop(0.06); impactFrame(40); emitWorldSparks(ep, d, 30, 3, 9); sfx.gauntletSlam(); shake = Math.max(shake, 0.3); } }
+    if (sp > 10) for (const e of alive()) { if (T.hit.has(e)) continue; const ep = enemyPos(e); ep.y = e.floorY + 1; if (ep.distanceTo(p) < 1.2) { T.hit.add(e); if (canFinish(e, "gauntlet")) { e.hp = 0; startFinisher(e); break; } const d = _gv.set(lv.x, 0, lv.z).normalize().clone(); e.killKind = "gauntlet"; killEnemy(e, ep, d, 40); ev("gauntletBowl", {}); hitstop(0.06); impactFrame(40); emitWorldSparks(ep, d, 30, 3, 9); sfx.gauntletSlam(); shake = Math.max(shake, 0.3); } }
     // glass and breakable walls on the way give
     if (sp > 8) {
       const d = _gv.set(lv.x, lv.y, lv.z).divideScalar(sp); const R = world.castRayAndGetNormal(new RAPIER.Ray(p, d), sp * dtw + 0.7, true, undefined, GROUPS.playerShot, player.col, undefined, (c) => !T.rd.parts.some((q) => q.col.handle === c.handle));
@@ -7468,7 +7470,7 @@ function pickFinisher(e) {
     wire: () => { const P = propNear(p, ["rack"], 4); return P && { prop: P }; },
     desk: () => { const P = propNear(p, ["desk", "crate"], 3.2); return P && { prop: P }; },
     rail: () => { const L = ledgeNear(p, 4); return L && { ledge: L }; },
-    pin: () => { const W = wallNear(p, 3.4); return W && { wall: W }; },
+    pin: () => { if (!player.ownsSword) return null; const W = wallNear(p, 3.4); return W && { wall: W }; },
     disc: () => (player.ownsDisc ? {} : null),
   };
   if (want && tries[want]) { const c = tries[want](); if (c) return { kind: want, ctx: c }; if (want !== "sword") return null; }
@@ -7476,7 +7478,7 @@ function pickFinisher(e) {
   for (const k of ["glass", "door", "wire", "desk", "rail", "pin"]) { const c = tries[k](); if (c) return { kind: k, ctx: c }; }
   // open floor: the disc when you are far away, or for every other open-floor kill
   const far = playerPos().distanceTo(p) > 9;
-  if (player.ownsDisc && (far || !player.ownsSword || (FX2.lastKind !== "disc" && Math.random() < 0.5))) return { kind: "disc", ctx: {} };
+  if ((player.ownsDisc || !player.ownsSword) && (far || !player.ownsSword || (FX2.lastKind !== "disc" && Math.random() < 0.5))) return { kind: "disc", ctx: {} };
   return null;
 }
 // ---------- the rig's extra poses (same format as the sword finisher's) ----------
@@ -7531,7 +7533,7 @@ function holdE(F, pos, faceYaw, lean = 0, roll = 0) {
 function eDie(F, at, dir, force) {
   const e = F.e; if (e.dead) return F.rd; e.killKind = "finisher"; e.finishing = false;
   const before = ragdolls.length; killEnemy(e, at, dir, force);
-  F.rd = ragdolls.length > before ? ragdolls[ragdolls.length - 1] : null;
+  F.rd = e.rd && ragdolls.includes(e.rd) ? e.rd : null;
   if (F.rd) F.rd.fin = true;
   return F.rd;
 }
@@ -7752,7 +7754,7 @@ FIN2.desk = (F) => {
     [1.3, () => { sfx.dash(); }],
     [1.6, () => {
       const at = P.c.clone().setY(top); headHit = ePt(F, EP.head);
-      const rd = eDie(F, headHit, new THREE.Vector3(0, -1, 0), 2);
+      const rd = eDie(F, headHit, new THREE.Vector3(0, -1, 0), 2); F.headAt = headHit.clone();
       if (rd) { rdVel(rd, new THREE.Vector3(0, -2.5, 0).addScaledVector(toE, -0.3), 1); for (const p of rd.parts) p.body.setAngularDamping(4); F.headAt = headHit.clone(); const q = rdQ(rd, "head"); F.gH = gripPart(F, rd, "head", () => ({ p: F.headAt, q })); }
       breakDesk(P, headHit.clone().setY(top), toE);
       impactFrame(110); glitch(0.7); F.shake = 0.9; sfx.finSlash(); noise(0.9, "lowpass", 420, 1, 0.8, 40); tone("sawtooth", 120, 35, 0.5, 0.25); sfx.slam?.();
@@ -8331,7 +8333,7 @@ function fin2Start(e) {
   const F = { kind: pick.kind, ctx: pick.ctx, e, t: 0, acc: 0, ground: new THREE.Vector3(ep.x, e.floorY, ep.z), camP: camera.position.clone(), camQ: camera.quaternion.clone(), cues: new Set(), shake: 0, fov: camera.fov, sliced: false, grips: [] };
   FIN2[pick.kind](F); F.cueList = F.cues; F.cues = new Set();
   state.fin = F; FX2.lastKind = pick.kind;
-  finRig.root.visible = true; finRig.sword.visible = true; finGun.visible = false; finLine.visible = false; finDisc.visible = false;
+  finRig.root.visible = true; finRig.sword.visible = player.ownsSword || pick.kind === "pin"; finGun.visible = false; finLine.visible = false; finDisc.visible = false;
   F.root(0, finRig); applyFinPose(finRig, pose2(F.keys, 0));
   document.body.classList.add("fin"); sfx.finCharge(); glitch(0.4);
   ev("finisher", { kind: pick.kind });
