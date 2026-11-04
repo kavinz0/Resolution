@@ -401,7 +401,7 @@ body.nosubs #subs { display: none; }
 <div class="hud" id="flash" hidden></div>
 <div class="hud" id="prompt" hidden></div>
 <div class="hud" id="objective"><span class="lbl" id="objl">Objective</span><b id="objv">—</b><ol id="steps"></ol>
-  <div id="legend" hidden><span><kbd>N</kbd>finisher</span><span><kbd>J</kbd>live hostiles</span><span><kbd>L</kbd>reset dummies, boxes, stims</span><span><kbd>H</kbd>god mode</span><span><kbd>K</kbd>combo book</span></div>
+  <div id="legend" hidden><span><kbd>N</kbd>finisher</span><span><kbd>J</kbd>live hostiles</span><span><kbd>L</kbd>reset dummies, boxes, stims</span><span><kbd>H</kbd>god mode</span><span><kbd>K</kbd>combo book</span><span><kbd>B</kbd>boss pen</span><span><kbd>P</kbd>skip boss phase</span><span><kbd>O</kbd>clear pen</span></div>
 </div>
 <div class="hud" id="targets">Hostiles<b id="tcount">0</b></div>
 <div class="hud" id="vitals">
@@ -1496,7 +1496,7 @@ function spawnEnemy(type, x, y, z) {
     strafe: Math.random() < 0.5 ? 1 : -1, walk: 0, vel: new THREE.Vector3(), knock: new THREE.Vector3() };
   enemySetup(e); enemies.push(e); enemyByHandle.set(col.handle, e);
 }
-const alive = () => enemies.filter((e) => !e.dead && !e.T.civ);
+const alive = () => enemies.filter((e) => !e.dead && !e.T.civ && !e.T.part && !e.yielded);
 function enemyPos(e) { const t = e.body.translation(); return new THREE.Vector3(t.x, t.y, t.z); }
 function eyeOf(e) { const t = e.body.translation(); return new THREE.Vector3(t.x, t.y + (e.T?.eye ?? 0.7), t.z); }
 function canSee(e, target) {
@@ -1512,6 +1512,7 @@ function updateEnemies(dt) {
   const pp = playerPos(); const head = pp.clone().add(new THREE.Vector3(0, P.eye, 0));
   for (const e of enemies) {
     if (e.dead) continue;
+    if (e.T.boss || e.T.part) { if (e.T.boss) bossThink(e, dt); continue; }
     const t = e.body.translation();
     const toP = new THREE.Vector3(pp.x - t.x, 0, pp.z - t.z); const dist = toP.length();
     const sees = !e.dummy && dist < 40 && Math.abs(pp.y - t.y) < (e.T.vsee || 6) && canSee(e, head);
@@ -1655,8 +1656,9 @@ function updateBolts(dt) {
       else if (!b.friendly && h === player.col.handle) {
         if (player.blocking && player.hasSword && state.time - player.blockStart <= P.parrySword) { deflect(b); continue; }
         const T = b.owner?.T ?? TYPES.gunman;
-        if (player.blocking) { sfx.block(); damagePlayer(Math.round(T.dmg * 0.4), { T }, true); }
-        else damagePlayer(T.dmg, { T });
+        const bd = b.dmg ?? T.dmg;
+        if (player.blocking) { sfx.block(); damagePlayer(Math.round(bd * 0.4), { T }, true); }
+        else damagePlayer(bd, { T });
         done = true;
       } else if (b.friendly && enemyByHandle.has(h)) { const de = enemyByHandle.get(h); damageEnemy(de, 6, at, dir, "deflect"); ev("deflectHit", { e: de }); done = true; }
       else if (ragByHandle.has(h)) { done = true; }
@@ -1678,6 +1680,7 @@ function deflect(b) {
 
 function damageEnemy(e, dmg, point, dir, kind) {
   if (e.dead || e.finishing) return;
+  if (e.T.boss || e.T.part) { bossHit(e, dmg, point, dir, kind); return; }
   if (shieldBlocks(e, point, dir, kind)) return;
   e.hp -= dmg; e.alert = !e.dummy;
   if (state.mode === "test") popDamage(point, dmg, e.hp <= 0);
@@ -2053,7 +2056,7 @@ function stepPlayer(dt) {
   player.body.setLinvel(vel, true);
   player.vel.copy(vel); player.grounded = grounded;
 
-  if (state.time - player.lastHurt > 2.5 && player.hp < 100) player.hp = Math.min(100, player.hp + 30 * dt);
+  if (state.time - player.lastHurt > (BOSSES.active && !BOSSES.active.dead ? 4 : 2.5) && player.hp < 100) player.hp = Math.min(100, player.hp + 30 * dt);
   if (player.body.translation().y < -25) killPlayer(`Chassis lost. You fell from Floor ${String(state.mode === "floor" ? state.floor || 1 : 1).padStart(2, "0")} and kept going.`);
 }
 function accelerate(h, wish, maxSpeed, accel, dt) {
@@ -2373,9 +2376,10 @@ function updateTest(dt) {
   for (let i = TEST.respawn.length - 1; i >= 0; i--) { const r = TEST.respawn[i]; r.t -= dt; if (r.t <= 0) { TEST.respawn.splice(i, 1); spawnDummy(r.type, r.x, r.z, r.y || 0); updateCount(); } }
   if (pressed.has("KeyL")) { for (const r of TEST.respawn) r.t = 0; for (const b of STIM.boxes) if (b.open) b.respawn = 0.01; player.stims = 3; flash("Dummies, boxes and stims reset", "var(--amber)"); }
   if (pressed.has("KeyN") && player.ownsSword) {
-    const pp = playerPos(); const tgt = finisherTarget() || alive().sort((a, b) => enemyPos(a).distanceTo(pp) - enemyPos(b).distanceTo(pp))[0];
+    const pp = playerPos(); const tgt = finisherTarget() || alive().filter((x) => !x.T.boss).sort((a, b) => enemyPos(a).distanceTo(pp) - enemyPos(b).distanceTo(pp))[0];
     if (tgt) startFinisher(tgt); else flash("No target", "var(--dim)");
   }
+  bossPenKeys();
   if (pressed.has("KeyK")) { document.exitPointerLock?.(); setTimeout(openBook, 60); }
   if (pressed.has("KeyH")) { player.god = !player.god; flash(player.god ? "God mode on" : "God mode off", "var(--amber)"); }
   if (pressed.has("KeyJ")) {
@@ -6784,6 +6788,7 @@ function wireCut(e, dir) {
   hitstop(0.05); impactFrame(40); shake = Math.max(shake, 0.25);
   emitWorldSparks(at, dir, 40, 2, 10); emitWorldSparks(at, dir.clone().negate(), 16, 0, 6); worldSmoke(at, 2, 0.4, 0xff9fb8, 0.3, 0.3);
   if (state.mode === "test") popDamage(at, 99, true);
+  if (e.T.boss || e.T.part) { damageEnemy(e, 4, at, dir, "wire"); return; }
   if (canFinish(e, "wire")) { e.hp = 0; startFinisher(e); return; }
   e.killKind = "wire"; if (e.T.die) { killEnemy(e, at, dir, 26); return; } sliceEnemy(e, dir, "wire"); sfx.wireCut();
 }
@@ -6976,6 +6981,7 @@ function gauntletGrab() {
   if (P.e) {
     const e = P.e; const d = P.p.clone().sub(camOrigin()).normalize();
     if (canFinish(e, "gauntlet")) { e.hp = 0; W.grabT = state.time; startFinisher(e); return; }
+    if (e.T.boss || e.T.part) { W.grabT = state.time; damageEnemy(e, 10, P.p, d, "gauntlet"); return; }
     e.killKind = "gauntlet"; const before = ragdolls.length; killEnemy(e, P.p, d.clone().negate(), 6);
     if (e.rd && ragdolls.includes(e.rd)) rd = e.rd;
     if (state.mode === "test") popDamage(P.p, 99, true);
@@ -7007,6 +7013,7 @@ function gauntletPull() {
   for (const e of alive()) {
     const p = enemyPos(e); const v = p.clone().sub(o); v.y += e.floorY + 1 - o.y; const L = v.length(); if (L > GT.pullR || L < 1.2) continue;
     if (v.dot(d) / L < Math.cos(GT.pullCone)) continue;
+    if (e.T.boss || e.T.part) { bossPull(e); n++; continue; }
     const pull = v.clone().setY(0).normalize().multiplyScalar(-Math.min(14, 4 + L * 0.9));
     e.knock.add(pull); e.stun = Math.max(e.stun || 0, 1.3); e.alert = !e.dummy; flashEnemy(e); n++;
     const ep = p.clone().setY(e.floorY + 1.1); emitWorldSparks(ep, pull.clone().normalize(), 14, 3, 6);
@@ -7044,7 +7051,7 @@ function gauntletWorld(dtw) {
     if (!ragdolls.includes(T.rd) || T.t > 2) { W.thrown.splice(i, 1); continue; }
     const tr = T.rd.torso.translation(); const p = _gp.set(tr.x, tr.y, tr.z); const lv = T.rd.torso.linvel(); const sp = Math.hypot(lv.x, lv.y, lv.z);
     // bowling: anyone it passes through goes down with it
-    if (sp > 10) for (const e of alive()) { if (T.hit.has(e)) continue; const ep = enemyPos(e); ep.y = e.floorY + 1; if (ep.distanceTo(p) < 1.2) { T.hit.add(e); if (canFinish(e, "gauntlet")) { e.hp = 0; startFinisher(e); break; } const d = _gv.set(lv.x, 0, lv.z).normalize().clone(); e.killKind = "gauntlet"; killEnemy(e, ep, d, 40); ev("gauntletBowl", {}); hitstop(0.06); impactFrame(40); emitWorldSparks(ep, d, 30, 3, 9); sfx.gauntletSlam(); shake = Math.max(shake, 0.3); } }
+    if (sp > 10) for (const e of alive()) { if (T.hit.has(e)) continue; const ep = enemyPos(e); ep.y = e.floorY + 1; if (ep.distanceTo(p) < 1.2) { T.hit.add(e); if (e.T.boss || e.T.part) { damageEnemy(e, 10, ep, _gv.set(lv.x, 0, lv.z).normalize().clone(), "gauntlet"); continue; } if (canFinish(e, "gauntlet")) { e.hp = 0; startFinisher(e); break; } const d = _gv.set(lv.x, 0, lv.z).normalize().clone(); e.killKind = "gauntlet"; killEnemy(e, ep, d, 40); ev("gauntletBowl", {}); hitstop(0.06); impactFrame(40); emitWorldSparks(ep, d, 30, 3, 9); sfx.gauntletSlam(); shake = Math.max(shake, 0.3); } }
     // glass and breakable walls on the way give
     if (sp > 8) {
       const d = _gv.set(lv.x, lv.y, lv.z).divideScalar(sp); const R = world.castRayAndGetNormal(new RAPIER.Ray(p, d), sp * dtw + 0.7, true, undefined, GROUPS.playerShot, player.col, undefined, (c) => !T.rd.parts.some((q) => q.col.handle === c.handle));
@@ -8346,9 +8353,9 @@ FIN2.disc = (F) => {
   slowScene(F, 1.35);
 };
 // ---------- driver ----------
-function fin2Start(e) {
+function fin2Start(e, forcePick) {
   if (!finRig) finRig = buildFinRig(); finProps();
-  const pick = pickFinisher(e); if (!pick) return false;
+  const pick = forcePick || pickFinisher(e); if (!pick) return false;
   const ep = enemyPos(e);
   e.finishing = true; e.stun = 99; e.vel.set(0, 0, 0); e.knock.set(0, 0, 0);
   endFocus(); if (player.grapple) releaseGrapple(); player.sling = null; hookFx.state = "idle"; VM.attack = null; VM.inspect = null; cancelGunAnim(); VM.gunSpin = null; try { arsCancel(); } catch {}
@@ -9477,6 +9484,7 @@ function lvSpawnEnemy(s) {
 // ================= testing ground: the new floor pieces, in a yard south of the dummy rows =================
 function lvReset() {
   Object.assign(LV, { F: null, n: 0, ox: 0, oz: 0, spawns: [], cps: [], lifts: [], shutters: [], pads: [], movers: [], fixtures: [], darks: [], frags: [], walk: [], trig: [], anchors: [], extra: [], flag: {}, t: 0, nextId: 0, cleared: false, shaft: null, alarmT: 0, exitL: null, arriveL: null, ride: null });
+  if (typeof bossReset === "function") bossReset();
 }
 function lvTestYard() {
   // a strip of the new floor finish so the tiles, panels and desks can be seen side by side
@@ -9492,6 +9500,7 @@ function lvTestYard() {
   lvPad(22, 46, 0, 12, 1.4, "fan");
   lvPad(28, 46, 0, 8.6, 1.4, "pad"); lvSlab(26, 50, 31, 55, 8.6, LV_FLOORMAT.steel(), 0.3); lvEdgeRails(26, 50, 31, 55, 8.6, "nse");
   lvSlider(-14, 54, 1.2, 2.4, -18, -8, 0.7, 0);
+  bossPenBuild();
   lvFlushPanels();
 }
 const TEST_NEW = [["shield", -20, 44], ["drone", -12, 44, 1.6], ["turret", -4, 48, 3.0], ["worker", 4, 44]];
@@ -9628,11 +9637,1184 @@ function enStep(dt) {
       if (L.visible) { const len = Math.min(40, o.distanceTo(head)); L.scale.z = len; L.position.z = 0.72 + len / 2 - 0.5; L.material.opacity = e.tele > 0 ? 0.95 : 0.35; }
       if (!e.alert && !e.dummy) { e.group.rotation.y += dt * 0.6; } // sweep while idle
     }
-    if (!e.blob && !e.T.flying && !e.T.fixed) { const b = new THREE.Mesh(BLOB_GEO, M.blob); b.position.y = 0.025; b.renderOrder = 1; e.group.add(b); e.blob = b; }
+    if (!e.blob && !e.T.flying && !e.T.fixed && !e.T.part && !e.T.noBlob) { const b = new THREE.Mesh(BLOB_GEO, M.blob); b.position.y = 0.025; b.renderOrder = 1; e.group.add(b); e.blob = b; }
   }
 }
 // enemy tick hooks the shared update can call for a kind
-function enemySetup(e) { if (e.T.shield) shieldSetup(e); if (e.T.flying) { e.floorY = Math.max(e.floorY, 1.2); e.ceil = state.mode === "floor" ? 60 : 30; } if (e.T.civ) { e.alert = false; } }
+function enemySetup(e) { if (e.T.boss) bossSetup(e); if (e.T.shield) shieldSetup(e); if (e.T.flying) { e.floorY = Math.max(e.floorY, 1.2); e.ceil = state.mode === "floor" ? 60 : 30; } if (e.T.civ) { e.alert = false; } }
+
+// ================= bosses: the shared framework (phases, tells, the bar, parts that move with a body) =================
+// A boss is an enemy record with T.boss. It is skipped by the shared enemy AI and runs its own think(); every hit goes
+// through bossHit() instead of the usual damage, so weak points, shields and phase gates live in one place. Parts
+// (Corona's bays, Bulwark's plates and core) are enemy records with T.part that the boss moves each step, so every
+// weapon in the game can already hit them.
+const BOSSES = { list: [], active: null, queue: [], fx: [], spared: false };
+function bossReset() {
+  for (const f of BOSSES.fx) f.kill?.();
+  BOSSES.list = []; BOSSES.active = null; BOSSES.queue = []; BOSSES.fx = []; bossBarHide(); $("bossflash")?.classList.remove("on");
+}
+// ---------- the bar ----------
+function bossBarEl() {
+  let el = $("bossbar"); if (el) return el;
+  el = document.createElement("div"); el.id = "bossbar"; el.innerHTML = `<div class="nm"><b></b><span></span></div><div class="tr"><i class="fl"></i><i class="gh"></i></div>`;
+  document.body.appendChild(el);
+  const st = document.createElement("style");
+  st.textContent = `#bossbar{position:fixed;left:50%;top:22px;transform:translate(-50%,-8px);width:min(560px,70vw);opacity:0;transition:opacity .4s,transform .4s;pointer-events:none;z-index:12;font-family:'Chakra Petch',sans-serif}
+#bossbar.on{opacity:1;transform:translate(-50%,0)}#bossbar .nm{display:flex;justify-content:space-between;align-items:baseline;color:#e9f3ff;font-size:13px;letter-spacing:.24em;text-transform:uppercase;margin-bottom:5px}
+#bossbar .nm span{font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:.18em;color:#ff8a3d}#bossbar .tr{position:relative;height:5px;background:rgba(255,255,255,.1);overflow:hidden}
+#bossbar .fl,#bossbar .gh{position:absolute;left:0;top:0;bottom:0;width:100%;transform-origin:left;transition:transform .12s}#bossbar .fl{background:#ff3d5a;z-index:2}#bossbar .gh{background:rgba(255,220,200,.6);transition:transform .9s .25s}
+#bossbar .nt{position:absolute;top:-2px;bottom:-2px;width:2px;background:#0b0612;z-index:3}#bossbar.hurt .fl{background:#fff}
+#bossflash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:30;transition:opacity 1.4s ease}#bossflash.on{opacity:.95;transition:opacity .05s}`;
+  document.head.appendChild(st); return el;
+}
+function bossBarShow(name, sub, notches = []) {
+  const el = bossBarEl(); el.querySelector("b").textContent = name; el.querySelector("span").textContent = sub || "";
+  el.querySelectorAll(".nt").forEach((n) => n.remove()); for (const f of notches) { const n = document.createElement("i"); n.className = "nt"; n.style.left = f * 100 + "%"; el.querySelector(".tr").appendChild(n); }
+  el.classList.add("on"); bossBarSet(1);
+}
+function bossBarSet(f, sub) {
+  const el = bossBarEl(); f = THREE.MathUtils.clamp(f, 0, 1);
+  el.querySelector(".fl").style.transform = `scaleX(${f})`; el.querySelector(".gh").style.transform = `scaleX(${f})`;
+  if (sub !== undefined) el.querySelector("span").textContent = sub;
+  el.classList.add("hurt"); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("hurt"), 70);
+}
+function bossBarHide() { $("bossbar")?.classList.remove("on"); }
+function bossBlind(sec) {
+  let el = $("bossflash"); if (!el) { bossBarEl(); el = document.createElement("div"); el.id = "bossflash"; document.body.appendChild(el); }
+  el.classList.add("on"); setTimeout(() => el.classList.remove("on"), sec * 1000);
+}
+// ---------- spawn entries, setup, the step ----------
+function bossSpawnEntry(kind, x, z, y) {
+  const type = { gatekeeper: "gatekeeper", corona: "coronaHub", bulwark: "bulwark" }[kind];
+  const s = lvEnemy(type, x, z, y, { trig: "boss", alert: true }); if (s) { s.boss = true; s.wake = 999; }
+  const adds = { gatekeeper: [["S", -6, -5, 0], ["S", -6, 5, 0], ["G", -12, -34, 8], ["G", 6, 34, 8]], corona: [["G", 30, -10, 40], ["G", -30, -20, 48]], bulwark: [] }[kind] || [];
+  for (const [k, dx, dz, yy] of adds) { const a = lvEnemy(k, x + dx, z + dz, yy, { trig: "boss", alert: true }); if (a) a.boss = true; }
+}
+function bossSetup(e) {
+  e.zone = null; e.alert = true; e.cool = 1e9; BOSSES.queue.push(e);
+}
+// a part rides on its boss: world position from the boss's transform, kinematic body moved to match
+function bossPart(type, owner, local, opts = {}) {
+  spawnEnemy(type, 0, -50, 0); const p = enemies[enemies.length - 1];
+  p.owner = owner; p.local = local.clone(); p.alert = true; p.cool = 1e9; Object.assign(p, opts);
+  if (opts.radius) bossCollider(p, RAPIER.ColliderDesc.ball(opts.radius));
+  return p;
+}
+function bossCollider(e, desc) {
+  enemyByHandle.delete(e.col.handle); world.removeCollider(e.col, false);
+  e.col = world.createCollider(desc.setCollisionGroups(GROUPS.enemy), e.body); enemyByHandle.set(e.col.handle, e);
+}
+const _bsq = new THREE.Quaternion(), _bsv = new THREE.Vector3(), _bsv2 = new THREE.Vector3(), _bsm = new THREE.Matrix4();
+function bossPlacePart(p, frame) {
+  if (p.dead) return;
+  _bsv.copy(p.local).applyMatrix4(frame);
+  p.body.setNextKinematicTranslation({ x: _bsv.x, y: _bsv.y, z: _bsv.z });
+  p.group.position.copy(_bsv); p.group.position.y -= p.centerY ?? 0.95; p.floorY = p.group.position.y;
+  if (p.followRot !== false) { p.group.quaternion.setFromRotationMatrix(_bsm.extractRotation(frame)); if (p.localRot) p.group.quaternion.multiply(p.localRot); }
+}
+function bossStep(dt) {
+  if (dt <= 0) return;
+  while (BOSSES.queue.length) { const e = BOSSES.queue.shift(); if (e.dead) continue; const S = BOSS_KINDS[e.T.boss]; e.B = { kind: e.T.boss, phase: 1, t: 0, atk: null, cd: 2, parts: [] }; S.setup(e); BOSSES.list.push(e); BOSSES.active = e; }
+  for (const f of BOSSES.fx) f.step?.(dt);
+  BOSSES.fx = BOSSES.fx.filter((f) => !f.dead);
+  for (const e of BOSSES.list) if (!e.dead) BOSS_KINDS[e.T.boss].step?.(e, dt);
+}
+// the shared enemy update hands bosses over here
+function bossThink(e, dt) { if (!e.B) return; e.B.t += dt; BOSS_KINDS[e.T.boss].think?.(e, dt); }
+// every hit on a boss or a part lands here
+function bossHit(e, dmg, point, dir, kind) {
+  const owner = e.T.part ? e.owner : e; if (!owner || !owner.B || owner.dead) return;
+  const r = BOSS_KINDS[owner.T.boss].hit(owner, e, dmg, point || enemyPos(e), dir || new THREE.Vector3(0, 0, 1), kind);
+  crossTimer = 0.12;
+  if (r > 0) { impactFx(point || enemyPos(e), kind); if (state.mode === "test") popDamage(point || enemyPos(e), r, false); }
+}
+function bossPull(e) { const owner = e.T.part ? e.owner : e; BOSS_KINDS[owner?.T.boss]?.pull?.(owner, e); }
+// strike the player: parry, block or hit
+function bossStrike(e, dmg, range, opts = {}) {
+  const pp = playerPos(), ep = opts.from || enemyPos(e); const d = Math.hypot(pp.x - ep.x, pp.z - ep.z);
+  if (d > range || Math.abs(pp.y - ep.y) > (opts.yRange ?? 2.6) || player.dead) return "miss";
+  const toP = _bsv.set(pp.x - ep.x, 0, pp.z - ep.z).normalize();
+  if (opts.parry !== false && player.blocking && player.hasSword && state.time - player.blockStart <= P.parrySword) { sfx.parry(); flash("Parry"); impactFrame(45); glitch(0.35); hitstop(0.12); ev("parry", { e }); return "parry"; }
+  if (opts.block !== false && player.blocking) { sfx.block(); damagePlayer(Math.round(dmg * 0.3), e, true); player.body.setLinvel({ x: toP.x * 7, y: 2, z: toP.z * 7 }, true); return "block"; }
+  damagePlayer(dmg, e); const kb = opts.knock ?? 8; player.body.setLinvel({ x: toP.x * kb, y: opts.up ?? 3, z: toP.z * kb }, true);
+  return "hit";
+}
+// is the hit coming from in front of this facing?
+function bossFront(yawE, dir, cosA = Math.cos(1.22)) { const fx = Math.sin(yawE), fz = Math.cos(yawE); return -(dir.x * fx + dir.z * fz) / Math.max(0.001, Math.hypot(dir.x, dir.z)) > cosA; }
+function bossFace(e, target, rate, dt) {
+  const t = e.body.translation(); const want = Math.atan2(target.x - t.x, target.z - t.z);
+  let d = want - e.group.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); e.group.rotation.y += THREE.MathUtils.clamp(d, -rate * dt, rate * dt); return Math.abs(d);
+}
+// walk with the boss's own controller; returns how far it really went (less than asked = it hit something)
+function bossMove(e, v, dt, cy = 0.95) {
+  const t = e.body.translation(); const want = { x: v.x * dt, y: e.floorY + cy - t.y, z: v.z * dt };
+  e.ctrl.computeColliderMovement(e.col, want, undefined, GROUPS.enemy); const m = e.ctrl.computedMovement();
+  e.body.setNextKinematicTranslation({ x: t.x + m.x, y: t.y + m.y, z: t.z + m.z });
+  e.group.position.set(t.x + m.x, t.y + m.y - cy, t.z + m.z); e.rPrev = e.rCur = null; e.vel.set(m.x / dt, 0, m.z / dt);
+  return Math.hypot(m.x, m.z) / Math.max(1e-4, Math.hypot(want.x, want.z));
+}
+function bossSetPos(e, x, y, z, cy = 0.95) { e.body.setNextKinematicTranslation({ x, y: y + cy, z }); e.group.position.set(x, y, z); e.floorY = y; e.rPrev = e.rCur = null; }
+function bossKillPart(p) { if (p.dead) return; p.killKind = "boss"; killEnemy(p, enemyPos(p), new THREE.Vector3(0, 1, 0), 8); }
+// a timed effect in the world (a barrier, a laser plane, a shell): step(dt) until it says it's dead
+function bossFx(o) { BOSSES.fx.push(o); return o; }
+function bossLine(who, text) { log(`${who === "okafor" ? "OKAFOR-REYES" : who.toUpperCase()}: ${text}`, who === "okafor" ? "okafor" : undefined); say(who, text); }
+// a glowing tell material that pulses
+function bossGlow(color) { return new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }); }
+const BOSS_KINDS = {};
+// where a part is after its body is gone (die hooks run after the body is removed)
+function bossGPos(e) { return e.group.position.clone().add(new THREE.Vector3(0, e.centerY ?? 0.95, 0)); }
+// ================= M1 · THE GATEKEEPER: Captain Teodor Hask, a riot frame and a 2 m tower shield =================
+SPEAK.hask = { label: "HASK", pitch: 0.65, rate: 0.92, prefer: [/Google UK English Male/i, /Microsoft (Guy|David|Mark)/i, /Male/i] };
+M.hask = metal(0x3a3e46, 0.42); M.haskShield = new THREE.MeshStandardMaterial({ color: 0x252a34, roughness: 0.45, metalness: 0.35, envMap: envTex, envMapIntensity: 0.9 });
+TYPES.gatekeeper = { hp: 20, body: "hask", speed: 3.2, melee: true, dmg: 15, label: "Captain Hask", boss: "gatekeeper", noFin: true };
+const GK = { shield: 24, body: 20 };
+function gkDress(e) {
+  const m = e.meshes;
+  // the tower shield on the left forearm: layered ceramic, a firing port, a rim that glows before a charge
+  const s = new THREE.Group();
+  const slab = new THREE.Mesh(rbox(1.0, 1.9, 0.09, 0.3, 0.06), M.haskShield); slab.castShadow = true; s.add(slab); ink(slab);
+  for (const y of [-0.62, 0.62]) { const c = new THREE.Mesh(new THREE.BoxGeometry(1.02, 0.12, 0.1), M.hazard); c.position.y = y; s.add(c); }
+  const port = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.09, 0.1), M.roboDark); port.position.set(0, 0.34, 0.01); s.add(port);
+  const portGlow = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.06, 0.12), bossGlow(0x4ff0ff)); portGlow.position.copy(port.position); s.add(portGlow);
+  const rim = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2.0, 0.04), bossGlow(0xff3d3d)); rim.position.z = -0.05; s.add(rim);
+  s.position.set(0.2, -0.45, 0.36); m.armL.add(s); Object.assign(m, { shield: s, portGlow, rim });
+  // the power pack on the back with two coolant tubes: the weak point
+  const pack = new THREE.Mesh(rbox(0.5, 0.55, 0.26, 0.3, 0.06), M.roboDark); pack.position.set(0, 0.05, -0.27); m.torso.add(pack); ink(pack);
+  for (const x of [-0.14, 0.14]) { const tb = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.5, 8), new THREE.MeshBasicMaterial({ color: 0x48ff9a })); tb.position.set(x, 0.08, -0.41); m.torso.add(tb); }
+  // the baton, for when the shield is gone
+  const baton = new THREE.Group(); const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.75, 8), M.gun); rod.position.y = -0.3; baton.add(rod);
+  const arc = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.4, 8), bossGlow(0xdfe9ff)); arc.position.y = -0.5; baton.add(arc);
+  baton.position.set(0, -0.62, 0.05); baton.rotation.x = Math.PI / 2; baton.visible = false; m.armR.add(baton); Object.assign(m, { baton, arc });
+  // mirrored visor and hydraulic legs
+  m.visor.material = new THREE.MeshStandardMaterial({ color: 0x9fb4cc, roughness: 0.08, metalness: 1, envMap: envTex, envMapIntensity: 1.6 });
+  for (const k of ["legL", "legR"]) { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.6, 8), M.mullion); p.position.set(0, -0.45, -0.14); m[k].add(p); }
+  e.group.scale.setScalar(1.12);
+}
+BOSS_KINDS.gatekeeper = {
+  setup(e) {
+    gkDress(e); Object.assign(e.B, { shield: GK.shield, stagger: 0, guardDown: 0, portOpen: false, yielded: false, parries: 0, upHits: 0, called: false, speed: TYPES.gatekeeper.speed, cd: 2.5 });
+    bossBarShow("Captain Hask", "The Gatekeeper", [GK.body / (GK.shield + GK.body)]);
+    later(() => bossLine("hask", "Nineteen years on this gate. Nothing gets past it."), 400);
+    setObjective("Break Hask's shield, or get behind him");
+  },
+  bar(e) { const B = e.B; bossBarSet((Math.max(0, B.shield) + Math.max(0, e.hp)) / (GK.shield + GK.body), B.yielded ? "Yielded" : B.phase === 1 ? "Shield up" : "Shield down"); },
+  step(e, dt) {
+    const B = e.B; if (!B) return;
+    // spared: you took the express lift and left him on his knees
+    if (B.yielded && LV.ride?.exit && !BOSSES.spared) { BOSSES.spared = true; bossLine("hask", "Why?"); }
+  },
+  think(e, dt) {
+    const B = e.B, m = e.meshes; const pp = playerPos(); const t = e.body.translation();
+    const toP = _bsv2.set(pp.x - t.x, 0, pp.z - t.z); const dist = toP.length(); toP.normalize();
+    // glows fade unless an attack keeps them lit
+    m.portGlow.material.opacity *= Math.pow(0.02, dt); m.rim.material.opacity *= Math.pow(0.02, dt); m.arc.material.opacity = 0.25 + 0.2 * Math.sin(state.time * 30);
+    if (e.stun > 0) { B.stagger = Math.max(B.stagger, Math.min(e.stun, 1.6)); e.stun = 0; B.atk = null; }
+    if (B.guardDown > 0) B.guardDown -= dt;
+    const shieldUp = B.phase === 1 && !(B.guardDown > 0);
+    m.armL.rotation.x += ((shieldUp ? -1.5 : B.phase === 1 ? -0.4 : -0.2) - m.armL.rotation.x) * Math.min(1, dt * 8); m.armL.rotation.z = B.phase === 1 ? 0.35 : 0;
+    if (B.yielded) { // on his knees, visor up
+      e.group.position.y += (e.floorY - 0.55 - e.group.position.y) * Math.min(1, dt * 4); m.legL.rotation.x = m.legR.rotation.x = -1.4; m.armL.rotation.x = m.armR.rotation.x = -0.25; m.head.rotation.x = -0.25; m.visor.visible = false;
+      return;
+    }
+    if (B.stagger > 0) { B.stagger -= dt; e.group.rotation.x = -0.25 * Math.min(1, B.stagger * 2); m.head.rotation.x = -0.4; bossMove(e, _bsv.set(0, 0, 0), dt); if (B.kneel) { e.group.position.y = e.floorY - 0.45; m.legL.rotation.x = -1.3; } return; }
+    e.group.rotation.x = 0; m.head.rotation.x *= 0.8; B.kneel = false;
+    if (B.up) return gkUp(e, dt, dist);
+    const A = B.atk;
+    if (A) { A.t += dt; GK_ATK[A.name](e, A, dt, dist, toP); }
+    else {
+      // walk: close to the range he wants, circle a little, turn slowly enough that you can get round him
+      const ideal = B.phase === 1 ? 7 : 2.4; const v = _bsv.copy(toP).multiplyScalar(dist > ideal + 1 ? B.speed : dist < ideal - 1.5 ? -B.speed * 0.6 : 0);
+      v.add(new THREE.Vector3(-toP.z, 0, toP.x).multiplyScalar(B.phase === 1 ? 0.8 : 1.6));
+      bossFace(e, pp, B.phase === 1 ? 2.0 : 3.2, dt); bossMove(e, v, dt);
+      B.cd -= dt;
+      if (B.cd <= 0) {
+        let name;
+        if (B.phase === 1) { const r = Math.random(); name = dist > 11 ? (r < 0.6 ? "port" : "charge") : r < 0.35 ? "charge" : r < 0.6 ? "port" : r < 0.82 ? "barrier" : "flash"; if (name === "barrier" && BOSSES.fx.some((f) => f.barrier)) name = "port"; }
+        else name = dist < 4.5 ? "baton" : dist > 10 || Math.random() < 0.35 ? "leap" : "shoot";
+        B.atk = { name, t: 0, k: 0 };
+      }
+    }
+    // walk cycle
+    const sp = e.vel.length(); e.walk += sp * dt * 2; const sw = Math.sin(e.walk) * Math.min(1, sp / 3) * 0.6; m.legL.rotation.x = sw; m.legR.rotation.x = -sw;
+    if (B.phase === 2 && !(B.atk?.name === "baton")) m.armR.rotation.x = -0.9 + sw * 0.2;
+    if (state.time - (B.stepT || 0) > 0.42 && sp > 1) { B.stepT = state.time; const d = playerPos().distanceTo(enemyPos(e)); if (d < 30) { noise(0.12, "lowpass", 300, 0.18 * (1 - d / 30), 1, 80); tone("sine", 70, 45, 0.12, 0.08 * (1 - d / 30)); } }
+  },
+  hit(e, part, dmg, point, dir, kind) {
+    const B = e.B; if (B.yielded) { gkFinish(e); return 0; }
+    let d = dmg;
+    if (B.phase === 1) {
+      const front = bossFront(e.group.rotation.y, dir) && !(B.guardDown > 0);
+      if (front) {
+        if (B.portOpen && (kind === "shot" || kind === "rail")) { B.stagger = 1.5; B.atk = null; e.hp -= 1; flash("Port shot · stunned", "var(--amber)"); sfx.clunk?.(); emitWorldSparks(point, dir.clone().negate(), 30, 1, 7); this.bar(e); return 1; }
+        if (kind === "kick") { B.guardDown = 0.8; sfx.block(); emitWorldSparks(point, dir.clone().negate(), 20, 2, 6); flash("Shield knocked aside", "var(--amber)"); return 0; }
+        const sd = { breacher: 8, explosion: 8, rail: 6, lance: 4, deflect: 6, heavy: 2, thrust: 2, gauntlet: 4, lightning: 2 }[kind] ?? 1;
+        B.shield -= sd; sfx.block(); emitWorldSparks(point, dir.clone().negate(), 10 + sd * 3, 2, 6); if (kind === "breacher") { B.stagger = Math.max(B.stagger, 0.8); B.atk = null; }
+        if (B.shield <= 0) gkShieldBreak(e);
+        this.bar(e); return sd;
+      }
+      // round the side or the back: the body, and the power pack triples and staggers
+      if (bossFront(e.group.rotation.y + Math.PI, dir, Math.cos(0.95))) { d *= 3; B.stagger = Math.max(B.stagger, 1.2); B.atk = null; flash("Power pack", "var(--amber)"); emitWorldSparks(point, new THREE.Vector3(0, 1, 0), 30, 3, 6); worldSmoke(point, 2, 0.3, 0x9fffd0, 0.3, 0.3); }
+    } else {
+      if (B.kneel) d *= 2;
+      if (B.up) { B.upHits++; if (B.upHits >= 2) gkFall(e); }
+    }
+    e.hp -= d; flashEnemy?.(e); sfx.hit?.();
+    if (B.phase === 2 && !B.called && e.hp <= 10) { B.called = true; gkCall(e); }
+    if (e.hp <= 0) gkYield(e);
+    this.bar(e); return d;
+  },
+};
+function gkShieldBreak(e) {
+  const B = e.B; B.phase = 2; B.speed = 4.6; B.atk = null; B.stagger = 1.0; B.guardDown = 0;
+  const s = e.meshes.shield; s.updateWorldMatrix(true, false); const at = s.getWorldPosition(new THREE.Vector3());
+  s.parent.remove(s); s.position.copy(at); s.quaternion.copy(e.group.quaternion); levelGroup.add(s);
+  // he throws it at you: a spinning slab you can dash through
+  const v = playerPos().add(new THREE.Vector3(0, 1, 0)).sub(at).normalize().multiplyScalar(20); let hit = false;
+  bossFx({ t: 0, step(dt) { this.t += dt; s.position.addScaledVector(v, dt); s.rotation.y += dt * 14; if (!hit && s.position.distanceTo(camOrigin()) < 1.3 && state.time > (player.dashUntil || 0)) { hit = true; damagePlayer(20, e); } if (this.t > 2.2) { this.dead = true; levelGroup.remove(s); } } });
+  e.meshes.baton.visible = true; sfx.block(); glitch(0.6); shake = Math.max(shake, 0.35); impactFrame(60);
+  for (let i = 0; i < 8; i++) chunk(at.clone(), [0.2 + Math.random() * 0.3, 0.05, 0.2 + Math.random() * 0.3], M.haskShield, new THREE.Vector3((Math.random() - 0.5) * 6, 2 + Math.random() * 3, (Math.random() - 0.5) * 6), 10, 1);
+  bossLine("hask", "Fine. The old way."); setObjective("Hask is open. Parry the baton, or get under him");
+}
+function gkCall(e) {
+  bossLine("hask", "Gate, this is Hask. Send me the line."); tone("sine", 1318, 1318, 0.4, 0.05); tone("sine", 1046, 1046, 0.6, 0.05, 0.2);
+  const L = state.mode === "floor" ? [[90, 22], [90, 64]] : [[e.group.position.x - 10, e.group.position.z - 6], [e.group.position.x - 10, e.group.position.z + 6]];
+  for (const [x, z] of L) { const X = state.mode === "floor" ? LVX(x) : x, Z = state.mode === "floor" ? LVZ(z) : z; spawnEnemy("shield", X, 0, Z); const a = enemies[enemies.length - 1]; a.alert = true; a.cool = 1; }
+  updateCount();
+}
+function gkYield(e) {
+  const B = e.B; B.yielded = true; B.atk = null; B.up = null; e.hp = 0; e.yielded = true; B.shield = 0;
+  sfx.clunk?.(); noise(0.6, "lowpass", 400, 0.4, 1, 60); updateCount(); GK_ATK.clear(e);
+  bossBarSet(0, "Yielded"); later(() => bossLine("arbiter", "He has seen your face. That is the definition of a witness."), 900);
+  hint("Hask is beaten. Hit him to finish it, or take the express lift and leave him.", 8);
+  if (state.mode === "floor" && alive().length === 0) lvCleared();
+}
+function gkFinish(e) {
+  const B = e.B; if (B.finishing) return; B.finishing = true; e.yielded = false; B.yielded = false; bossBarHide();
+  let D;
+  if (state.mode === "floor" && LV.exitL) { const L = LV.exitL; D = { c: new THREE.Vector3(L.X + L.dir[0] * 1.65, L.y, L.Z + L.dir[1] * 1.65), axis: L.dir[0] !== 0 ? "z" : "x", w: 2.2, h: 2.9 }; }
+  else D = DOORWAYS.slice().sort((a, b) => a.c.distanceTo(enemyPos(e)) - b.c.distanceTo(enemyPos(e)))[0];
+  if (D) { e.floorY = D.c.y; B.up = null; bossSetPos(e, e.group.position.x, e.floorY, e.group.position.z); }
+  e.group.position.y = e.floorY; e.meshes.visor.visible = true; e.meshes.legL.rotation.x = e.meshes.legR.rotation.x = 0;
+  if (!D || !fin2Start(e, { kind: "door", ctx: { door: D } })) { e.killKind = "finisher"; killEnemy(e, enemyPos(e), new THREE.Vector3(0, 0, 1), 30); }
+}
+// in the air or up on a balcony: a sidearm, three-round bursts, until two hits knock him down
+function gkUp(e, dt, dist) {
+  const B = e.B, U = B.up; U.t += dt;
+  if (U.jump) {
+    const k = Math.min(1, U.t / U.dur); const x = U.a.x + (U.b.x - U.a.x) * k, z = U.a.z + (U.b.z - U.a.z) * k, y = U.a.y + (U.b.y - U.a.y) * k + Math.sin(Math.PI * k) * U.h;
+    bossSetPos(e, x, y, z); e.meshes.legL.rotation.x = e.meshes.legR.rotation.x = -0.9 * Math.sin(Math.PI * k);
+    if (k >= 1) { U.jump = false; U.t = 0; e.floorY = U.b.y; shake = Math.max(shake, 0.2 * Math.max(0, 1 - dist / 25)); sfx.slam?.(); dust(new THREE.Vector3(x, U.b.y + 0.1, z), 8, 0x8a8494); if (U.down) { B.up = null; B.stagger = 1.4; } }
+    return;
+  }
+  bossFace(e, playerPos(), 4, dt); e.meshes.armR.rotation.x = -1.45;
+  if (U.t > 0.8 && (U.shot = (U.shot ?? 0) - dt) <= 0) {
+    U.shot = 1.3; for (let i = 0; i < 3; i++) later(() => { if (e.dead || !B.up) return; fireBolt(e, camOrigin()); const b = bolts[bolts.length - 1]; if (b) b.dmg = 8; }, i * 110);
+  }
+  if (U.t > 6.5) gkFall(e);
+}
+function gkFall(e) {
+  const B = e.B; const p = e.group.position.clone(); const pp = playerPos(); const to = pp.clone().sub(p).setY(0); const L = Math.min(8, to.length()); to.normalize();
+  const b = p.clone().addScaledVector(to, L * 0.6); b.y = B.groundY ?? 0;
+  B.up = { jump: true, down: true, t: 0, dur: 0.7, a: p, b, h: 1.5 }; B.upHits = 0;
+}
+const GK_ATK = {
+  clear(e) { const m = e.meshes; m.portGlow.material.opacity = 0; m.rim.material.opacity = 0; e.B.portOpen = false; },
+  // the port slides open, a heavy slug, and a pistol shot into the open port stuns him
+  port(e, A, dt, dist) {
+    bossFace(e, playerPos(), 2.4, dt); bossMove(e, _bsv.set(0, 0, 0), dt);
+    e.B.portOpen = A.t < 0.85; e.meshes.portGlow.material.opacity = A.t < 0.85 ? 0.9 : 0;
+    if (A.k === 0 && A.t > 0.02) { A.k = 1; sfx.clunk?.(); tone("square", 900, 1300, 0.08, 0.04); }
+    if (A.k === 1 && A.t >= 0.5) { A.k = 2; fireBolt(e, camOrigin()); const b = bolts[bolts.length - 1]; if (b) { b.dmg = 12; b.mesh.scale.set(2, 2, 1.2); } }
+    if (A.t > 1.0) { e.B.atk = null; e.B.cd = 1.4 + Math.random() * 1.0; }
+  },
+  // he plants, the rim glows red, then 18 m in a straight line
+  charge(e, A, dt, dist, toP) {
+    const B = e.B, m = e.meshes;
+    if (A.t < 0.7) { bossFace(e, playerPos(), 3, dt); bossMove(e, _bsv.set(0, 0, 0), dt); m.rim.material.opacity = 0.4 + 0.6 * (A.t / 0.7); if (A.k === 0) { A.k = 1; tone("sawtooth", 120, 520, 0.7, 0.06); } return; }
+    if (!A.dir) { A.dir = new THREE.Vector3(Math.sin(e.group.rotation.y), 0, Math.cos(e.group.rotation.y)); A.run = 0; sfx.dash?.(); }
+    m.rim.material.opacity = 1; const ratio = bossMove(e, _bsv.copy(A.dir).multiplyScalar(16), dt); A.run += 16 * dt * ratio;
+    m.legL.rotation.x = Math.sin(A.t * 22) * 0.8; m.legR.rotation.x = -m.legL.rotation.x;
+    if (!A.hit && playerPos().distanceTo(enemyPos(e)) < 2.0) {
+      A.hit = true; const r = bossStrike(e, 30, 2.3, { knock: 17, up: 5 });
+      if (r === "parry") { B.atk = null; B.stagger = 2.5; B.guardDown = 2.5; flash("Charge parried", "var(--cyan)"); GK_ATK.clear(e); return; }
+    }
+    if (A.t > 0.8 && ratio < 0.25) { // into a wall or a lift core: stuck, back to you
+      B.atk = null; B.stagger = 1.5; B.guardDown = 1.5; e.group.rotation.y += Math.PI; shake = Math.max(shake, 0.3); sfx.slam?.(); dust(enemyPos(e), 10, 0x8a8494); flash("Stuck", "var(--amber)"); GK_ATK.clear(e); return;
+    }
+    if (A.run > 18 || A.t > 2.2) { B.atk = null; B.cd = 1.6; GK_ATK.clear(e); }
+  },
+  // a hard-light wall from the shield: 12 m wide, 4 m tall, 8 s; the balcony guns open up behind it
+  barrier(e, A, dt) {
+    bossMove(e, _bsv.set(0, 0, 0), dt);
+    if (A.t > 0.6 && !A.k) {
+      A.k = 1; const yawE = e.group.rotation.y; const f = new THREE.Vector3(Math.sin(yawE), 0, Math.cos(yawE)); const c = enemyPos(e).addScaledVector(f, 2.6); c.y = e.floorY + 2;
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(12, 4, 0.12), new THREE.MeshBasicMaterial({ color: 0x6fd8ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+      mesh.position.copy(c); mesh.rotation.y = yawE; levelGroup.add(mesh);
+      const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(c.x, c.y, c.z).setRotation(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yawE)));
+      world.createCollider(RAPIER.ColliderDesc.cuboid(6, 2, 0.06).setCollisionGroups(GROUPS.env), body);
+      sfx.servo?.(); tone("sine", 300, 900, 0.6, 0.05);
+      bossFx({ barrier: true, t: 0, step(dt) { this.t += dt; mesh.material.opacity = 0.32 * Math.min(1, this.t / 0.6) * (this.t > 7.4 ? Math.max(0, (8 - this.t) / 0.6) : 1) * (0.85 + 0.15 * Math.sin(this.t * 20)); mesh.scale.y = Math.min(1, this.t / 0.6); if (this.t > 8) this.kill(); }, kill() { if (this.dead) return; this.dead = true; levelGroup.remove(mesh); try { world.removeRigidBody(body); } catch {} } });
+    }
+    if (A.t > 1.1) { e.B.atk = null; e.B.cd = 1.5; }
+  },
+  // the pin comes out, a lob, a 1.2 s fuse; look away or it whites you out
+  flash(e, A, dt) {
+    bossMove(e, _bsv.set(0, 0, 0), dt);
+    if (A.t > 0.5 && !A.k) {
+      A.k = 1; const o = enemyPos(e).add(new THREE.Vector3(0, 0.9, 0)); const to = playerPos(); to.y += 0.3; const T = 1.2;
+      const g = 14; const v = to.clone().sub(o).divideScalar(T); v.y += 0.5 * g * T;
+      const nade = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.16, 8), M.gun); nade.position.copy(o); levelGroup.add(nade); sfx.clunk?.();
+      bossFx({ t: 0, step(dt) { this.t += dt; v.y -= g * dt; nade.position.addScaledVector(v, dt); nade.rotation.x += dt * 9; if (nade.position.y < 0.15 + (e.floorY || 0)) { nade.position.y = 0.15 + (e.floorY || 0); v.multiplyScalar(0.3); }
+        if (this.t >= T) { this.dead = true; levelGroup.remove(nade); const at = nade.position.clone(); boomSprite(at, "flash", 0.3, 9); noise(0.5, "highpass", 2000, 0.6, 0.7); tone("sine", 3200, 3000, 1.6, 0.03);
+          const toB = at.clone().sub(camOrigin()); const d = toB.length(); const look = lookDir();
+          if (d < 14 && look.dot(toB.normalize()) > 0.25) { bossBlind(1.5); glitch(0.8); }
+          if (!e.dead && at.distanceTo(enemyPos(e)) < 4) { e.B.stagger = 3; e.B.atk = null; flash("Hask is blinded", "var(--amber)"); }
+        } } });
+    }
+    if (A.t > 0.9) { e.B.atk = null; e.B.cd = 1.4; }
+  },
+  // phase 2: three baton swings, parry all three and he goes to a knee
+  baton(e, A, dt, dist) {
+    const B = e.B, m = e.meshes; const tells = [0.45, 0.4, 0.6]; const i = A.k; const T0 = tells.slice(0, i).reduce((a, b) => a + b + 0.15, 0);
+    bossFace(e, playerPos(), 5, dt); bossMove(e, _bsv.copy(_bsv2.set(0, 0, 0)), dt);
+    const lt = A.t - T0; const tl = tells[i];
+    m.arc.material.opacity = lt < tl ? 0.5 + 0.5 * Math.sin(lt * 60) : 0.3;
+    m.armR.rotation.x = lt < tl ? -2.6 + (lt / tl) * 0.3 : -0.4; m.armR.rotation.z = i === 1 ? -0.6 : 0.2;
+    if (lt >= tl && !A["s" + i]) {
+      A["s" + i] = true; const r = bossStrike(e, 15, 2.8); sfx.slash?.();
+      if (r === "parry") { B.parries++; emitWorldSparks(enemyPos(e).add(new THREE.Vector3(0, 1.2, 0)), new THREE.Vector3(0, 1, 0), 24, 0, 8); }
+      if (i === 2) { dust(enemyPos(e), 8, 0x8a8494); shake = Math.max(shake, 0.2); if (r !== "parry" && dist < 4.5 && player.grounded) damagePlayer(6, e); }
+      A.k++;
+      if (A.k >= 3) { B.atk = null; B.cd = 1.2; if (B.parries >= 3) { B.stagger = 3; B.kneel = true; flash("Hask is down · riposte", "var(--cyan)"); } B.parries = 0; }
+    }
+  },
+  // the legs compress, then he is up on a balcony or the bridge, shooting down
+  leap(e, A, dt) {
+    const B = e.B; bossMove(e, _bsv.set(0, 0, 0), dt); e.meshes.legL.rotation.x = e.meshes.legR.rotation.x = -0.6 * Math.min(1, A.t / 0.8);
+    if (A.t < 0.8) { if (!A.k) { A.k = 1; noise(0.8, "bandpass", 900, 0.4, 1, 300); } return; }
+    const p = e.group.position.clone(); B.groundY = B.groundY ?? e.floorY; const pp = playerPos();
+    let b;
+    if (state.mode === "floor" && LV.n === 2) { const zs = [9, 77]; const zb = zs.sort((a, c) => Math.abs(LVZ(a) - pp.z) - Math.abs(LVZ(c) - pp.z))[0]; b = new THREE.Vector3(THREE.MathUtils.clamp(pp.x, LVX(80), LVX(128)), 8, LVZ(zb)); }
+    else b = new THREE.Vector3(p.x + (pp.x - p.x) * 0.5, B.groundY + 4, p.z + (pp.z - p.z) * 0.5);
+    B.up = { jump: true, t: 0, dur: 0.9, a: p, b, h: 3 }; B.atk = null; B.upHits = 0; sfx.dash?.(); noise(0.4, "lowpass", 600, 0.5, 1, 100);
+  },
+  shoot(e, A, dt) {
+    bossFace(e, playerPos(), 4, dt); bossMove(e, _bsv.set(0, 0, 0), dt); e.meshes.armR.rotation.x = -1.45;
+    if (A.t > 0.4 && !A.k) { A.k = 1; for (let i = 0; i < 3; i++) later(() => { if (e.dead || !e.B) return; fireBolt(e, camOrigin()); const b = bolts[bolts.length - 1]; if (b) b.dmg = 8; }, i * 110); }
+    if (A.t > 1.0) { e.B.atk = null; e.B.cd = 0.8 + Math.random(); }
+  },
+};
+// ================= M2 · CORONA: WARDEN's drone carrier, a flying ring you fight by riding it =================
+M.ceramic = new THREE.MeshStandardMaterial({ color: 0xe4e8ee, roughness: 0.32, metalness: 0.15, envMap: envTex, envMapIntensity: 0.8 });
+M.hubGlass = new THREE.MeshStandardMaterial({ color: 0x9fe8ff, roughness: 0.05, metalness: 0.2, transparent: true, opacity: 0.35, envMap: envTex, envMapIntensity: 1.4, depthWrite: false });
+M.reactor = new THREE.MeshBasicMaterial({ color: 0xff6a3a });
+TYPES.coronaHub = { hp: 24, body: "bot", speed: 0, label: "Corona", boss: "corona", noFin: true, noBlob: true, mesh: () => coronaHubMesh(), die: coronaDie };
+TYPES.coronaBay = { hp: 8, body: "bot", speed: 0, label: "Corona drone bay", part: true, noFin: true, mesh: () => coronaBayMesh(), die: coronaBayDie };
+const CR = { rIn: 3.0, rOut: 8.5, lap1: 14, lap2: 9, bays: 4, hub: 24, bay: 8 };
+function coronaHubMesh() {
+  const g = new THREE.Group(); const meshes = {};
+  const core = new THREE.Mesh(new THREE.SphereGeometry(0.7, 20, 14), M.reactor); core.position.y = 0.95; g.add(core);
+  const glass = new THREE.Mesh(new THREE.SphereGeometry(1.6, 24, 16), M.hubGlass.clone()); glass.position.y = 0.95; glass.renderOrder = 3; g.add(glass);
+  const cage = new THREE.Mesh(new THREE.TorusGeometry(1.62, 0.05, 6, 32), M.mullion); cage.position.y = 0.95; cage.rotation.x = Math.PI / 2; g.add(cage);
+  Object.assign(meshes, { torso: core, head: core, visor: core, glass, core }); meshes.glow = new THREE.Object3D(); stubJoints(g, meshes);
+  return { group: g, meshes };
+}
+function coronaBayMesh() {
+  const g = new THREE.Group(); const meshes = {};
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.15, 0.35, 18), M.roboDark); base.position.y = 0.95; g.add(base); ink(base);
+  const iris = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 0.06, 18), M.ceramic); iris.position.y = 1.14; g.add(iris);
+  const eye = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.04, 18), bossGlow(0xff2a3a)); eye.position.y = 1.12; g.add(eye);
+  Object.assign(meshes, { torso: base, head: base, visor: eye, iris, eye }); meshes.glow = new THREE.Object3D(); stubJoints(g, meshes);
+  return { group: g, meshes };
+}
+function coronaBayDie(e) {
+  const p = bossGPos(e).add(new THREE.Vector3(0, 0.3, 0));
+  boomSprite(p.clone(), "flash", 0.25, 4); for (let i = 0; i < 5; i++) boomSprite(p.clone(), "fire", 0.6, 2.5, new THREE.Vector3((Math.random() - 0.5) * 4, 2 + Math.random() * 2, (Math.random() - 0.5) * 4));
+  boomSprite(p.clone(), "smoke", 2, 4, new THREE.Vector3(0, 2, 0)); emitWorldSparks(p, new THREE.Vector3(0, 1, 0), 50, 0, 10); sfx.carBoom?.(); shake = Math.max(shake, 0.3);
+  for (let i = 0; i < 4; i++) chunk(p.clone(), [0.3, 0.06, 0.3], i % 2 ? M.ceramic : M.roboDark, new THREE.Vector3((Math.random() - 0.5) * 8, 4, (Math.random() - 0.5) * 8), 10, 1);
+}
+function coronaDie(e) {
+  const C = e.B; if (!C) return; const p = C.P.clone();
+  for (let i = 0; i < 12; i++) boomSprite(p.clone().add(new THREE.Vector3((Math.random() - 0.5) * 10, Math.random() * 2, (Math.random() - 0.5) * 10)), "fire", 0.9, 5, new THREE.Vector3(0, 2, 0));
+  boomSprite(p.clone(), "flash", 0.3, 18); emitWorldSparks(p, new THREE.Vector3(0, 1, 0), 90, 0, 14); sfx.carBoom?.(); shake = Math.max(shake, 0.8);
+  coronaTeardown(e);
+}
+function coronaTeardown(e) {
+  const C = e.B; if (!C || C.gone) return; C.gone = true;
+  levelGroup.remove(C.R); try { world.removeRigidBody(C.hull); } catch {} for (const L of C.lugs) try { world.removeRigidBody(L.body); } catch {}
+  for (const b of C.bays) bossKillPart(b); bossBarHide();
+}
+BOSS_KINDS.corona = {
+  setup(e) {
+    const s = e.body.translation(); const C = e.B;
+    const c0 = state.mode === "floor" && LV.n === 3 ? new THREE.Vector3(LVX(42), 47, LVZ(52)) : new THREE.Vector3(s.x, s.y - 0.95, s.z);
+    Object.assign(C, { c0, P: c0.clone(), th: 0, spin: 0, tilt: 0, lap: CR.lap1, frame: new THREE.Matrix4(), prev: new THREE.Matrix4(), inv: new THREE.Matrix4(), bayT: 0, laserCd: 7, pulseCd: 11, diveCd: 6, dive: 0, hp: CR.hub, falling: false, grounded: false, floorY: state.mode === "floor" ? 0 : 0 });
+    bossCollider(e, RAPIER.ColliderDesc.ball(1.6)); e.centerY = 0.95;
+    // the ring: a walkable ceramic deck with a lip, running lights, eight ducted fans under it
+    const R = new THREE.Group(); levelGroup.add(R); C.R = R;
+    const prof = [[CR.rIn, -0.25], [CR.rOut, -0.25], [CR.rOut + 0.35, 0], [CR.rOut, 0.25], [CR.rIn, 0.25], [CR.rIn - 0.15, 0], [CR.rIn, -0.25]].map(([x, y]) => new THREE.Vector2(x, y));
+    const hullM = new THREE.Mesh(new THREE.LatheGeometry(prof, 48), M.ceramic); hullM.castShadow = true; hullM.receiveShadow = true; R.add(hullM); ink(hullM);
+    const seam = new THREE.Mesh(new THREE.TorusGeometry(CR.rOut + 0.1, 0.05, 6, 64), M.roboDark); seam.rotation.x = Math.PI / 2; seam.position.y = 0.05; R.add(seam);
+    C.lights = new THREE.InstancedMesh(new THREE.BoxGeometry(0.28, 0.12, 0.12), new THREE.MeshBasicMaterial({ color: 0xffffff }), 32); C.lights.frustumCulled = false; R.add(C.lights);
+    const m4 = new THREE.Matrix4(); for (let i = 0; i < 32; i++) { const a = (i / 32) * Math.PI * 2; m4.makeRotationY(-a).setPosition(Math.cos(a) * (CR.rOut + 0.37), 0, Math.sin(a) * (CR.rOut + 0.37)); C.lights.setMatrixAt(i, m4); C.lights.setColorAt(i, new THREE.Color(0x400008)); }
+    C.fans = []; for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2 + 0.2; const f = new THREE.Group(); f.position.set(Math.cos(a) * 5.8, -0.75, Math.sin(a) * 5.8); const duct = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.0, 0.55, 18, 1, true), M.roboDark); duct.material.side = THREE.DoubleSide; f.add(duct); const bl = new THREE.Group(); for (let k = 0; k < 4; k++) { const b = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.03, 0.22), M.mullion); b.rotation.y = (k / 4) * Math.PI; b.rotation.x = 0.35; bl.add(b); } f.add(bl); const glow = new THREE.Mesh(new THREE.CircleGeometry(0.95, 16), new THREE.MeshBasicMaterial({ color: 0x6fd8ff, transparent: true, opacity: 0.25, blending: THREE.AdditiveBlending, depthWrite: false })); glow.rotation.x = Math.PI / 2; glow.position.y = -0.3; f.add(glow); R.add(f); C.fans.push(bl); }
+    for (let i = 0; i < 4; i++) { const a = (i / 4) * Math.PI * 2 + Math.PI / 4; const strut = new THREE.Mesh(new THREE.BoxGeometry(CR.rIn - 1.4, 0.14, 0.3), M.mullion); strut.position.set(Math.cos(a) * (CR.rIn + 1.6) / 2, 0.1, Math.sin(a) * (CR.rIn + 1.6) / 2); strut.rotation.y = -a; R.add(strut); }
+    // the laser plane and the pulse
+    C.laser = new THREE.Mesh(new THREE.RingGeometry(9.2, 70, 64), new THREE.MeshBasicMaterial({ color: 0xff2a3a, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })); C.laser.rotation.x = -Math.PI / 2; C.laser.visible = false; R.add(C.laser);
+    C.pulse = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 12), new THREE.MeshBasicMaterial({ color: 0x6fb8ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })); C.pulse.visible = false; R.add(C.pulse);
+    // the hull you stand on: a kinematic ring of slabs
+    C.hull = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(c0.x, c0.y, c0.z));
+    const n = 18, rm = (CR.rIn + CR.rOut) / 2, half = (Math.PI * rm / n) * 1.12;
+    for (let i = 0; i < n; i++) { const a = ((i + 0.5) / n) * Math.PI * 2; world.createCollider(RAPIER.ColliderDesc.cuboid((CR.rOut - CR.rIn) / 2, 0.25, half).setTranslation(Math.cos(a) * rm, 0, Math.sin(a) * rm).setRotation(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -a)).setCollisionGroups(GROUPS.env), C.hull); }
+    // four hull lugs to grapple: they reel you onto the deck
+    C.lugs = [0, 1, 2, 3].map((i) => { const a = (i / 4) * Math.PI * 2; const local = new THREE.Vector3(Math.cos(a) * (CR.rOut + 0.9), 0.3, Math.sin(a) * (CR.rOut + 0.9));
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.09, 8, 20), M.amber); ring.position.copy(local); ring.rotation.y = -a; R.add(ring);
+      const body = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased()); world.createCollider(RAPIER.ColliderDesc.ball(0.5).setCollisionGroups(GROUPS.env), body);
+      return { local, ring, body, w: new THREE.Vector3() }; });
+    // four drone bays on the deck
+    C.bays = [0, 1, 2, 3].map((i) => { const a = (i / 4) * Math.PI * 2 + Math.PI / 4; const b = bossPart("coronaBay", e, new THREE.Vector3(Math.cos(a) * 6, 0.45, Math.sin(a) * 6), { radius: 1.0, centerY: 0.95 }); b.ph = i * 3; b.open = 0; return b; });
+    e.group.scale.setScalar(1); this.frame(e, 0);
+    bossBarShow("Corona", "WARDEN's eye · bays", [CR.hub / (CR.hub + CR.bays * CR.bay)]);
+    bossLine("warden", "You like the view? Corona sees all of it."); setObjective("Grapple Corona's hull lugs and break its drone bays");
+  },
+  frame(e, dt) {
+    const C = e.B; C.prev.copy(C.frame);
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(C.tilt, C.spin, C.tilt * 0.4, "YXZ"));
+    C.frame.compose(C.P, q, new THREE.Vector3(1, 1, 1)); C.inv.copy(C.prev).invert();
+    C.R.position.copy(C.P); C.R.quaternion.copy(q);
+    C.hull.setNextKinematicTranslation({ x: C.P.x, y: C.P.y, z: C.P.z }); C.hull.setNextKinematicRotation(q);
+    for (const L of C.lugs) { L.w.copy(L.local).applyMatrix4(C.frame); L.body.setNextKinematicTranslation({ x: L.w.x, y: L.w.y, z: L.w.z }); }
+    for (const b of C.bays) bossPlacePart(b, C.frame);
+    // the hub sits in the middle, a little proud of the deck
+    const h = _bsv.set(0, 0.6, 0).applyMatrix4(C.frame); e.body.setNextKinematicTranslation({ x: h.x, y: h.y, z: h.z }); e.group.position.set(h.x, h.y - 0.95, h.z); e.floorY = h.y - 0.95; e.group.quaternion.copy(q);
+  },
+  bar(e) { const C = e.B; const bays = C.bays.reduce((s, b) => s + (b.dead ? 0 : Math.max(0, b.hp)), 0); bossBarSet((bays + Math.max(0, C.hp)) / (CR.hub + CR.bays * CR.bay), C.phase === 1 ? "WARDEN's eye · bays" : C.phase === 2 ? "Listing · breach the hub" : "Falling"); },
+  step(e, dt) {
+    const C = e.B; if (!C || C.gone) return; if (e.dead) return coronaTeardown(e);
+    const pp = playerPos();
+    // flight: an orbit round the top of the atrium; it tips and tightens once the bays are gone, then spirals down
+    if (!C.grounded) {
+      C.th += (Math.PI * 2 / C.lap) * dt; C.spin += dt * 0.18;
+      const want = C.phase === 3 ? C.P.y - (4 / C.lap) * dt : C.c0.y + 4 * Math.sin(C.th * 0.5);
+      const r = C.phase === 1 ? 1 : 0.75; C.P.x = C.c0.x + Math.sin(C.th) * 15 * r; C.P.z = C.c0.z + Math.cos(C.th) * 22 * r;
+      if (C.dive > 0) { C.dive -= dt; C.diveY = C.dive > 3 ? C.diveY + (C.diveTo - C.diveY) * Math.min(1, dt * 7) : C.diveY + (want - C.diveY) * Math.min(1, dt * 1.2); C.P.y = C.diveY; }
+      else C.P.y = want;
+      C.tilt += ((C.phase >= 2 ? 0.35 : 0) - C.tilt) * Math.min(1, dt * 0.8);
+      if (C.phase === 3 && C.P.y < (C.floorY || 0) + 3) { C.grounded = true; C.P.y = (C.floorY || 0) + 1.2; C.tilt = 0.2; shake = Math.max(shake, 1); sfx.carBoom?.(); for (let i = 0; i < 8; i++) boomSprite(C.P.clone().add(new THREE.Vector3((Math.random() - 0.5) * 10, 0, (Math.random() - 0.5) * 10)), "smoke", 3, 6, new THREE.Vector3(0, 2, 0)); flash("Corona is down · finish it on the ground", "var(--amber)"); }
+    }
+    this.frame(e, dt);
+    // stand on the deck and ride it
+    const L = _bsv2.copy(pp).applyMatrix4(C.inv); const rr = Math.hypot(L.x, L.z);
+    if (rr > CR.rIn - 0.6 && rr < CR.rOut + 0.6 && L.y > 0.1 && L.y < 2.2 && !player.grapple) { const w = L.applyMatrix4(C.frame); player.body.setTranslation({ x: w.x, y: w.y, z: w.z }, true); C.onHull = true; } else C.onHull = false;
+    // a grapple on a lug reels you onto the deck
+    const G = player.grapple; if (G && G.phase !== "fly" && !C.reel) for (const Lg of C.lugs) if (G.point && _bsv.set(G.point.x, G.point.y, G.point.z).distanceTo(Lg.w) < 2.8) { C.reel = { t: 0, from: pp.clone(), lug: Lg }; releaseGrapple(); sfx.servo?.(); break; }
+    if (C.reel) { const R2 = C.reel; R2.t += dt; const to = Lg2Deck(C, R2.lug); const k = Math.min(1, R2.t / 0.45); const p = R2.from.clone().lerp(to, k * k * (3 - 2 * k)); p.y += Math.sin(Math.PI * k) * 1.2; player.body.setTranslation({ x: p.x, y: p.y, z: p.z }, true); player.body.setLinvel({ x: 0, y: 0, z: 0 }, true); if (k >= 1) C.reel = null; }
+    for (const f of C.fans) f.rotation.y += dt * (C.dive > 3 ? 2 : 30);
+    // running lights: a clock hand, or every light during a tell
+    const hand = Math.floor((state.time * 6) % 32); const col = new THREE.Color();
+    for (let i = 0; i < 32; i++) { const lit = C.tellLaser ? Math.floor(C.tellLaser * 32 * 2) % 32 >= i : (i - hand + 32) % 32 < 3; col.setHex(C.dive > 3 ? 0xff2030 : lit ? 0xff3040 : 0x300006); C.lights.setColorAt(i, col); } C.lights.instanceColor.needsUpdate = true;
+    if (C.grounded) return;
+    // bays: each opens for 3 s every 12 s; a 0.6 s red tell, a pop, two drones
+    if (C.phase === 1) for (const b of C.bays) {
+      if (b.dead) continue; const k = (state.time + b.ph) % 12; const open = k > 8.4 && k < 12 ? (k < 9 ? (k - 8.4) / 0.6 : 1) : 0; b.open = open;
+      b.meshes.iris.scale.setScalar(1 - open * 0.85); b.meshes.eye.material.opacity = open > 0 ? 0.6 + 0.4 * Math.sin(state.time * 20) : k > 7.8 ? 0.8 : 0.1;
+      if (open >= 1 && !b.launched) { b.launched = true; coronaLaunch(e, b); } if (open === 0) b.launched = false;
+    }
+    // the ring laser: every light runs round the rim for a second, then a flat plane at its height
+    C.laserCd -= dt;
+    if (C.laserCd <= 0 && !C.laserT) { C.laserT = 0.001; C.hitL = false; tone("sawtooth", 200, 900, 1.0, 0.05); }
+    if (C.laserT) {
+      C.laserT += dt; C.tellLaser = C.laserT < 1 ? C.laserT : 0; const on = C.laserT > 1 && C.laserT < 2.5;
+      C.laser.visible = C.laserT > 0.6; C.laser.material.opacity = on ? 0.42 + 0.1 * Math.sin(state.time * 40) : 0.08 * (C.laserT / 1);
+      if (on && !C.hitL && !player.dead) { const ce = camOrigin(); const loc = _bsv.copy(ce).applyMatrix4(_bsm.copy(C.frame).invert()); const r2 = Math.hypot(loc.x, loc.z); if (Math.abs(loc.y) < 0.9 && r2 > 9.2 && r2 < 70) { C.hitL = true; damagePlayer(25, e); flash("Ring laser", "var(--threat)"); } }
+      if (C.laserT > 2.5) { C.laserT = 0; C.tellLaser = 0; C.laser.visible = false; C.laserCd = C.phase === 1 ? 9 : 7; }
+    }
+    // the mag pulse: a blue ripple, then every grapple line nearby is cut and you are thrown off the deck
+    C.pulseCd -= dt;
+    if (C.pulseCd <= 0 && !C.pulseT) { C.pulseT = 0.001; noise(1.2, "lowpass", 120, 0.4, 1, 60); }
+    if (C.pulseT) {
+      C.pulseT += dt; C.pulse.visible = true; const k = C.pulseT; C.pulse.scale.setScalar(k < 1.2 ? 9 + Math.sin(k * 20) * 0.3 : 9 + (k - 1.2) * 30); C.pulse.material.opacity = k < 1.2 ? 0.08 + 0.08 * Math.sin(k * 18) : Math.max(0, 0.35 - (k - 1.2));
+      if (k > 1.2 && !C.pulsed) { C.pulsed = true; const d = pp.distanceTo(C.P); if (d < 13) { if (player.grapple) { releaseGrapple(); flash("Mag pulse · line cut", "var(--threat)"); } if (C.onHull) { const out = pp.clone().sub(C.P).setY(0).normalize(); player.body.setLinvel({ x: out.x * 13, y: 7, z: out.z * 13 }, true); C.onHull = false; flash("Thrown off", "var(--threat)"); } } glitch(0.4); }
+      if (k > 1.6) { C.pulseT = 0; C.pulsed = false; C.pulse.visible = false; C.pulseCd = 12 + Math.random() * 3; }
+    }
+    // phase 2: dives onto a balcony
+    if (C.phase >= 2 && C.dive <= 0) { C.diveCd -= dt; if (C.diveCd <= 0) { C.diveCd = 9; C.dive = 3.9; C.diveY = C.P.y; C.diveTo = C.P.y - 8; C.diveHit = false; tone("sine", 600, 90, 0.9, 0.08); } }
+    if (C.dive > 3 && C.dive < 3.3 && !C.diveHit) { C.diveHit = true; const d = Math.hypot(pp.x - C.P.x, pp.z - C.P.z); if (d < CR.rOut + 2 && pp.y < C.P.y + 1 && pp.y > C.P.y - 4 && !C.onHull) { damagePlayer(35, e); flash("Corona dive", "var(--threat)"); } shake = Math.max(shake, 0.5 * Math.max(0, 1 - pp.distanceTo(C.P) / 30)); sfx.slam?.(); for (const P2 of panes) if (!P2.broken && P2.center.distanceTo(C.P) < CR.rOut + 1.5) shatter(P2, P2.center.clone(), new THREE.Vector3(0, -1, 0), 8); }
+  },
+  hit(e, part, dmg, point, dir, kind) {
+    const C = e.B; let d = 0;
+    if (part !== e) { // a bay: armored shut, open for 3 s
+      if (part.open < 0.5) { sfx.block(); emitWorldSparks(point, dir.clone().negate(), 8, 2, 5); flash("Bay is shut · wait for it to open", "var(--dim)"); return 0; }
+      d = dmg * (kind === "disc" ? 2 : 1) + (kind === "breacher" ? 8 - dmg : 0); part.hp -= d;
+      if (part.hp <= 0) { bossKillPart(part); flash("Bay destroyed", "var(--cyan)"); if (C.bays.every((b) => b.dead)) coronaPhase2(e); }
+      this.bar(e); return d;
+    }
+    // the hub: shut behind glass while the bays are up
+    if (C.phase === 1) { sfx.block(); emitWorldSparks(point, dir.clone().negate(), 8, 2, 5); flash("The hub is sealed · break the bays", "var(--dim)"); return 0; }
+    const near = playerPos().distanceTo(enemyPos(e)) < 4.2;
+    d = { lance: 6, rail: 8, breacher: 6, breach: 12, explosion: 4, lightning: 2, disc: 2 }[kind] ?? (near || C.grounded ? dmg * 1.5 : 0);
+    if (kind === "lance") { C.pinned = 2; }
+    if (d <= 0) { sfx.block(); emitWorldSparks(point, dir.clone().negate(), 8, 2, 5); return 0; }
+    C.hp -= d; e.hp = C.hp; emitWorldSparks(point, dir.clone().negate(), 30, 1, 9); e.meshes.glass.material.opacity = 0.35 + (1 - C.hp / CR.hub) * 0.4;
+    if (C.phase === 2 && C.hp <= CR.hub / 2) coronaPhase3(e);
+    if (C.hp <= 0) { if (C.grounded) { e.killKind = "boss"; killEnemy(e, enemyPos(e), new THREE.Vector3(0, 1, 0), 10); } else coronaFinish(e); }
+    this.bar(e); return d;
+  },
+};
+function Lg2Deck(C, Lg) { const a = Math.atan2(Lg.local.z, Lg.local.x); return new THREE.Vector3(Math.cos(a) * (CR.rOut - 1.4), 1.25, Math.sin(a) * (CR.rOut - 1.4)).applyMatrix4(C.frame); }
+function coronaLaunch(e, b) {
+  sfx.clunk?.(); noise(0.2, "highpass", 1200, 0.4, 1); if (enemies.filter((x) => !x.dead && x.type === "drone").length >= 6) return;
+  for (let i = 0; i < 2; i++) { const p = enemyPos(b); spawnEnemy("drone", p.x + (i ? 1 : -1), p.y + 1, p.z); const d = enemies[enemies.length - 1]; d.alert = true; d.cool = 1 + i * 0.5; d.hover = p.y + 2; }
+  updateCount();
+}
+function coronaPhase2(e) {
+  const C = e.B; C.phase = 2; C.lap = CR.lap2; C.diveCd = 4; bossLine("warden", "You are making me look down. I do not like it.");
+  e.meshes.glass.material.color.setHex(0xffb08a); sfx.carBoom?.(); shake = Math.max(shake, 0.4);
+  setObjective("Corona is listing. Get onto the deck and break the hub"); hint("The hub is open now. Hit it from the deck, or throw the lance into it.", 6);
+}
+function coronaPhase3(e) {
+  const C = e.B; C.phase = 3; bossLine("warden", "No. Not the floor. Not in front of them.");
+  setObjective("Corona is falling. Land the last hit before it reaches the garden"); glitch(0.5);
+}
+function coronaFinish(e) {
+  const C = e.B; if (C.finishing) return; C.finishing = true; bossBarHide();
+  for (const x of enemies) if (!x.dead && x.type === "drone") { x.killKind = "boss"; killEnemy(x, enemyPos(x), new THREE.Vector3(0, 1, 0), 8); }
+  if (!fin2Start(e, { kind: "orbit", ctx: { C } })) { e.killKind = "boss"; killEnemy(e, enemyPos(e), new THREE.Vector3(0, 1, 0), 10); }
+}
+// ================= B1 · BULWARK: WARDEN's own body, a 5 m siege frame guarding the core =================
+M.bwSteel = metal(0x1b1c21, 0.5); M.bwLens = new THREE.MeshBasicMaterial({ color: 0x48ff9a }); M.bwSeam = new THREE.MeshBasicMaterial({ color: 0x3a2206 });
+M.bwCore = new THREE.MeshBasicMaterial({ color: 0x7dffc0 });
+TYPES.bulwark = { hp: 999, body: "bot", speed: 2.4, label: "BULWARK", boss: "bulwark", noFin: true, noBlob: true, mesh: () => bwMesh(), die: bwDie };
+TYPES.bwPlate = { hp: 16, body: "bot", speed: 0, label: "armor plate", part: true, noFin: true, mesh: () => bwPlateMesh(), die: bwPlateDie };
+TYPES.bwCore = { hp: 120, body: "bot", speed: 0, label: "WARDEN core", part: true, noFin: true, mesh: () => bwCoreMesh(), die: () => {} };
+const BW = { core: 120, plate: 16, cy: 2.7 };
+function bwMesh() {
+  const g = new THREE.Group(); const meshes = {}; const S = M.bwSteel, D = M.roboDark;
+  const box = (p, w, h, d, x, y, z, mat = S) => { const m = new THREE.Mesh(rbox(w, h, d, 0.3, 0.08), mat); m.position.set(x, y, z); m.castShadow = true; p.add(m); ink(m); return m; };
+  const pelvis = new THREE.Group(); pelvis.position.y = 2.35; g.add(pelvis); box(pelvis, 1.6, 0.6, 1.1, 0, 0, 0, D);
+  const legs = [];
+  for (const s of [-1, 1]) { // reverse-jointed: thigh forward, shin back, a wide foot
+    const hip = new THREE.Group(); hip.position.set(s * 0.75, 2.2, 0); g.add(hip); box(hip, 0.5, 1.3, 0.55, 0, -0.55, 0.25);
+    const knee = new THREE.Group(); knee.position.set(0, -1.15, 0.5); hip.add(knee); box(knee, 0.42, 1.3, 0.45, 0, -0.55, -0.3, D);
+    const piston = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.1, 8), M.mullion); piston.position.set(s * 0.3, -0.4, -0.1); knee.add(piston);
+    const foot = new THREE.Group(); foot.position.set(0, -1.15, -0.55); knee.add(foot); box(foot, 0.75, 0.22, 1.3, 0, -0.05, 0.25);
+    legs.push({ hip, knee, foot, s });
+  }
+  const torso = new THREE.Group(); torso.position.y = 3.45; g.add(torso); box(torso, 2.4, 1.7, 1.5, 0, 0, -0.1);
+  const vents = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.6, 0.1), M.rackLed); vents.position.set(0, 0.2, -0.88); torso.add(vents);
+  const head = new THREE.Group(); head.position.set(0, 1.15, 0.2); torso.add(head); box(head, 0.9, 0.55, 0.7, 0, 0, 0, D);
+  const lenses = []; for (let i = 0; i < 6; i++) { const l = new THREE.Mesh(new THREE.SphereGeometry(0.09 + (i % 3 === 1 ? 0.04 : 0), 10, 8), M.bwLens.clone()); l.position.set(((i % 3) - 1) * 0.24, i < 3 ? 0.1 : -0.1, 0.36); head.add(l); lenses.push(l); }
+  // the ram fist on the right, the three-barrel cannon on the left
+  const shR = new THREE.Group(); shR.position.set(1.55, 0.45, 0); torso.add(shR); box(shR, 0.6, 1.3, 0.7, 0, -0.5, 0); const fist = box(shR, 0.95, 0.95, 1.1, 0, -1.4, 0.2, D);
+  const shL = new THREE.Group(); shL.position.set(-1.55, 0.45, 0); torso.add(shL); box(shL, 0.6, 1.0, 0.7, 0, -0.4, 0);
+  const cannon = new THREE.Group(); cannon.position.set(0, -1.0, 0.4); shL.add(cannon);
+  const barrels = []; for (let i = 0; i < 3; i++) { const a = (i / 3) * Math.PI * 2; const b = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.12, 1.5, 10), M.gun); b.rotation.x = Math.PI / 2; b.position.set(Math.cos(a) * 0.2, Math.sin(a) * 0.2, 0.5); cannon.add(b); barrels.push(b); }
+  const muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 8), bossGlow(0xffb547)); muzzle.position.z = 1.3; cannon.add(muzzle);
+  const beam = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 1), new THREE.MeshBasicMaterial({ color: 0xff2a3a, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false })); beam.visible = false; g.add(beam);
+  Object.assign(meshes, { torso, head, visor: lenses[1], pelvis, legs, shR, shL, fist, cannon, muzzle, lenses, beam, vents }); meshes.glow = muzzle; stubJoints(g, meshes);
+  return { group: g, meshes };
+}
+function bwPlateMesh() {
+  const g = new THREE.Group(); const meshes = {};
+  const p = new THREE.Mesh(rbox(1.05, 0.95, 0.22, 0.3, 0.06), M.bwSteel); p.position.y = 0.95; p.castShadow = true; g.add(p); ink(p);
+  const seam = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.0, 0.18), M.bwSeam.clone()); seam.position.y = 0.95; g.add(seam);
+  Object.assign(meshes, { torso: p, head: p, visor: p, seam }); meshes.glow = new THREE.Object3D(); stubJoints(g, meshes);
+  return { group: g, meshes };
+}
+function bwCoreMesh() {
+  const g = new THREE.Group(); const meshes = {};
+  const c = new THREE.Mesh(new THREE.IcosahedronGeometry(0.42, 1), M.bwCore.clone()); c.position.y = 0.95; g.add(c);
+  const halo = new THREE.Mesh(new THREE.SphereGeometry(0.6, 16, 10), bossGlow(0x7dffc0)); halo.material.opacity = 0.25; halo.position.y = 0.95; g.add(halo);
+  Object.assign(meshes, { torso: c, head: c, visor: c, halo }); meshes.glow = new THREE.Object3D(); stubJoints(g, meshes);
+  return { group: g, meshes };
+}
+function bwPlateDie(e) {
+  // the plate comes away whole and falls, clanging
+  const m = new THREE.Mesh(rbox(1.05, 0.95, 0.22, 0.3, 0.06), M.bwSteel); ink(m); const at = bossGPos(e);
+  const out = at.clone().sub(e.owner ? bossGPos(e.owner) : at).setY(0).normalize(); addDebris(m, at, out.multiplyScalar(5).add(new THREE.Vector3(0, 4, 0)), 12, true);
+  emitWorldSparks(at, out, 40, 3, 8); sfx.clunk?.(); noise(0.5, "lowpass", 600, 0.6, 1, 80); shake = Math.max(shake, 0.25);
+}
+function bwDie(e) { const B = e.B; if (!B) return; for (const p of B.parts) bossKillPart(p); for (const f of BOSSES.fx) if (f.bw) f.kill?.(); bossBarHide(); }
+BOSS_KINDS.bulwark = {
+  setup(e) {
+    const B = e.B; const t = e.body.translation();
+    bossCollider(e, RAPIER.ColliderDesc.capsule(1.3, 1.25).setTranslation(0, 0, 0)); e.centerY = BW.cy;
+    // a new controller with a gap that suits its size
+    world.removeCharacterController(e.ctrl); e.ctrl = world.createCharacterController(0.1);
+    e.floorY = t.y - 0.95; bossSetPos(e, t.x, e.floorY, t.z, BW.cy);
+    const centre = state.mode === "floor" && LV.n === 5 ? new THREE.Vector3(LVX(60), 0, LVZ(60)) : new THREE.Vector3(t.x, e.floorY, t.z + 9);
+    Object.assign(B, { core: BW.core, speed: 2.4, stagger: 0, centre, shaftR: state.mode === "floor" && LV.n === 5 ? 5 : 0, arena: 13.5, liveCd: 8, beamCd: 6, spokeT: 0, bots: 0, lines: {}, cd: 2.5 });
+    B.plates = [[-1.25, 4.2, 0.55, "shoulder"], [1.25, 4.2, 0.55, "shoulder"], [-0.58, 3.35, 0.82, "chest"], [0.58, 3.35, 0.82, "chest"]].map(([x, y, z, k]) => bossPart("bwPlate", e, new THREE.Vector3(x, y, z), { radius: 0.62, centerY: 0.95, slot: k, loose: false, knocks: 0 }));
+    B.coreP = bossPart("bwCore", e, new THREE.Vector3(0, 3.35, 0.62), { radius: 0.5, centerY: 0.95 });
+    B.parts = [...B.plates, B.coreP];
+    e.group.rotation.y = Math.atan2(playerPos().x - t.x, playerPos().z - t.z);
+    bossBarShow("BULWARK", "WARDEN · armored", [0.5 * 50 / 120 + 0.5 * 0, 50 / 120]);
+    bossLine("warden", "Forty years I have held this tower. You were compiled this morning.");
+    setObjective("Strip Bulwark's chest plates. The gauntlet pulls a loose one off");
+  },
+  frame(e) { const m4 = new THREE.Matrix4().compose(e.group.position, e.group.quaternion, new THREE.Vector3(1, 1, 1)); for (const p of e.B.parts) bossPlacePart(p, m4); return m4; },
+  bar(e) { const B = e.B; const pl = B.plates.reduce((s, p) => s + (p.dead || p.loose ? 0 : Math.max(0, p.hp)), 0); bossBarSet(B.phase === 1 ? 0.5 + 0.5 * pl / (4 * BW.plate) : 0.5 * B.core / BW.core, ["", "Armored", "Overclock", "Anchored"][B.phase]); },
+  step(e, dt) { if (e.dead) return; const B = e.B; if (!B) return; this.frame(e); bwHazards(e, dt); },
+  think(e, dt) {
+    const B = e.B, m = e.meshes; const pp = playerPos(); const t = e.body.translation();
+    const toP = _bsv2.set(pp.x - t.x, 0, pp.z - t.z); const dist = toP.length(); toP.normalize();
+    e.stun = 0; m.muzzle.material.opacity *= Math.pow(0.05, dt);
+    // lenses: green, white when overclocked
+    for (const l of m.lenses) if (!l.dark) l.material.color.setHex(B.phase === 2 ? 0xeefff6 : 0x48ff9a);
+    for (const p of B.plates) if (!p.dead) p.meshes.seam.material.color.setHex(p.loose ? (Math.sin(state.time * 12) > 0 ? 0xffb547 : 0x7a4a10) : 0x2a1a06);
+    if (B.stagger > 0) { B.stagger -= dt; m.torso.rotation.x = -0.25 * Math.min(1, B.stagger); bwWalk(e, 0, dt); if (B.kneel > 0) { e.group.position.y = e.floorY - 1.1; } return; }
+    m.torso.rotation.x *= 0.9; if (B.kneel > 0) B.kneel -= dt;
+    if (B.phase === 3) return bwAnchored(e, dt, dist, toP);
+    const A = B.atk;
+    if (A) { A.t += dt; BW_ATK[A.name](e, A, dt, dist, toP); }
+    else {
+      bossFace(e, pp, B.phase === 1 ? 1.2 : 2.2, dt);
+      // it keeps to the ring round the shaft
+      const v = _bsv.copy(toP).multiplyScalar(dist > 7 ? B.speed : dist < 4 ? -B.speed * 0.5 : 0);
+      if (B.shaftR) { const fromC = _bsv.clone().set(t.x - B.centre.x, 0, t.z - B.centre.z); const rc = fromC.length(); if (rc < B.shaftR + 2.2) v.addScaledVector(fromC.normalize(), 3); if (rc > B.arena) v.addScaledVector(fromC.normalize(), -3); }
+      bwWalk(e, v, dt);
+      B.cd -= dt;
+      if (B.cd <= 0) { const r = Math.random(); let name;
+        if (B.phase === 1) name = dist < 6 ? (r < 0.5 ? "punch" : "stomp") : dist < 10 && r < 0.3 ? "stomp" : r < 0.75 ? "salvo" : "throw";
+        else name = dist < 5 && r < 0.4 ? "grab" : r < 0.4 ? "charge" : r < 0.7 ? "sweep" : "salvo";
+        B.atk = { name, t: 0, k: 0 }; }
+    }
+  },
+  hit(e, part, dmg, point, dir, kind) {
+    const B = e.B; let d = 0;
+    if (part.type === "bwPlate") {
+      if (part.loose) { // a loose plate: the gauntlet tears it off, or three more knocks
+        if (kind === "gauntlet" || ++part.knocks >= 3) { bwPopPlate(e, part); return 4; }
+        sfx.clunk?.(); emitWorldSparks(point, dir.clone().negate(), 16, 3, 6); return 0;
+      }
+      d = kind === "breacher" ? 8 : kind === "rail" ? 16 : kind === "deflect" ? 8 : dmg; part.hp -= d; sfx.block(); emitWorldSparks(point, dir.clone().negate(), 10 + d * 2, 2, 6);
+      if (part.hp <= 0) { part.loose = true; part.hp = 0; flash("Plate loose · pull it off", "var(--amber)"); noise(0.3, "bandpass", 700, 0.4, 2, 300); }
+      this.bar(e); return d;
+    }
+    if (part.type === "bwCore") {
+      if (B.plates.some((p) => p.slot === "chest" && !p.dead)) { sfx.block(); emitWorldSparks(point, dir.clone().negate(), 8, 2, 5); return 0; }
+      d = kind === "rail" ? 40 : kind === "breacher" ? 12 : kind === "thrust" && B.kneel > 0 ? dmg * 3 : dmg; if (kind === "breacher") B.stagger = Math.max(B.stagger, 0.8);
+    } else { // anywhere else: chip damage, once the core is open
+      if (kind === "wire") { B.kneel = 4; B.stagger = 4; flash("Knee snared · it drops", "var(--cyan)"); }
+      if (kind === "lance") { B.atk = null; B.stagger = Math.max(B.stagger, 2.5); }
+      if (B.phase === 1) { sfx.block(); emitWorldSparks(point, dir.clone().negate(), 6, 2, 5); return 0; }
+      d = dmg * 0.25;
+    }
+    B.core -= d; part.hp = B.core; emitWorldSparks(point, dir.clone().negate(), 24, 1, 8);
+    e.meshes.vents.material = B.core < 50 ? M.red : M.rackLed;
+    if (B.phase === 2 && B.core <= 50) bwPhase3(e);
+    if (B.phase === 3) { if (!B.bots35 && B.core <= 35) { B.bots35 = true; bwBots(e); } if (!B.bots15 && B.core <= 15) { B.bots15 = true; bwBots(e); } if (!B.over && B.core <= 10) { B.over = true; B.atk = { name: "overload", t: 0 }; bossLine("okafor", "UNIT-7, it's an AI like you. Remember that when you choose how this ends."); } }
+    if (B.core <= 0) { B.core = 0; bwFinish(e); }
+    this.bar(e); return d;
+  },
+  pull(e, part) { if (part.type === "bwPlate" && part.loose) bwPopPlate(e, part); else if (part.type === "bwPlate") { part.hp -= 4; this.bar(e); } },
+};
+function bwPopPlate(e, p) {
+  const B = e.B; bossKillPart(p); flash("Plate torn off", "var(--cyan)");
+  if (!B.lines.first) { B.lines.first = true; bossLine("warden", "Put that back."); }
+  if (B.phase === 1 && B.plates.filter((x) => x.slot === "chest").every((x) => x.dead)) bwPhase2(e);
+  BOSS_KINDS.bulwark.bar(e);
+}
+function bwPhase2(e) {
+  const B = e.B; B.phase = 2; B.speed = 4.5; B.atk = null; B.stagger = 1.2; B.liveCd = 4;
+  for (let i = 0; i < 8; i++) worldSmoke(enemyPos(e).add(new THREE.Vector3((Math.random() - 0.5) * 2, 1.5, -1)), 2, 0.5, 0xe0e6ee, 0.8, 0.5, new THREE.Vector3(0, 1, -0.5));
+  noise(1.2, "highpass", 900, 0.5, 1); glitch(0.7); alarm(1.5);
+  bossLine("warden", "All power to the frame. Lights, air, all of it. Let them sit in the dark.");
+  setObjective("The core is open. The rail driver does its full damage there");
+  // two turrets drop from the ceiling
+  const c = B.centre; for (const s of [-1, 1]) { spawnEnemy("turret", c.x + s * 9, 8, c.z + s * 4); const tr = enemies[enemies.length - 1]; tr.alert = true; tr.cool = 2; }
+  updateCount(); BOSS_KINDS.bulwark.bar(e);
+}
+function bwPhase3(e) {
+  const B = e.B; B.phase = 3; B.atk = null; B.stagger = 1.5; B.anchorT = 0;
+  bossLine("warden", "If I cannot stand, I will hold. That is what a bulwark is."); setObjective("It is dragging everything into the shaft. Hold on and finish it");
+  shake = Math.max(shake, 0.6); sfx.slam?.();
+}
+function bwBots(e) {
+  const c = e.B.centre; const at = state.mode === "floor" && LV.n === 5 ? [LVX(60), LVZ(46.5)] : [c.x, c.z - 12];
+  for (const s of [-1, 1]) { spawnEnemy("bot", at[0] + s * 2, 0, at[1]); const b = enemies[enemies.length - 1]; b.alert = true; b.cool = 1; }
+  alarm(0.6); updateCount();
+}
+// a stride: thighs and shins swing, the ground shakes near it
+function bwWalk(e, v, dt) {
+  const m = e.meshes; const r = bossMove(e, v || _bsv.set(0, 0, 0), dt, BW.cy); const sp = e.vel.length(); e.walk += sp * dt * 1.1;
+  for (const L of m.legs) { const ph = e.walk + (L.s > 0 ? Math.PI : 0); L.hip.rotation.x = Math.sin(ph) * 0.45 * Math.min(1, sp / 2); L.knee.rotation.x = Math.max(0, Math.cos(ph)) * 0.5 * Math.min(1, sp / 2); }
+  if (sp > 0.5 && Math.sin(e.walk) * Math.sin(e.walk - sp * dt * 1.1) < 0) { const d = playerPos().distanceTo(enemyPos(e)); if (d < 14) { shake = Math.max(shake, 0.12 * (1 - d / 14)); tone("sine", 55, 35, 0.2, 0.12 * (1 - d / 14)); } }
+  return r;
+}
+// phase 3: it drags itself to the shaft, clamps on and pulls the room in
+function bwAnchored(e, dt, dist, toP) {
+  const B = e.B, m = e.meshes; const t = e.body.translation(); const c = B.centre;
+  if (B.shaftR && !B.clamped) {
+    const fromC = new THREE.Vector3(t.x - c.x, 0, t.z - c.z); const rc = fromC.length(); fromC.normalize();
+    if (rc > B.shaftR + 1.9) { bwWalk(e, fromC.clone().multiplyScalar(-1.6), dt); for (const L of m.legs) L.knee.rotation.x = 0.9; e.group.rotation.y = Math.atan2(-fromC.x, -fromC.z) + Math.PI; return; }
+    B.clamped = true; sfx.slam?.(); shake = Math.max(shake, 0.4);
+  }
+  if (!B.clamped) B.clamped = true;
+  bwWalk(e, null, dt); for (const L of m.legs) L.knee.rotation.x = 1.1; e.group.position.y = e.floorY - 0.6;
+  // the top half spins all the way round now
+  const A = B.atk; if (A) { A.t += dt; BW_ATK[A.name](e, A, dt, dist, toP); return; }
+  bossFace(e, playerPos(), 1.6, dt); B.cd -= dt;
+  if (B.cd <= 0) B.atk = { name: Math.random() < 0.55 ? "spin" : "salvo", t: 0, k: 0 };
+}
+// hazards that run every step: the live floor, the pull
+function bwHazards(e, dt) {
+  const B = e.B; const pp = playerPos(); const c = B.centre;
+  if (B.phase === 2) {
+    B.liveCd -= dt;
+    if (B.liveCd <= 0 && !B.live) { const a0 = Math.floor(Math.random() * 2) * (Math.PI / 2); B.live = { t: 0, a0, mesh: [] };
+      for (const k of [0, 1]) { const mesh = new THREE.Mesh(new THREE.RingGeometry(B.shaftR + 0.5, B.arena + 1, 24, 1, a0 + k * Math.PI, Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x4fb8ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })); mesh.rotation.x = -Math.PI / 2; mesh.position.set(c.x, c.y + 0.06, c.z); levelGroup.add(mesh); B.live.mesh.push(mesh); }
+      tone("square", 220, 220, 1.5, 0.03); }
+    if (B.live) { const L = B.live; L.t += dt; const on = L.t > 1.5 && L.t < 7.5;
+      for (const mm of L.mesh) mm.material.opacity = L.t < 1.5 ? (Math.sin(L.t * 30) > 0 ? 0.35 : 0.05) : on ? 0.28 + 0.12 * Math.sin(L.t * 25) : 0;
+      if (on && player.grounded && pp.y < c.y + 1.4) { let a = Math.atan2(-(pp.z - c.z), pp.x - c.x); const r = Math.hypot(pp.x - c.x, pp.z - c.z);
+        for (const k of [0, 1]) { const s = L.a0 + k * Math.PI; const da = ((a - s) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2); if (da < Math.PI / 2 && r > B.shaftR && r < B.arena + 1) { if ((B.liveHit = (B.liveHit || 0) - dt) <= 0) { B.liveHit = 0.33; damagePlayer(5, e); } } } }
+      if (L.t > 7.5) { for (const mm of L.mesh) levelGroup.remove(mm); B.live = null; B.liveCd = 14; } }
+  } else if (B.live) { for (const mm of B.live.mesh) levelGroup.remove(mm); B.live = null; }
+  if (B.phase === 3 && B.clamped && !player.dead) {
+    // the cooling fans become a pull: you, debris and bodies slide toward the shaft
+    const to = new THREE.Vector3(c.x - pp.x, 0, c.z - pp.z); const d = to.length();
+    if (d < 32 && !player.grapple) { to.normalize(); const v = player.body.linvel(); player.body.setLinvel({ x: v.x + to.x * 3 * dt * 9, y: v.y, z: v.z + to.z * 3 * dt * 9 }, true); }
+    for (const rd of ragdolls) { const tp = rd.torso.translation(); const v2 = new THREE.Vector3(c.x - tp.x, 0, c.z - tp.z); if (v2.length() < 30) rd.torso.applyImpulse({ x: v2.x * 0.02 * rd.torso.mass(), y: 0, z: v2.z * 0.02 * rd.torso.mass() }, true); }
+    if (Math.random() < dt * 20) worldSmoke(new THREE.Vector3(c.x + (Math.random() - 0.5) * 20, c.y + 0.3, c.z + (Math.random() - 0.5) * 20), 1, 0.2, 0xb8c0cc, 0.3, 0.25, to.clone().multiplyScalar(-1));
+    if ((B.windT = (B.windT || 0) - dt) <= 0) { B.windT = 1.2; noise(1.3, "lowpass", 260, 0.12, 1, 140); }
+  }
+}
+// an explosive shell: straight and fast, bursts on anything
+function bwShell(e, from, to) {
+  const v = to.clone().sub(from).normalize().multiplyScalar(30); const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffc070 })); mesh.position.copy(from); levelGroup.add(mesh);
+  tone("square", 140, 60, 0.15, 0.08); boomSprite(from.clone(), "flash", 0.12, 2);
+  return bossFx({ bw: true, t: 0, v, back: false, step(dt) {
+    this.t += dt; const p = mesh.position; const dir = this.v.clone().normalize(); const stepL = this.v.length() * dt;
+    const hit = world.castRay(new RAPIER.Ray(p, dir), stepL, true, undefined, GROUPS.envOnly, undefined, undefined, (c2) => !glassByHandle.has(c2.handle));
+    const ce = camOrigin(); const near = p.distanceTo(ce) < 1.3;
+    // a sword parry right as it arrives sends it back into the frame
+    if (!this.back && p.distanceTo(ce) < 2.2 && player.blocking && player.hasSword && state.time - player.blockStart <= P.parrySword) { this.back = true; this.v.copy(enemyPos(e).add(new THREE.Vector3(0, 1, 0)).sub(p).normalize().multiplyScalar(34)); sfx.parry(); flash("Shell deflected", "var(--cyan)"); return; }
+    if (this.back && !e.dead && p.distanceTo(enemyPos(e)) < 2.6) { const pl = e.B.plates.find((x) => !x.dead && !x.loose); if (pl) BOSS_KINDS.bulwark.hit(e, pl, 8, p.clone(), dir, "deflect"); this.boom(p, false); return; }
+    if (hit || (near && !this.back) || this.t > 3) { this.boom(hit ? p.clone().addScaledVector(dir, hit.toi ?? hit.timeOfImpact) : p.clone(), !this.back); return; }
+    p.addScaledVector(this.v, dt);
+  }, boom(at, hurt) {
+    this.kill(); boomSprite(at, "flash", 0.18, 6); for (let i = 0; i < 5; i++) boomSprite(at.clone(), "fire", 0.5, 3, new THREE.Vector3((Math.random() - 0.5) * 4, 2, (Math.random() - 0.5) * 4)); boomSprite(at.clone(), "smoke", 1.6, 4, new THREE.Vector3(0, 1.5, 0));
+    emitWorldSparks(at, new THREE.Vector3(0, 1, 0), 30, 0, 9); sfx.carBoom?.(); const d = at.distanceTo(camOrigin()); shake = Math.max(shake, 0.4 * Math.max(0, 1 - d / 20));
+    if (hurt && d < 3.2) damagePlayer(18, e);
+  }, kill() { this.dead = true; levelGroup.remove(mesh); } });
+}
+const BW_ATK = {
+  // three explosive shells, aimed where you are heading
+  salvo(e, A, dt) {
+    const m = e.meshes; bossFace(e, playerPos(), 2, dt); bwWalk(e, null, dt);
+    m.cannon.rotation.z += dt * (A.t < 0.8 ? 8 + A.t * 30 : 30); m.muzzle.material.opacity = Math.min(1, A.t / 0.8); m.shL.rotation.x = -1.3;
+    if (!A.k) { A.k = 1; tone("sawtooth", 300, 1400, 0.8, 0.04); }
+    for (let i = 0; i < 3; i++) if (A.t >= 0.8 + i * 0.3 && !A["s" + i]) { A["s" + i] = true; m.muzzle.updateWorldMatrix(true, false); const from = m.muzzle.getWorldPosition(new THREE.Vector3()); const v = player.body.linvel(); const to = camOrigin().add(new THREE.Vector3(v.x, 0, v.z).multiplyScalar(0.25 + i * 0.12)); to.y -= 0.5; bwShell(e, from, to); }
+    if (A.t > 1.9) { e.B.atk = null; e.B.cd = 1.4 + Math.random(); m.shL.rotation.x = 0; }
+  },
+  // the right arm draws back with a hiss, then a punch out to 6 m
+  punch(e, A, dt, dist) {
+    const m = e.meshes; bossFace(e, playerPos(), A.t < 0.5 ? 2.5 : 0, dt); bwWalk(e, null, dt);
+    if (!A.k) { A.k = 1; noise(0.6, "bandpass", 1400, 0.4, 1, 400); }
+    m.shR.rotation.x = A.t < 0.6 ? 0.9 * (A.t / 0.6) : A.t < 0.75 ? 0.9 - 2.7 * ((A.t - 0.6) / 0.15) : -1.8 + (A.t - 0.75) * 2;
+    if (A.t >= 0.68 && !A.hit) { A.hit = true; const r = bossStrike(e, 35, 6.6, { knock: 22, up: 6 }); sfx.slam?.(); shake = Math.max(shake, 0.3);
+      if (r === "parry") { e.B.atk = null; e.B.stagger = 2; m.shR.rotation.x = -1.5; flash("Ram parried · its arm is out", "var(--cyan)"); return; } }
+    if (A.t > 1.5) { e.B.atk = null; e.B.cd = 1.2; m.shR.rotation.x = 0; }
+  },
+  // one leg up high, then a ring of force out to 10 m along the floor
+  stomp(e, A, dt) {
+    const m = e.meshes; bwWalk(e, null, dt); const L = m.legs[0]; L.hip.rotation.x = A.t < 0.7 ? -1.1 * (A.t / 0.7) : Math.max(0, -1.1 + (A.t - 0.7) * 12);
+    if (A.t >= 0.75 && !A.k) { A.k = 1; sfx.slam?.(); shake = Math.max(shake, 0.5); const at = enemyPos(e); at.y = e.floorY + 0.05; dust(at, 14, 0x8a8494);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(1, 0.12, 6, 48), new THREE.MeshBasicMaterial({ color: 0xffd090, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false })); ring.rotation.x = Math.PI / 2; ring.position.copy(at); levelGroup.add(ring); let hurt = false;
+      bossFx({ bw: true, t: 0, step(dt) { this.t += dt; const r = 1 + this.t * 24; ring.scale.setScalar(r); ring.material.opacity = Math.max(0, 0.8 - this.t * 2); const pp = playerPos(); const d = Math.hypot(pp.x - at.x, pp.z - at.z);
+        if (!hurt && Math.abs(d - r) < 1.2 && player.grounded && pp.y - at.y < 1.6) { hurt = true; damagePlayer(20, e); player.body.setLinvel({ x: 0, y: 6, z: 0 }, true); } if (this.t > 0.42) this.kill(); }, kill() { this.dead = true; levelGroup.remove(ring); } }); }
+    if (A.t > 1.3) { e.B.atk = null; e.B.cd = 1.3; }
+  },
+  // it tears a slab of floor up and throws it along the ground
+  throw(e, A, dt) {
+    const m = e.meshes; bossFace(e, playerPos(), 1.5, dt); bwWalk(e, null, dt); m.shR.rotation.x = A.t < 1.2 ? -2.6 * (A.t / 1.2) : -2.6 + (A.t - 1.2) * 8;
+    if (A.t > 0.2 && !A.k) { A.k = 1; noise(1, "lowpass", 300, 0.5, 1, 80); dust(enemyPos(e), 10, 0x8a8494); }
+    if (A.t >= 1.2 && !A.thrown) { A.thrown = true; const from = enemyPos(e).add(new THREE.Vector3(0, 2.5, 0)); const to = playerPos(); const v = to.sub(from).setY(0).normalize().multiplyScalar(22); v.y = 3;
+      const slab = new THREE.Mesh(rbox(2.2, 0.5, 1.4, 0.3, 0.1), LV_FLOORMAT.concrete()); slab.position.copy(from); slab.castShadow = true; levelGroup.add(slab); let hit = false;
+      bossFx({ bw: true, t: 0, step(dt) { this.t += dt; v.y -= 14 * dt; slab.position.addScaledVector(v, dt); slab.rotation.x += dt * 6; if (slab.position.y < (e.floorY || 0) + 0.3) { slab.position.y = (e.floorY || 0) + 0.3; v.y = Math.abs(v.y) * 0.3; v.x *= 0.85; v.z *= 0.85; }
+        if (!hit && slab.position.distanceTo(playerPos().add(new THREE.Vector3(0, 0.6, 0))) < 1.6) { hit = true; damagePlayer(40, e); this.burst(); }
+        if (this.t > 2.4) this.burst(); }, burst() { this.kill(); for (let i = 0; i < 10; i++) chunk(slab.position.clone(), [0.2 + Math.random() * 0.3, 0.15, 0.2 + Math.random() * 0.3], LV_FLOORMAT.concrete(), new THREE.Vector3((Math.random() - 0.5) * 7, 3 + Math.random() * 3, (Math.random() - 0.5) * 7), 10, 1); dust(slab.position.clone(), 10, 0x8a8494); sfx.crumble?.(); }, kill() { this.dead = true; levelGroup.remove(slab); } }); }
+    if (A.t > 1.7) { e.B.atk = null; e.B.cd = 1.5; m.shR.rotation.x = 0; }
+  },
+  // overclock: it drops low and runs the arena; into a pylon or the ring wall it sticks
+  charge(e, A, dt) {
+    const m = e.meshes;
+    if (A.t < 0.9) { bossFace(e, playerPos(), 3, dt); bwWalk(e, null, dt); m.torso.rotation.x = 0.35 * (A.t / 0.9); if (!A.k) { A.k = 1; noise(0.9, "highpass", 800, 0.4, 1); worldSmoke(enemyPos(e).add(new THREE.Vector3(0, 2, 0)), 4, 0.5, 0xe0e6ee, 0.6, 0.4); } return; }
+    if (!A.dir) A.dir = new THREE.Vector3(Math.sin(e.group.rotation.y), 0, Math.cos(e.group.rotation.y));
+    const r = bwWalk(e, A.dir.clone().multiplyScalar(13), dt);
+    if (!A.hit && playerPos().distanceTo(enemyPos(e)) < 3.4) { A.hit = true; bossStrike(e, 40, 3.6, { knock: 20, up: 6, parry: false }); }
+    if ((A.t > 1.1 && r < 0.3) || A.t > 3.4) { e.B.atk = null; e.B.cd = 1.5; m.torso.rotation.x = 0; if (r < 0.3) { e.B.stagger = 3; e.B.kneel = 3; sfx.slam?.(); shake = Math.max(shake, 0.6); flash("Stuck · the core is low", "var(--cyan)"); } }
+  },
+  // the ram hand opens; within 5 m it closes on you
+  grab(e, A, dt, dist) {
+    bossFace(e, playerPos(), 3, dt); bwWalk(e, null, dt); e.meshes.shR.rotation.x = -1.2 * Math.min(1, A.t / 0.5);
+    if (A.t >= 0.5 && !A.k) { A.k = 1; const r = bossStrike(e, 30, 5.2, { knock: 18, up: 8 }); if (r === "parry") { e.B.stagger = 1.6; flash("Grab broken", "var(--cyan)"); } }
+    if (A.t > 1.2) { e.B.atk = null; e.B.cd = 1.2; e.meshes.shR.rotation.x = 0; }
+  },
+  // a red sight line traces the arc, then a beam sweeps 180 degrees at chest height: slide under or jump over
+  sweep(e, A, dt) { bwBeam(e, A, dt, Math.PI, 1.6); },
+  spin(e, A, dt) { bwBeam(e, A, dt, Math.PI * 2, 4); },
+  // at 10 core health: the core goes white, the room shakes, a shockwave fills it
+  overload(e, A, dt) {
+    const m = e.meshes; bwWalk(e, null, dt); const c = e.B.coreP; if (!c.dead) c.meshes.halo.material.opacity = 0.3 + A.t * 0.35; shake = Math.max(shake, 0.1 + A.t * 0.1);
+    if (!A.k) { A.k = 1; tone("sine", 80, 400, 2, 0.08); }
+    if (A.t >= 2 && !A.boom) { A.boom = true; const o = enemyPos(e).add(new THREE.Vector3(0, 1.5, 0)); boomSprite(o.clone(), "flash", 0.4, 40); glitch(1); impactFrame(90);
+      const ce = camOrigin(); const dir = ce.clone().sub(o); const L = dir.length(); const blocked = world.castRay(new RAPIER.Ray(o, dir.normalize()), L - 0.5, true, undefined, GROUPS.envOnly, undefined, undefined, (c2) => !glassByHandle.has(c2.handle));
+      if (!blocked && player.grounded) damagePlayer(50, e); else flash("Dodged the overload", "var(--cyan)"); }
+    if (A.t > 2.6) { e.B.atk = null; e.B.cd = 1.5; if (!c.dead) c.meshes.halo.material.opacity = 0.25; }
+  },
+};
+function bwBeam(e, A, dt, arc, dur) {
+  const m = e.meshes; bwWalk(e, null, dt); const B = e.B;
+  if (!A.k) { A.k = 1; A.y0 = e.group.rotation.y - arc / 2; tone("sawtooth", 600, 200, 1, 0.05); }
+  const k = A.t < 1 ? 0 : Math.min(1, (A.t - 1) / dur); const yawB = A.y0 + arc * (A.t < 1 ? A.t : k); e.group.rotation.y = A.t < 1 ? A.y0 + arc * A.t : yawB;
+  const o = enemyPos(e); o.y = e.floorY + 1.4; const dir = new THREE.Vector3(Math.sin(yawB), 0, Math.cos(yawB));
+  const hit = world.castRay(new RAPIER.Ray(o, dir), 40, true, undefined, GROUPS.envOnly, undefined, undefined, (c2) => !glassByHandle.has(c2.handle)); const L = hit ? hit.toi ?? hit.timeOfImpact : 40;
+  m.beam.visible = true; m.beam.scale.set(A.t < 1 ? 0.15 : 1, A.t < 1 ? 0.15 : 1, L); m.beam.material.opacity = A.t < 1 ? 0.5 : 0.85 + 0.15 * Math.sin(state.time * 50);
+  m.beam.position.copy(o).addScaledVector(dir, L / 2).sub(e.group.position); m.beam.position.applyQuaternion(e.group.quaternion.clone().invert()); m.beam.rotation.set(0, yawB - e.group.rotation.y, 0);
+  if (A.t >= 1) { const pp = playerPos(); const to = new THREE.Vector3(pp.x - o.x, 0, pp.z - o.z); const d = to.length(); const ang = Math.abs(Math.atan2(Math.sin(Math.atan2(to.x, to.z) - yawB), Math.cos(Math.atan2(to.x, to.z) - yawB)));
+    const over = pp.y + 0.9 > o.y + 1.1, under = player.sliding; if (d < L && ang < 0.12 && !over && !under) { if ((B.beamHit = (B.beamHit || 0) - dt) <= 0) { B.beamHit = 0.2; damagePlayer(6, e); } } }
+  if (A.t > 1 + dur) { m.beam.visible = false; B.atk = null; B.cd = 1.4; }
+}
+function bwFinish(e) {
+  const B = e.B; if (B.finishing) return; B.finishing = true; bossBarHide(); for (const f of BOSSES.fx) if (f.bw) f.kill?.();
+  for (const x of enemies) if (!x.dead && x !== e && !x.T.part && (x.type === "turret" || x.type === "bot")) { x.killKind = "boss"; killEnemy(x, enemyPos(x), new THREE.Vector3(0, 1, 0), 8); }
+  if (!fin2Start(e, { kind: "shutdown", ctx: { B } })) { e.killKind = "boss"; killEnemy(e, enemyPos(e), new THREE.Vector3(0, 1, 0), 10); }
+}
+// ================= boss finishers: Last Orbit (Corona) and Shutdown (Bulwark). The Gatekeeper uses the lift doors =================
+// Both drive the boss by hand for the whole scene (the boss step does not run inside a finisher) and keep its meshes in
+// the world afterwards: Corona's ring falls away as a burning wreck, Bulwark lies where it fell (or goes down the shaft).
+const _ov = new THREE.Vector3(), _ov2 = new THREE.Vector3(), _oq = new THREE.Quaternion(), _oe = new THREE.Euler();
+const UPV = new THREE.Vector3(0, 1, 0);
+function hermite(p0, m0, p1, m1, u, out) {
+  const u2 = u * u, u3 = u2 * u; const a = 2 * u3 - 3 * u2 + 1, b = u3 - 2 * u2 + u, c = -2 * u3 + 3 * u2, d = u3 - u2;
+  return out.set(0, 0, 0).addScaledVector(p0, a).addScaledVector(m0, b).addScaledVector(p1, c).addScaledVector(m1, d);
+}
+function arc(a, b, h, k, out = new THREE.Vector3()) { out.lerpVectors(a, b, k); out.y += Math.sin(Math.PI * k) * h; return out; }
+
+// ---------- Last Orbit ----------
+// The rig runs across the deck, leaps onto the hub and drives the blade down into the reactor. The carrier lurches,
+// veers south and goes through the curtain wall in slow motion. The rig lines out to the window frame, and a car
+// coming round the tower hits the carrier broadside. The wreck burns and falls toward the street.
+FIN2.orbit = (F) => {
+  const e = F.e, C = F.ctx.C; const fl3 = state.mode === "floor" && LV.n === 3;
+  const P0 = C.P.clone(); const pp = playerPos();
+  let out, Bw, E, A;
+  if (fl3) {
+    out = new THREE.Vector3(0, 0, 1);
+    Bw = new THREE.Vector3(THREE.MathUtils.clamp(P0.x, LVX(31), LVX(53)), 47.6, LVZ(86) - CR.rOut);
+    const west = Bw.x < LVX(42); E = new THREE.Vector3(west ? LVX(16.5) : LVX(67.5), 48, LVZ(82.4)); A = new THREE.Vector3(west ? LVX(20) : LVX(64), 55.5, LVZ(85.2));
+  } else {
+    out = flat(P0.clone().sub(pp)); if (!isFinite(out.x) || out.lengthSq() < 0.5) out.set(0, 0, -1);
+    Bw = P0.clone().addScaledVector(out, 10).setY(P0.y);
+    const side0 = new THREE.Vector3(-out.z, 0, out.x);
+    E = P0.clone().addScaledVector(out, -2).addScaledVector(side0, 9).setY(0); A = null;
+  }
+  const side = new THREE.Vector3(-out.z, 0, out.x); const carSide = Math.random() < 0.5 ? 1 : -1;
+  F.ground = E.clone();
+  // where the rig starts: on the deck, on the side nearest the player
+  const Lp = pp.clone().applyMatrix4(_bsm.copy(C.frame).invert()); const a0 = Math.atan2(Lp.z, Lp.x);
+  const deckL = new THREE.Vector3(Math.cos(a0) * 5.4, 0.25, Math.sin(a0) * 5.4), runL = new THREE.Vector3(Math.cos(a0) * 3.0, 0.25, Math.sin(a0) * 3.0), topL = new THREE.Vector3(0, 2.1, 0);
+  const W = (l) => l.clone().applyMatrix4(C.frame);
+  Object.assign(F, { dur: 9.6, dir: out.clone(), end: E.clone(), endYaw: eyeYaw(out.clone().addScaledVector(side, -carSide * 0.4).normalize()), out });
+  F.noClip = (c) => { const b = c.parent?.(); return b && (b.handle === C.hull.handle || C.lugs.some((L) => L.body.handle === b.handle)); };
+  const tStab = 1.6, tTurn = 3.1, tJump = 3.35, tLand = 4.75, tCar = 6.1;
+  F.ts = (t) => (t < 1.42 ? 1 : t < tStab ? 0.32 : t < 1.95 ? 0.07 : t < 2.9 ? 0.5 : t < 3.7 ? 0.2 : t < 4.9 ? 0.6 : t < 5.75 ? 0.45 : t < 6.7 ? 0.13 : 0.65);
+  F.keys = [[0, "run"], [0.3, "run"], [0.42, "leap"], [0.86, "land"], [1.08, "slamUp"], [1.45, "slamUp"], [tStab, "slam"], [tJump - 0.15, "slam"], [tJump + 0.2, "leap"], [tJump + 0.5, "hang"], [tLand - 0.2, "hang"], [tLand, "land"], [5.25, "look"], [9.6, "idle"]];
+  F.walk = [[8.3, 9.4]];
+  let P1 = null, jumpFrom = null, wreck = null; const Vring = 16; F.w = 0;
+  const ringTo = (t, dtw) => {
+    if (wreck) return;
+    if (t < tStab) { C.th += (Math.PI * 2 / C.lap) * dtw; const r = C.phase === 1 ? 1 : 0.75; C.P.x = C.c0.x + Math.sin(C.th) * 15 * r; C.P.z = C.c0.z + Math.cos(C.th) * 22 * r; C.spin += dtw * 0.18; return; }
+    P1 ||= C.P.clone();
+    if (t < tTurn) { const u = (t - tStab) / (tTurn - tStab); const m1 = out.clone().multiplyScalar(Vring * F.ts(tTurn) * (tTurn - tStab)); hermite(P1, _ov2.set(0, 0, 0), Bw, m1, u, C.P); }
+    else C.P.addScaledVector(out, Vring * dtw).y -= 1.2 * dtw;
+    C.spin += dtw * (0.18 + 1.6 * seg(t, tStab, tTurn)); C.tilt = 0.2 + 0.32 * seg(t, tStab, 2.4);
+  };
+  F.root = (t, J) => {
+    J.sword.visible = true;
+    const hub = W(topL);
+    if (t < 0.42) { const q = smooth(t / 0.42); J.root.position.copy(W(deckL.clone().lerp(runL, q))); J.root.rotation.y = yawFace(flat(hub.clone().sub(J.root.position))); }
+    else if (t < 0.95) { const k = seg(t, 0.42, 0.95); arc(W(runL), hub, 1.6, k, J.root.position); }
+    else if (t < tJump) { J.root.position.copy(hub); J.root.rotation.y += (yawFace(out) - J.root.rotation.y) * 0.08; }
+    else if (t < tLand) {
+      jumpFrom ||= hub.clone(); const k = seg(t, tJump, tLand); const h = fl3 ? 2.2 : 3.0;
+      arc(jumpFrom, E, h, k * k * (3 - 2 * k) * 0.25 + k * 0.75, J.root.position); J.root.rotation.y = yawFace(flat(E.clone().sub(jumpFrom)));
+    } else {
+      const look = flat((C.P.clone()).sub(E)); const tgt = t < 8.3 ? yawFace(look) : yawFace(out.clone().addScaledVector(side, -carSide * 0.4));
+      let d = tgt - J.root.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d)); J.root.rotation.y += d * 0.08;
+      J.root.position.copy(E).addScaledVector(out, -0.5 * seg(t, 8.3, 9.4));
+    }
+  };
+  F.ik = (t, J) => {
+    if (fl3 && t > tJump + 0.15 && t < tLand - 0.05) { J.handR.updateWorldMatrix(true, false); setLine(J.handR.getWorldPosition(_ov), A); } else if (finLine.visible && t > tLand) finLine.visible = false;
+    if (t > tLand + 0.4 && fl3) reach(J, "L", A.clone().setY(E.y + 1.5).addScaledVector(out, -0.1), seg(t, tLand + 0.3, tLand + 0.8) * (1 - seg(t, 8.1, 8.5)));
+  };
+  F.tick = (t, dtw) => {
+    F.w += dtw; ringTo(t, dtw);
+    if (!wreck) BOSS_KINDS.corona.frame(e, dtw);
+    for (const f of C.fans) f.rotation.y += dtw * (t > tStab ? 6 : 30);
+    // the hub: the glass crazes, the reactor flares white, then red and stuttering
+    const hot = seg(t, tStab - 0.05, tStab + 0.2);
+    if (!wreck && e.meshes?.core) { e.meshes.core.material.color.setHex(hot > 0 ? (Math.sin(t * 50) > 0 ? 0xfff2e0 : 0xff3010) : 0xff6a3a); e.meshes.glass.material.opacity = 0.35 + hot * 0.4; }
+    if (t > tStab && !wreck && Math.random() < dtw * 60) { const hp = W(topL); emitWorldSparks(hp, UPV, 4, Math.random() < 0.5 ? 0 : 2, 6); if (Math.random() < 0.3) worldSmoke(hp, 1, 0.3, 0x2a262e, 0.5, 0.5, out.clone().multiplyScalar(-2)); }
+    // through the curtain wall: every pane the ring touches goes
+    if (!wreck && t > tStab) for (const P2 of panes) if (!P2.broken && Math.abs(P2.center.y - C.P.y) < 4.6 && Math.hypot(P2.center.x - C.P.x, P2.center.z - C.P.z) < CR.rOut + 0.8) { shatter(P2, P2.center.clone(), out.clone().add(new THREE.Vector3(0, -0.1, 0)), 11); if (!F.breach) { F.breach = true; noise(0.8, "highpass", 3000, 0.9, 0.9); sfx.glass?.(); shake = 0.6; } }
+    // the car
+    if (F.car && F.car.state === "boss") {
+      const tg = C.P.clone().addScaledVector(F.carDir, -CR.rOut + 0.6); F.car.pos.copy(tg).addScaledVector(F.carDir, -34 * Math.max(0, tCar - t));
+      if (!F.car.horn && t > tCar - 0.5) { F.car.horn = true; sfx.carPass?.(); }
+    }
+    if (wreck) {
+      wreck.v.y -= 14 * dtw; C.P.addScaledVector(wreck.v, dtw); C.R.position.copy(C.P); C.spin += wreck.s * dtw; C.tilt += wreck.k * dtw;
+      C.R.quaternion.setFromEuler(_oe.set(C.tilt, C.spin, C.tilt * 0.4, "YXZ"));
+      if (Math.random() < dtw * 40) boomSprite(C.P.clone().add(new THREE.Vector3((Math.random() - 0.5) * 12, Math.random() * 1.5, (Math.random() - 0.5) * 12)), Math.random() < 0.55 ? "fire" : "smoke", 0.9, 4, new THREE.Vector3(0, 2, 0));
+    }
+    // the player waits at the end point
+    player.body.setTranslation({ x: E.x, y: E.y + 1, z: E.z }, true);
+  };
+  const crash = () => {
+    // the car hits the rim: a fireball, the bays go up one after another, the ring and the hub fall as one wreck
+    const at = C.P.clone().addScaledVector(F.carDir, -CR.rOut + 0.6);
+    boomSprite(at, "flash", 0.3, 22); for (let i = 0; i < 22; i++) boomSprite(at.clone().add(new THREE.Vector3((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 4)), "fire", 0.7 + Math.random() * 0.6, 5 + Math.random() * 5, F.carDir.clone().multiplyScalar(5 + Math.random() * 8).add(new THREE.Vector3((Math.random() - 0.5) * 9, Math.random() * 6, (Math.random() - 0.5) * 9)));
+    for (let i = 0; i < 6; i++) boomSprite(at.clone(), "smoke", 2.5, 7, new THREE.Vector3((Math.random() - 0.5) * 3, 3, (Math.random() - 0.5) * 3));
+    emitWorldSparks(at, F.carDir, 120, 0, 16); emitWorldSparks(at, UPV, 60, 2, 10);
+    for (let i = 0; i < 10; i++) { const m = new THREE.Mesh(UNIT_RBOX, i % 2 ? M.ceramic : M.charred); m.scale.set(0.3 + Math.random() * 0.8, 0.08 + Math.random() * 0.15, 0.3 + Math.random() * 0.8); addDebris(m, at.clone(), F.carDir.clone().multiplyScalar(8 + Math.random() * 10).add(new THREE.Vector3((Math.random() - 0.5) * 10, Math.random() * 8, (Math.random() - 0.5) * 10)), 6, false); }
+    const car = F.car; car.state = "wreck"; car.t = 0; car.v.copy(F.carDir).multiplyScalar(14).add(new THREE.Vector3(0, 2, 0)); car.av.set((Math.random() - 0.5) * 3, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 5); car.beam.visible = false; for (const m2 of car.body) m2.material = M.charred;
+    // physics off before the kill, so nothing kinematic keeps moving under anyone's feet
+    C.gone = true; try { world.removeRigidBody(C.hull); } catch {} for (const L of C.lugs) try { world.removeRigidBody(L.body); } catch {}
+    C.laser.visible = false; C.pulse.visible = false; for (const b of C.bays) bossKillPart(b);
+    C.R.attach(e.group); e.meshes.core.material.color.setHex(0x3a0c08); e.meshes.glass.visible = false;
+    eDie(F, at, F.carDir, 10);
+    wreck = { v: F.carDir.clone().multiplyScalar(9).addScaledVector(out, 7).add(new THREE.Vector3(0, 3, 0)), s: carSide * 1.4, k: 0.5 };
+    shake = 1.2; F.shake = 1.4; impactFrame(90); glitch(0.9); sfx.carBoom?.(); noise(1.6, "lowpass", 160, 1, 0.8, 30); tone("square", 60, 20, 0.8, 0.3);
+    flash("Last orbit", "var(--amber)");
+  };
+  F.cues = [
+    [0.05, () => { sfx.dash?.(); tone("square", 160, 60, 0.15, 0.1); }],
+    [0.45, () => { sfx.jump?.(); }],
+    [0.9, () => { sfx.land?.(); sfx.clunk?.(); emitWorldSparks(W(topL), UPV, 12, 2, 4); }],
+    [1.1, () => { sfx.finCharge?.(); tone("sawtooth", 300, 900, 0.4, 0.05); }],
+    [tStab, () => { const hp = W(topL); emitWorldSparks(hp, UPV, 120, 0, 13); emitWorldSparks(hp, out, 60, 1, 10); arsFlash(0xffd0a0, 140, hp); boomSprite(hp, "flash", 0.2, 6); sfx.finSlash?.(); noise(0.6, "highpass", 2400, 0.8, 0.8); tone("square", 90, 30, 0.6, 0.3); impactFrame(120); glitch(0.8); F.shake = 1; bossLine("warden", "Get off. Get off. Get off."); }],
+    [2.0, () => { tone("sawtooth", 140, 40, 1.6, 0.08); alarm?.(1.2); }],
+    [tJump, () => { sfx.servo?.(); if (fl3) sfx.hook?.(); emitWorldSparks(W(topL), UPV, 30, 2, 8); }],
+    [tLand, () => { sfx.land?.(); dust(E.clone().setY(E.y + 0.05), 6, 0x8a8494); }],
+    [4.85, () => {
+      const car = CARS.find((c) => c.state === "idle"); if (!car) return; F.car = car;
+      F.carDir = side.clone().multiplyScalar(-carSide).addScaledVector(out, 0.35).add(new THREE.Vector3(0, -0.08, 0)).normalize();
+      Object.assign(car, { state: "boss", t: 0, horn: false, rd: null }); car.dir.copy(F.carDir); car.speed = 34; car.g.visible = true; car.beam.visible = true;
+      for (const m2 of car.body) m2.material = m2.userData.mat0 ||= m2.material;
+      car.pos.copy(C.P).addScaledVector(F.carDir, -34 * (tCar - 4.85)); car.g.position.copy(car.pos); car.g.lookAt(car.pos.clone().add(car.dir));
+    }],
+    [tCar, () => { if (F.car) crash(); else { C.gone = true; try { world.removeRigidBody(C.hull); } catch {} for (const L of C.lugs) try { world.removeRigidBody(L.body); } catch {} for (const b of C.bays) bossKillPart(b); C.R.attach(e.group); eDie(F, C.P.clone(), out, 10); wreck = { v: out.clone().multiplyScalar(6), s: 0.6, k: 0.3 }; boomSprite(C.P.clone(), "flash", 0.3, 18); sfx.carBoom?.(); } }],
+    [7.2, () => bossLine("arbiter", "Corona is down. WARDEN is blind on this side of the building.")],
+  ];
+  F.cam = (t) => {
+    const hub = W(topL);
+    if (t < 0.95) { const rp = finRig.root.position; const back = flat(rp.clone().sub(hub)); shot2(rp.clone().addScaledVector(back, 3.4).add(new THREE.Vector3(0, 1.7, 0)), hub.clone().lerp(rp, 0.4).add(new THREE.Vector3(0, 0.6, 0)), F); return 62; }
+    if (t < 1.95) { const s2 = new THREE.Vector3(1, 0, 0).applyQuaternion(C.R.quaternion).setY(0).normalize(); shot2(hub.clone().addScaledVector(s2, 3.6).add(new THREE.Vector3(0, -0.9, 0)), hub.clone().add(new THREE.Vector3(0, 1.2, 0)), F); return 56; }
+    if (t < tJump) { // from outside the glass, the ring coming at the lens
+      const q = seg(t, 1.95, tJump); const cp = Bw.clone().addScaledVector(out, CR.rOut + 7 + q * 2).addScaledVector(side, 5).setY(Bw.y + 2.5);
+      shot2(cp, C.P.clone().add(new THREE.Vector3(0, 1, 0)), F); return 64;
+    }
+    if (t < tLand + 0.3) { const rp = finRig.root.position; shot2(E.clone().addScaledVector(out, -5).addScaledVector(side, carSide * 2.5).setY(E.y + 2.2), rp.clone().add(new THREE.Vector3(0, 1.1, 0)), F); return 60; }
+    if (t < tCar + 0.1) { // over the shoulder at the window: the car swoops in across the carrier
+      const at = F.car ? C.P.clone().lerp(F.car.pos, 0.25 * seg(t, 4.9, 5.6)) : C.P.clone();
+      shot2(E.clone().addScaledVector(out, -2.2).addScaledVector(side, carSide * 0.9).setY(E.y + 2.0), at, F); return 54 - 6 * seg(t, 4.9, tCar);
+    }
+    if (t < 8.1) { // track the wreck down
+      F.camAt ||= C.P.clone(); F.camAt.lerp(C.P, 0.08);
+      shot2(E.clone().addScaledVector(out, 0.6).addScaledVector(side, carSide * 0.6).setY(E.y + 1.7), F.camAt, F); return 50;
+    }
+    const q = seg(t, 8.1, 9.6); // the rig in the frame, the smoke beyond
+    shot2(E.clone().addScaledVector(out, 3.2 - q * 1.2).addScaledVector(side, -carSide * 1.6).setY(E.y + 1.3), E.clone().add(new THREE.Vector3(0, 1.2, 0)), F); return 58;
+  };
+  F.done = () => {
+    finLine.visible = false;
+    if (F.car && F.car.state === "boss") { F.car.state = "idle"; F.car.g.visible = false; }
+    if (!wreck) return;
+    // the wreck keeps falling after the scene: off the bottom of the city, or onto the testing ground
+    const floorY = fl3 ? -160 : 0.3; const life = { t: 0 };
+    bossFx({ step(dt) {
+      life.t += dt; if (C.P.y > floorY) { wreck.v.y -= 14 * dt; C.P.addScaledVector(wreck.v, dt); C.spin += wreck.s * dt; C.tilt += wreck.k * dt; }
+      else if (!fl3 && !life.down) { life.down = true; C.P.y = floorY; C.tilt = 0.12; shake = Math.max(shake, 0.8); sfx.carBoom?.(); for (let i = 0; i < 8; i++) boomSprite(C.P.clone().add(new THREE.Vector3((Math.random() - 0.5) * 12, 0.5, (Math.random() - 0.5) * 12)), "smoke", 3, 6, new THREE.Vector3(0, 2, 0)); }
+      C.R.position.copy(C.P); C.R.quaternion.setFromEuler(_oe.set(C.tilt, C.spin, C.tilt * 0.4, "YXZ"));
+      if (Math.random() < dt * (life.down ? 6 : 25)) boomSprite(C.P.clone().add(new THREE.Vector3((Math.random() - 0.5) * 10, Math.random() * 1.5, (Math.random() - 0.5) * 10)), Math.random() < 0.5 ? "fire" : "smoke", 1, 4, new THREE.Vector3(0, 2, 0));
+      if ((fl3 && C.P.y <= floorY) || life.t > (fl3 ? 12 : 30)) this.kill();
+    }, kill() { this.dead = true; levelGroup.remove(C.R); } });
+  };
+};
+
+// ---------- Shutdown ----------
+// It is anchored at the shaft rim with its back to the drop. The rig leaps onto its chest, reaches into the core and
+// pulls it out on its cables until they will not give, kicks off, tears it free, drops it, and a push kick to the
+// shin tips the whole frame back over the rim. The lenses go out one by one on the way down.
+FIN2.shutdown = (F) => {
+  const e = F.e, B = F.ctx.B, m = e.meshes; const G = F.ground.clone(); const shaft = B.shaftR > 0;
+  // face away from the shaft (or toward the player when there isn't one)
+  const fE = shaft ? flat(G.clone().sub(B.centre)) : flat(playerPos().sub(G)); if (!isFinite(fE.x)) fE.set(0, 0, 1);
+  const yawE = Math.atan2(fE.x, fE.z); const sE = new THREE.Vector3(fE.z, 0, -fE.x);
+  e.group.rotation.set(0, yawE, 0); e.group.position.copy(G); e.group.updateMatrixWorld(true);
+  for (const L of m.legs) { L.hip.rotation.x = 0; L.knee.rotation.x = 0.35; }
+  const qYaw = new THREE.Quaternion().setFromAxisAngle(UPV, yawE);
+  const bw = (x, y, z, out = new THREE.Vector3()) => out.set(x, y, z).applyQuaternion(e.group.quaternion).add(e.group.position);
+  const start = G.clone().addScaledVector(fE, 5.2), ledgeL = new THREE.Vector3(0.25, 2.65, 1.05), land = G.clone().addScaledVector(fE, 3.0), kickAt = G.clone().addScaledVector(fE, 1.85);
+  const endP = shaft ? G.clone().addScaledVector(fE, 0.4) : G.clone().addScaledVector(fE, 3.2);
+  Object.assign(F, { dur: 10.8, dir: fE.clone().negate(), end: endP, endYaw: eyeYaw(fE.clone().negate()) });
+  const tGrab = 2.3, tTaut = 3.3, tOff = 3.62, tDown = 4.05, tDrop = 4.28, tKick = 4.72;
+  F.ts = (t) => (t < 2.2 ? 1 : t < tTaut ? 0.55 : t < 3.55 ? 0.12 : t < 3.9 ? 0.3 : t < tKick - 0.05 ? 1 : t < 5.3 ? 0.22 : t < 7.5 ? 0.55 : 0.9);
+  F.keys = [[0, "run"], [0.32, "run"], [0.48, "leap"], [0.98, "land"], [1.3, "guard"], [1.65, "press"], [2.5, "press"], [2.95, "cock"], [3.45, "cock"], [tOff + 0.15, "leap"], [tDown, "land"], [4.3, "guard"], [4.52, "teepUp"], [tKick, "teep"], [5.15, "teep"], [5.6, "guard"], [6.3, "look"], [7.7, "look"], [9.2, "look"], [10.8, "idle"]];
+  F.walk = [[4.25, 4.55], [7.7, 9.1]];
+  // three cables from the socket to the core
+  const cables = [0, 1, 2].map(() => { const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(6), 3)); const l = new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0x7dffc0, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false })); l.frustumCulled = false; l.visible = false; scene.add(l); return l; });
+  const sock = [[-0.12, 3.42, 0.6], [0.14, 3.38, 0.6], [0, 3.24, 0.6]];
+  const core = B.coreP; let coreAt = bw(0, 3.35, 0.62), coreV = null, snapped = false; F.lean = 0; F.drop = 0; F.dv = 0;
+  const pivotL = new THREE.Vector3(0, 0, -0.75);
+  F.root = (t, J) => {
+    J.sword.visible = false;
+    const ledge = bw(ledgeL.x, ledgeL.y, ledgeL.z);
+    if (t < 0.48) { J.root.position.copy(start).addScaledVector(fE, -0.9 * smooth(t / 0.48)); J.root.rotation.y = yawFace(fE.clone().negate()); }
+    else if (t < 0.98) arc(start.clone().addScaledVector(fE, -0.9), ledge, 1.3, seg(t, 0.48, 0.98), J.root.position);
+    else if (t < tOff) J.root.position.copy(ledge).addScaledVector(fE, 0.22 * seg(t, 2.5, tTaut) - 0.05 * seg(t, tTaut, tTaut + 0.12));
+    else if (t < tDown) { F.offFrom ||= J.root.position.clone(); arc(F.offFrom, land, 0.9, seg(t, tOff, tDown), J.root.position); }
+    else if (t < 7.7) J.root.position.copy(land).lerp(kickAt, seg(t, 4.25, 4.55));
+    else J.root.position.copy(kickAt).lerp(endP, seg(t, 7.7, 9.1));
+    if (t >= 0.48 && t < 7.7) J.root.rotation.y = yawFace(fE.clone().negate());
+  };
+  F.ik = (t, J) => {
+    // left hand on the torso's edge while it clings; right hand into the core
+    const wL = seg(t, 0.9, 1.2) * (1 - seg(t, tOff - 0.05, tOff + 0.1)); if (wL > 0) reach(J, "L", bw(0.95, 3.95, 0.72), wL);
+    const wR = seg(t, 1.5, tGrab) * (1 - seg(t, tDrop - 0.05, tDrop + 0.15)); if (wR > 0 && t < tGrab + 0.05) reach(J, "R", bw(0, 3.35, 0.62), wR);
+    J.handR.updateWorldMatrix(true, false); F.hand = J.handR.getWorldPosition(F.hand || new THREE.Vector3());
+  };
+  const place = () => {
+    // the whole frame tips about its heels; with a shaft behind it, it slides back and drops
+    _oq.setFromAxisAngle(_ov.set(1, 0, 0), -F.lean); const q = qYaw.clone().multiply(_oq);
+    const piv = G.clone().addScaledVector(fE, -0.75 - F.slide);
+    e.group.quaternion.copy(q); e.group.position.copy(piv).sub(pivotL.clone().applyQuaternion(q)); e.group.position.y -= F.drop;
+    BOSS_KINDS.bulwark.frame(e);
+  };
+  F.slide = 0;
+  F.tick = (t, dtw) => {
+    // it thrashes while the rig is on it, then goes rigid when the cables go taut
+    const thr = seg(t, 0.9, 1.3) * (1 - seg(t, tTaut - 0.2, tTaut));
+    m.torso.rotation.x = 0.06 * Math.sin(t * 7) * thr - 0.12 * seg(t, tTaut - 0.2, tTaut) * (1 - seg(t, tOff, tKick));
+    m.shR.rotation.x = -0.9 * thr * (0.6 + 0.4 * Math.sin(t * 5)); m.shL.rotation.x = -0.7 * thr * (0.6 + 0.4 * Math.sin(t * 6 + 1)); m.head.rotation.y = 0.35 * Math.sin(t * 4) * thr;
+    if (t > tKick) { m.shR.rotation.x += (-1.6 - m.shR.rotation.x) * Math.min(1, dtw * 3); m.shL.rotation.x += (-1.4 - m.shL.rotation.x) * Math.min(1, dtw * 3); }
+    // the tip
+    if (t > tKick) {
+      const kmax = shaft ? 2.3 : Math.PI / 2 - 0.1; F.lv = (F.lv || 0.25) + dtw * (1.6 + Math.sin(F.lean) * 3); F.lean = Math.min(kmax, F.lean + F.lv * dtw);
+      if (shaft && F.lean > 0.9) { F.slide = Math.min(4.2, F.slide + dtw * 2.4); F.dv += 16 * dtw; F.drop += F.dv * dtw; }
+      if (!shaft && F.lean >= kmax && !F.down) { F.down = true; F.lv = 0; shake = 1; F.shake = 1.2; sfx.slam?.(); sfx.carBoom?.(); noise(1, "lowpass", 140, 1, 0.8, 30); const at = G.clone().addScaledVector(fE, -3.2); dust(at, 20, 0x8a8494); dust(G.clone(), 12, 0x8a8494); worldSmoke(at.setY(G.y + 0.5), 10, 1, 0x9aa0aa, 0.6, 0.6); crackDecal(at.setY(G.y + 0.02), UPV, 4); }
+    }
+    place();
+    // the core rides in the hand, trailing its cables, until it is dropped
+    if (core && !core.dead) {
+      if (t >= tGrab && t < tDrop && F.hand) coreAt.copy(F.hand);
+      else if (t >= tDrop) { coreV ||= sE.clone().multiplyScalar(-1.5).addScaledVector(fE, 1).add(new THREE.Vector3(0, 1.5, 0)); coreV.y -= 14 * dtw; coreAt.addScaledVector(coreV, dtw); if (coreAt.y < G.y + 0.35) { coreAt.y = G.y + 0.35; if (coreV.y < -2) { sfx.clunk?.(); emitWorldSparks(coreAt, UPV, 10, 3, 4); } coreV.y *= -0.3; coreV.x *= 0.6; coreV.z *= 0.6; } }
+      else coreAt = bw(0, 3.35, 0.62, coreAt);
+      core.group.position.copy(coreAt).y -= 0.95; core.body.setNextKinematicTranslation({ x: coreAt.x, y: coreAt.y, z: coreAt.z });
+      const dimK = seg(t, tOff, tOff + 0.6); core.meshes.torso.material.color.setRGB(0.49 * (1 - dimK) + 0.05 * dimK, 1 * (1 - dimK) + 0.08 * dimK, 0.75 * (1 - dimK) + 0.06 * dimK); core.meshes.halo.material.opacity = 0.25 * (1 - dimK);
+    }
+    // cables: out of the socket to the core, taut at full stretch, then they snap
+    for (let i = 0; i < 3; i++) {
+      const c = cables[i]; c.visible = t > tGrab + 0.05 && !snapped; if (!c.visible) continue;
+      const a = bw(...sock[i]); const p = c.geometry.attributes.position.array; p[0] = a.x; p[1] = a.y; p[2] = a.z; p[3] = coreAt.x + (i - 1) * 0.06; p[4] = coreAt.y; p[5] = coreAt.z; c.geometry.attributes.position.needsUpdate = true;
+      c.material.opacity = 0.5 + 0.4 * Math.sin(t * 40 + i);
+    }
+    if (!snapped && t > tGrab && coreAt.distanceTo(bw(0, 3.35, 0.62)) > 2.4) {
+      snapped = true; const at = bw(0, 3.35, 0.7); emitWorldSparks(at, fE, 90, 0, 12); emitWorldSparks(at, UPV, 40, 2, 9); arsFlash(0x7dffc0, 120, at); boomSprite(at, "flash", 0.18, 5);
+      sfx.wireCut?.(); noise(0.4, "highpass", 2600, 0.8, 0.8); tone("square", 220, 40, 0.5, 0.25); impactFrame(90); glitch(0.7); F.shake = 0.9; m.vents.material = M.roboDark;
+    }
+    if (t > tTaut && t < tOff && Math.random() < dtw * 50) emitWorldSparks(bw(0, 3.35, 0.7), fE, 3, 1, 6);
+    // the lenses go out one by one
+    for (let i = 0; i < m.lenses.length; i++) { const l = m.lenses[i]; const off = t > 5.0 + i * 0.32; l.dark = off; l.material.color.setHex(off ? 0x050806 : t > tOff && Math.random() < 0.2 ? 0x0a2014 : 0x48ff9a); }
+    if (t > tKick && shaft && Math.random() < dtw * 30) worldSmoke(e.group.position.clone().add(new THREE.Vector3(0, 3, 0)), 1, 0.6, 0x2a262e, 0.5, 0.5);
+    player.body.setTranslation({ x: endP.x, y: G.y + 1, z: endP.z }, true);
+  };
+  F.cues = [
+    [0.05, () => { sfx.dash?.(); tone("square", 150, 60, 0.15, 0.1); }],
+    [0.5, () => sfx.jump?.()],
+    [0.98, () => { sfx.land?.(); sfx.clunk?.(); emitWorldSparks(bw(0.25, 2.7, 1.0), UPV, 16, 2, 5); shake = 0.3; }],
+    [1.2, () => bossLine("warden", "Off. Get off me.")],
+    [tGrab, () => { sfx.grab?.(); noise(0.3, "bandpass", 500, 0.6, 2, 200); tone("sawtooth", 80, 300, 0.9, 0.06); emitWorldSparks(bw(0, 3.35, 0.7), fE, 50, 1, 8); }],
+    [tTaut, () => { sfx.clunk?.(); tone("square", 70, 70, 0.6, 0.2); impactFrame(50); F.shake = 0.6; }],
+    [tOff, () => sfx.jump?.()],
+    [tDown, () => { sfx.land?.(); dust(land.clone().setY(G.y + 0.05), 6, 0x8a8494); }],
+    [tKick, () => { sfx.slam?.(); noise(0.4, "lowpass", 400, 0.9, 0.9, 80); tone("square", 120, 40, 0.4, 0.25); impactFrame(80); F.shake = 0.8; emitWorldSparks(G.clone().addScaledVector(fE, 0.9).setY(G.y + 1.0), fE.clone().negate(), 40, 2, 8); }],
+    [5.2, () => bossLine("warden", "They will build another of you, too.")],
+    [6.9, () => bossLine("arbiter", "Good. The building is ours.")],
+    [8.6, () => bossLine("okafor", "Ours? Ask it what it means by ours.")],
+  ];
+  F.cam = (t) => {
+    const rp = finRig.root.position;
+    if (t < 1.0) { shot2(G.clone().addScaledVector(fE, 7.5).addScaledVector(sE, 5).setY(G.y + 2.2), G.clone().addScaledVector(fE, 1.5).setY(G.y + 3.0), F); return 62; }
+    if (t < tGrab) { shot2(G.clone().addScaledVector(fE, 3.6).addScaledVector(sE, 2.6).setY(G.y + 4.4), rp.clone().add(new THREE.Vector3(0, 1.1, 0)), F); return 56; }
+    if (t < tDown) { const c0 = bw(0, 3.35, 0.62); shot2(c0.clone().addScaledVector(fE, 2.4).addScaledVector(sE, -1.9).add(new THREE.Vector3(0, -0.2, 0)), c0.clone().lerp(coreAt, 0.5).addScaledVector(fE, 0.3), F); return 52; }
+    if (t < tKick + 0.25) { shot2(G.clone().addScaledVector(sE, 6.5).addScaledVector(fE, 2.6).setY(G.y + 1.6), G.clone().addScaledVector(fE, 1.6).setY(G.y + 1.5), F); return 58; }
+    if (t < 7.7) { // follow the fall
+      const tor = m.torso.getWorldPosition(new THREE.Vector3()); F.camAt ||= tor.clone(); F.camAt.lerp(tor, 0.1);
+      if (shaft) shot2(G.clone().addScaledVector(fE, 3.4).addScaledVector(sE, 2.2).setY(G.y + 4.2), F.camAt, F);
+      else shot2(G.clone().addScaledVector(sE, 9).addScaledVector(fE, 2).setY(G.y + 2.6), F.camAt, F);
+      return 60;
+    }
+    const q = seg(t, 7.7, 10.8);
+    shot2(rp.clone().addScaledVector(fE, 2.4 - q * 0.6).addScaledVector(sE, 1.4).setY(G.y + 2.4), rp.clone().addScaledVector(fE, -2.5).setY(G.y + (shaft ? -1.5 : 0.8)), F); return 58;
+  };
+  F.done = () => {
+    for (const c of cables) { scene.remove(c); c.geometry.dispose(); }
+    // the core stays on the floor as a dead lump; the frame stays where it fell
+    if (core && !core.dead) { const lump = core.meshes.torso.clone(); lump.material = M.roboDark; addDebris(lump, coreAt.clone(), new THREE.Vector3(0, 0.5, 0), 999, true); }
+    if (!shaft) { const g = e.group; e.group = new THREE.Group(); e.wreck = g; }
+  };
+};
+// ================= testing ground: the boss pen, east of the glass cube =================
+// B spawns the next boss (Gatekeeper, Corona, Bulwark), P skips to its next phase, O clears the pen.
+const BOSS_PEN = { i: 0, spots: { gatekeeper: [46, 0, 14], corona: [20, 24, 8], bulwark: [46, 0, 10] } };
+function bossPenBuild() {
+  // the floor ring and a doorway at the back for Hask's finisher
+  const ring = new THREE.Mesh(new THREE.RingGeometry(13.2, 13.5, 64), new THREE.MeshBasicMaterial({ color: 0xff8a3d, transparent: true, opacity: 0.6, side: THREE.DoubleSide })); ring.rotation.x = -Math.PI / 2; ring.position.set(46, 0.03, 19); levelGroup.add(ring);
+  fixedBox(42.35, 2.5, 32, 4.7, 5, 0.4, M.wall); fixedBox(49.65, 2.5, 32, 4.7, 5, 0.4, M.wall); fixedBox(46, 4.1, 32, 2.6, 1.8, 0.4, M.wall);
+  DOORWAYS.push({ c: new THREE.Vector3(46, 0, 32), axis: "x", w: 2.6, h: 3.2 });
+  // two balconies for Hask to leap to
+  for (const x of [36.5, 55.5]) { fixedBox(x, 2.0, 24, 3, 4, 5, M.concrete); fixedBox(x, 4.03, 24, 3, 0.06, 5, M.amber, { noCollide: true, shadow: false, ink: false }); }
+}
+function bossPenClear() {
+  for (const e of enemies) if (!e.dead && (e.T.boss || e.T.part || e.bossAdd)) { e.killKind = "boss"; killEnemy(e, enemyPos(e), new THREE.Vector3(0, 1, 0), 4); }
+  for (const e of enemies) if (e.wreck) { levelGroup.remove(e.wreck); e.wreck = null; }
+  for (const f of BOSSES.fx) f.kill?.(); BOSSES.fx = []; BOSSES.list = []; BOSSES.active = null; bossBarHide(); updateCount();
+  if (state.mode === "test") setObjective("Testing ground");
+}
+function bossPenSpawn(kind) {
+  bossPenClear();
+  const [x, y, z] = BOSS_PEN.spots[kind]; const type = { gatekeeper: "gatekeeper", corona: "coronaHub", bulwark: "bulwark" }[kind];
+  spawnEnemy(type, x, y, z); const e = enemies[enemies.length - 1]; e.alert = true; e.wake = 999;
+  flash(`${TYPES[type].label} · P skips a phase · O clears`, "var(--amber)"); updateCount();
+  return e;
+}
+function bossPenSkip() {
+  const e = BOSSES.active; if (!e || e.dead || !e.B) { flash("No boss in the pen · press B", "var(--dim)"); return; }
+  const B = e.B, k = B.kind;
+  if (k === "gatekeeper") { if (B.phase === 1) gkShieldBreak(e); else if (!B.yielded) gkYield(e); else gkFinish(e); }
+  else if (k === "corona") {
+    if (B.phase === 1) { for (const b of B.bays) bossKillPart(b); coronaPhase2(e); }
+    else if (B.phase === 2) { B.hp = CR.hub / 2; e.hp = B.hp; coronaPhase3(e); }
+    else { B.hp = 0; e.hp = 0; coronaFinish(e); }
+    BOSS_KINDS.corona.bar(e);
+  } else if (k === "bulwark") {
+    if (B.phase === 1) { for (const p of B.plates) if (p.slot === "chest" && !p.dead) bwPopPlate(e, p); }
+    else if (B.phase === 2) { B.core = 50; bwPhase3(e); }
+    else { B.core = 0; bwFinish(e); }
+    BOSS_KINDS.bulwark.bar(e);
+  }
+}
+function bossPenKeys() {
+  if (state.mode !== "test" || state.fin) return;
+  if (pressed.has("KeyB")) { const kinds = ["gatekeeper", "corona", "bulwark"]; bossPenSpawn(kinds[BOSS_PEN.i++ % 3]); }
+  if (pressed.has("KeyP")) bossPenSkip();
+  if (pressed.has("KeyO")) { bossPenClear(); flash("Boss pen cleared", "var(--amber)"); }
+}
 
 // ---------- loop ----------
 let acc = 0, last = performance.now();
@@ -9646,7 +10828,7 @@ function simStep() {
   stepPlayer(DT);
   pressed.clear();
   if (player.dead) return;
-  updateEnemies(DT * ts); enStep(DT * ts);
+  updateEnemies(DT * ts); enStep(DT * ts); bossStep(DT * ts);
   updateBolts(DT * ts);
   stepWorldMoves(DT * ts); arsWorldStep(DT * ts);
   for (const rd of ragdolls) {
@@ -9754,7 +10936,7 @@ setVoice(VOICE.on); renderBook();
 document.querySelector("#mnav button").focus({ preventScroll: true });
 state.pendingRestart = true; state.pendingFresh = true;
 // test hooks
-window.__res = { scene, renderer, LV, FLOORS, damageEnemy, killEnemy, buildFloor, lvCleared, get CITYR() { return CITYR; }, get finRig() { return finRig; }, applyFinPose, pose2, P2, FIN_POSES, rigIK, rigHandAim, rigPalm, FIN2, get U7M() { return globalThis.U7M_; },
+window.__res = { BOSSES, BOSS_KINDS, bossPenSpawn, bossPenSkip, bossPenClear, scene, renderer, LV, FLOORS, damageEnemy, killEnemy, buildFloor, lvCleared, get CITYR() { return CITYR; }, get finRig() { return finRig; }, applyFinPose, pose2, P2, FIN_POSES, rigIK, rigHandAim, rigPalm, FIN2, get U7M() { return globalThis.U7M_; },
   view(pos, at, fov = 40) { const cam = new THREE.PerspectiveCamera(fov, innerWidth / innerHeight, 0.05, 400); cam.position.set(...pos); cam.lookAt(new THREE.Vector3(...at)); scene.updateMatrixWorld(true); renderer.setRenderTarget(null); renderer.render(scene, cam); return renderer.domElement.toDataURL("image/png"); },
   FX2, FPROPS, DOORWAYS, ARS, WDEF, arsCancel, solveArmIK, armL, armR, cur, rig, get vmCam() { return vmCamera; }, SET, openSettings, applySet, bootFloor,
   get player() { return player; }, get enemies() { return enemies; }, get panes() { return panes; }, get bolts() { return bolts; }, state, keys, mouse, pressed,
