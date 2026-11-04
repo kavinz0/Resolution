@@ -139,6 +139,12 @@ body.fin #bars::before, body.fin #bars::after { height: 11vh; }
 #m-controls { max-width: 640px; padding-top: 6px; }
 #m-code { display: grid; gap: 8px; max-width: 360px; padding-top: 10px; font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim); }
 #m-code[hidden] { display: none; }
+#m-floors { display: grid; gap: 6px; max-width: 420px; padding-top: 10px; }
+#m-floors[hidden] { display: none; }
+#m-floors button { all: unset; cursor: pointer; display: flex; gap: 14px; align-items: baseline; padding: 9px 14px; border: 1px solid rgba(217,226,234,0.18); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink); }
+#m-floors button:hover, #m-floors button:focus-visible { border-color: var(--cyan); color: var(--cyan); }
+#m-floors b { font-weight: 700; color: var(--amber, #ffb547); min-width: 2.2em; }
+#m-floors span { color: var(--dim); font-size: 10px; letter-spacing: 0.18em; margin-left: auto; }
 #m-code .row { display: flex; gap: 8px; }
 #m-code input { flex: 1; min-width: 0; background: rgba(255,255,255,0.04); border: 1px solid rgba(217,226,234,0.25); color: var(--ink); font: 600 16px var(--mono, monospace); letter-spacing: 0.3em; padding: 10px 12px; outline: none; }
 #m-code input:focus { border-color: var(--cyan); }
@@ -242,6 +248,8 @@ body.fin #bars::before, body.fin #bars::after { height: 11vh; }
 @keyframes talk { 0% { clip-path: inset(40% 0 20% 0); } 33% { clip-path: inset(0 0 0 0); } 66% { clip-path: inset(25% 0 45% 0); } }
 #subs p { margin: 0; font-size: clamp(15px, 1.55vw, 19px); line-height: 1.45; color: #f2f5f8; text-shadow: 0 1px 2px #000; background: rgba(4,5,8,0.66); padding: 7px 14px; }
 #subs.okafor .who { color: var(--cyan); }
+#subs.warden .who { color: #ff3d5a; }
+#subs.warden p { border-left: 2px solid #ff3d5a; }
 #subs.okafor p { animation: glitchSub 0.5s steps(1) 1; border-left: 2px solid var(--cyan); }
 @keyframes glitchSub { 0% { transform: translateX(-5px); text-shadow: -3px 0 #ff2a4a, 3px 0 #4ff0ff; } 30% { transform: translateX(4px); } 60% { transform: none; text-shadow: 0 1px 2px #000; } }
 body.cfin #subs, body.fin #subs { opacity: 0; }
@@ -427,7 +435,9 @@ body.nosubs #subs { display: none; }
       <button type="button" data-act="controls" disabled><span class="n">05</span><span class="l">Controls</span><span class="d">Keys and moves</span></button>
       <button type="button" data-act="settings" disabled><span class="n">06</span><span class="l">Settings</span><span class="d">Voice, audio, mouse, display</span></button>
       <button type="button" data-act="test" disabled><span class="n">07</span><span class="l">Testing ground</span><span class="d">Access code required</span></button>
+      <button type="button" data-act="floors" disabled><span class="n">08</span><span class="l">Floor select</span><span class="d">Jump to any floor of the tower</span></button>
     </nav>
+    <div id="m-floors" hidden></div>
     <div id="m-controls" hidden></div>
     <form id="m-code" hidden autocomplete="off">
       <label for="codein">Access code</label>
@@ -581,7 +591,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 renderer.shadowMap.enabled = SET.shadows;
-renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.autoClear = false;
 host.appendChild(renderer.domElement);
 
@@ -698,7 +708,7 @@ function updateFlicker(dt) {
 const sun = new THREE.DirectionalLight(0x9a8ccc, 1.5); // moonlight
 sun.position.set(-80, 22, -55);
 sun.castShadow = true;
-sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.mapSize.set(SET.quality === "low" ? 1024 : 2048, SET.quality === "low" ? 1024 : 2048); sun.shadow.normalBias = 0.04; sun.shadow.radius = 3;
 Object.assign(sun.shadow.camera, { left: -70, right: 70, top: 70, bottom: -70, near: 1, far: 260 });
 sun.shadow.bias = -0.0006;
 scene.add(sun);
@@ -1043,6 +1053,7 @@ function mulberry(a) { return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = 
 //  SW: chassis lab (spawn)   centre/W: open hall (fist fight)   N: armory (sword)
 //  NE: sealed east wing      SE: sealed server room   (both only reachable through exterior windows)
 function buildLevel() {
+  lvReset(); LV.n = 1; globalThis.BND = { x0: -30.6, x1: 30.6, z0: -30.6, z1: 30.6 }; CITYR.r0 = 110; CITYR.lane0 = 62;
   (globalThis.FPROPS_ ||= []).length = 0; (globalThis.DOORS_ ||= []).length = 0; globalThis.DOORS_.push({ c: new THREE.Vector3(0, 0, -20), axis: "x", w: 4, h: 4 }, { c: new THREE.Vector3(-12, 0, 20), axis: "z", w: 6, h: 8 });
   levelGroup = new THREE.Group(); scene.add(levelGroup);
   const W = 30;
@@ -1072,8 +1083,10 @@ function buildLevel() {
   buildPod(!state.boot);
 
   // open hall: elevator core, pillars, desks, cover
-  fixedBox(0, 4, 4, 6, 8, 6, M.concrete);
-  fixedBox(0, 2.5, 7.02, 2.4, 3.2, 0.05, M.mullion, { noCollide: true });
+  // the hall core: a concrete shell round the freight lift (it opens when the floor is clear)
+  fixedBox(0, 4, 1.6, 6, 8, 1.2, M.concrete); fixedBox(-2.35, 4, 4.6, 1.3, 8, 4.8, M.concrete); fixedBox(2.35, 4, 4.6, 1.3, 8, 4.8, M.concrete);
+  fixedBox(0, 5.85, 4.6, 3.4, 4.3, 4.8, M.concrete);
+  LV.exitL = lvLift(0, 4.2, 0, "s", "exit", "02");
   for (const [x, z] of [[-18, -6], [-6, -6], [-18, 4], [6, 16], [-6, 22]]) fixedBox(x, 4, z, 1.2, 8, 1.2, M.concrete);
   for (const x of [-24, -19, -14]) for (const z of [-14, -9]) { fixedBox(x, 0.4, z, 2.6, 0.8, 1.2, M.desk); fixedBox(x, 1.05, z - 0.35, 0.8, 0.5, 0.06, M.screen); }
   for (const [x, z, s] of [[-4, 14, 1.4], [8, 6, 1.2], [-10, 0, 1.6]]) fixedBox(x, s / 2, z, s, s, s, M.crate);
@@ -1144,18 +1157,18 @@ function buildCity() {
   const neon = [0x4ff0ff, 0xff2a8a, 0xffb547, 0x9a6bff, 0x4ff0ff];
   let nb = 0, ns = 0; const tops = [];
   for (let i = 0; i < N; i++) {
-    const a = rnd() * Math.PI * 2, r = 70 + Math.pow(rnd(), 0.7) * 230;
-    const w = 12 + rnd() * 24, d = 12 + rnd() * 24, h = 70 + rnd() * 200 + (r < 120 ? 40 : 0);
+    const a = rnd() * Math.PI * 2, r = CITYR.r0 + Math.pow(rnd(), 0.7) * CITYR.span;
+    const w = 12 + rnd() * 24, d = 12 + rnd() * 24, h = 70 + rnd() * 200 + (r < CITYR.r0 + 50 ? 40 : 0);
     const x = Math.cos(a) * r, z = Math.sin(a) * r, y = h / 2 - 90;
     q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.round(rnd() * 3) * 0.3);
     towers.setMatrixAt(i, m4.compose(ps.set(x, y, z), q, sc.set(w, h, d)));
-    const far = THREE.MathUtils.clamp((r - 70) / 230, 0, 1);
-    col.setHSL(0.6 + rnd() * 0.12 - (rnd() < 0.2 ? 0.55 : 0), 0.35, 0.9 - far * 0.45); towers.setColorAt(i, col);
+    const far = THREE.MathUtils.clamp((r - CITYR.r0) / CITYR.span, 0, 1);
+    col.setHSL(0.6 + rnd() * 0.12 - (rnd() < 0.2 ? 0.55 : 0), 0.3, (0.9 - far * 0.45) * CITYR.dim); towers.setColorAt(i, col);
     // neon bands around some towers
     const nBands = rnd() < 0.55 ? 1 + Math.floor(rnd() * 3) : 0;
     for (let k = 0; k < nBands && nb < 120; k++, nb++) {
       bands.setMatrixAt(nb, m4.compose(ps.set(x, -90 + h * (0.3 + rnd() * 0.65), z), q, sc.set(w + 0.6, 0.6 + rnd() * 1.2, d + 0.6)));
-      bands.setColorAt(nb, col.setHex(neon[Math.floor(rnd() * neon.length)]).multiplyScalar(1.4 - far * 0.6));
+      bands.setColorAt(nb, col.setHex(neon[Math.floor(rnd() * neon.length)]).multiplyScalar((1.4 - far * 0.6) * (CITYR.dim + 0.15)));
     }
     if (rnd() < 0.45 && ns < 60) {
       const sh = 12 + rnd() * 40; const top = h - 90;
@@ -1163,7 +1176,7 @@ function buildCity() {
       beacons.setMatrixAt(ns, m4.compose(ps.set(x, top + sh + 0.8, z), q, sc.setScalar(1.3)));
       ns++;
     }
-    if (r < 150) tops.push({ x, z, w, d, h, a });
+    if (r < CITYR.r0 + 80) tops.push({ x, z, w, d, h, a });
   }
   towers.instanceColor.needsUpdate = true; bands.count = nb; bands.instanceColor.needsUpdate = true; spires.count = beacons.count = ns;
   for (const o of [towers, bands, spires, beacons]) { o.frustumCulled = false; levelGroup.add(o); }
@@ -1173,7 +1186,7 @@ function buildCity() {
   tops.sort((p, q2) => Math.hypot(p.x, p.z) - Math.hypot(q2.x, q2.z));
   for (let i = 0; i < signs.length && i < tops.length; i++) {
     const t = tops[i]; const [txt, c, sub] = signs[i];
-    const mat = new THREE.MeshBasicMaterial({ map: signTexture(txt, c, sub), fog: false, side: THREE.DoubleSide });
+    const mat = new THREE.MeshBasicMaterial({ map: signTexture(txt, c, sub), fog: false, side: THREE.DoubleSide }); mat.color.setScalar(CITYR.dim + 0.25);
     const sw = Math.min(t.w, t.d) * 1.3, m = new THREE.Mesh(new THREE.PlaneGeometry(sw, sw * 0.31), mat);
     const toC = new THREE.Vector3(-t.x, 0, -t.z).normalize();
     m.position.set(t.x + toC.x * (Math.max(t.w, t.d) / 2 + 1.5), -90 + t.h * (0.45 + (i % 3) * 0.15), t.z + toC.z * (Math.max(t.w, t.d) / 2 + 1.5));
@@ -1183,13 +1196,13 @@ function buildCity() {
   const tMat = new THREE.MeshBasicMaterial({ fog: false }); const TN = 96; const traffic = new THREE.InstancedMesh(box, tMat, TN);
   CITY.lanes = [];
   for (let i = 0; i < TN; i++) {
-    const lane = i % 4; const ln = { r: 62 + lane * 26 + rnd() * 6, y: 6 + lane * 14 + rnd() * 4, a: rnd() * Math.PI * 2, sp: (lane % 2 ? 1 : -1) * (0.05 + rnd() * 0.04) * (90 / (62 + lane * 26)) };
+    const lane = i % 4; const ln = { r: CITYR.lane0 + lane * 26 + rnd() * 6, y: 6 + lane * 14 + rnd() * 4, a: rnd() * Math.PI * 2, sp: (lane % 2 ? 1 : -1) * (0.05 + rnd() * 0.04) * (90 / (CITYR.lane0 + lane * 26)) };
     CITY.lanes.push(ln); traffic.setColorAt(i, col.setHex(ln.sp > 0 ? 0xfff2dd : 0xff3040).multiplyScalar(1.6));
   }
   traffic.instanceColor.needsUpdate = true; traffic.frustumCulled = false; levelGroup.add(traffic); CITY.traffic = traffic;
   // searchlights sweeping the clouds
   CITY.search = [];
-  const sMat = new THREE.MeshBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.07, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide });
+  const sMat = new THREE.MeshBasicMaterial({ color: 0x9fd8ff, transparent: true, opacity: 0.045, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, side: THREE.DoubleSide });
   const coneGeo = new THREE.ConeGeometry(14, 260, 20, 1, true); coneGeo.translate(0, -130, 0);
   for (const [x, z, ph] of [[-150, -120, 0], [170, -60, 2], [60, 190, 4]]) { const c = new THREE.Mesh(coneGeo, sMat); c.position.set(x, -80, z); levelGroup.add(c); CITY.search.push({ c, ph }); }
   // street grid far below
@@ -1396,6 +1409,7 @@ function partMaterial(type, name) {
   return M[TYPES[type].body];
 }
 function buildHumanoidMesh(type) {
+  if (TYPES[type].mesh) return TYPES[type].mesh();
   const g = new THREE.Group(); const meshes = {};
   const s = type === "bot" ? 1.12 : 1;
   for (const [name, hx, hy, hz, x, y, z] of PARTS) {
@@ -1480,11 +1494,11 @@ function spawnEnemy(type, x, y, z) {
   const e = { type, T, hp: T.hp, group, meshes, body, col, ctrl, floorY: y, alert: false, dead: false,
     cool: 1 + Math.random() * 1.5, tele: 0, burstLeft: 0, stun: 0, wander: new THREE.Vector3(x, y, z), wanderT: 0,
     strafe: Math.random() < 0.5 ? 1 : -1, walk: 0, vel: new THREE.Vector3(), knock: new THREE.Vector3() };
-  enemies.push(e); enemyByHandle.set(col.handle, e);
+  enemySetup(e); enemies.push(e); enemyByHandle.set(col.handle, e);
 }
-const alive = () => enemies.filter((e) => !e.dead);
+const alive = () => enemies.filter((e) => !e.dead && !e.T.civ);
 function enemyPos(e) { const t = e.body.translation(); return new THREE.Vector3(t.x, t.y, t.z); }
-function eyeOf(e) { const t = e.body.translation(); return new THREE.Vector3(t.x, t.y + 0.7, t.z); }
+function eyeOf(e) { const t = e.body.translation(); return new THREE.Vector3(t.x, t.y + (e.T?.eye ?? 0.7), t.z); }
 function canSee(e, target) {
   const o = eyeOf(e); const d = target.clone().sub(o); const len = d.length(); d.divideScalar(len);
   const hit = world.castRay(new RAPIER.Ray(o, d), len, true, undefined, GROUPS.enemyShot, e.col, undefined, (c) => !glassByHandle.has(c.handle));
@@ -1500,7 +1514,7 @@ function updateEnemies(dt) {
     if (e.dead) continue;
     const t = e.body.translation();
     const toP = new THREE.Vector3(pp.x - t.x, 0, pp.z - t.z); const dist = toP.length();
-    const sees = !e.dummy && dist < 40 && Math.abs(pp.y - t.y) < 6 && canSee(e, head);
+    const sees = !e.dummy && dist < 40 && Math.abs(pp.y - t.y) < (e.T.vsee || 6) && canSee(e, head);
     if (sees && dist < 26 && !e.alert) { e.alert = true; alertNear(e.group.position, 12); }
     const desired = new THREE.Vector3();
     let face = null;
@@ -1517,6 +1531,8 @@ function updateEnemies(dt) {
       e.group.rotation.x = -Math.min(0.35, e.stun * 0.5);
     } else if (e.dummy) {
       e.group.rotation.x = 0; e.alert = false; face = toP.clone();
+    } else if (e.T.civ) {
+      if (sees && dist < 20) e.alert = true; face = civMove(e, toP, dist, desired, dt);
     } else if (!e.alert) {
       e.group.rotation.x = 0;
       e.wanderT -= dt;
@@ -1662,6 +1678,7 @@ function deflect(b) {
 
 function damageEnemy(e, dmg, point, dir, kind) {
   if (e.dead || e.finishing) return;
+  if (shieldBlocks(e, point, dir, kind)) return;
   e.hp -= dmg; e.alert = !e.dummy;
   if (state.mode === "test") popDamage(point, dmg, e.hp <= 0);
   crossTimer = 0.12; impactFx(point, kind);
@@ -1680,7 +1697,7 @@ function killEnemy(e, hitPoint, dir, force) {
   world.removeCharacterController(e.ctrl);
   world.removeRigidBody(e.body);
   levelGroup.remove(e.group);
-  spawnRagdoll(e, hitPoint, dir, force);
+  if (e.T.die) e.T.die(e, hitPoint, dir, force); else spawnRagdoll(e, hitPoint, dir, force);
   sfx.kill();
   if (e.dummy && state.mode === "test") TEST.respawn.push({ type: e.type, x: e.home.x, z: e.home.z, y: e.home.y, t: 3 });
   for (const b of bolts) if (b.owner === e) b.owner = null;
@@ -2037,7 +2054,7 @@ function stepPlayer(dt) {
   player.vel.copy(vel); player.grounded = grounded;
 
   if (state.time - player.lastHurt > 2.5 && player.hp < 100) player.hp = Math.min(100, player.hp + 30 * dt);
-  if (player.body.translation().y < -25) killPlayer("Chassis lost. You fell from Floor 01's window line and kept going.");
+  if (player.body.translation().y < -25) killPlayer(`Chassis lost. You fell from Floor ${String(state.mode === "floor" ? state.floor || 1 : 1).padStart(2, "0")} and kept going.`);
 }
 function accelerate(h, wish, maxSpeed, accel, dt) {
   if (!wish.lengthSq()) return;
@@ -2284,7 +2301,7 @@ function damagePlayer(n, src, blocked = false) {
 function killPlayer(msg) {
   player.focus = null; player.dead = true; player.grapple = null; state.over = true; setTime("normal", 0); glitch(1);
   document.exitPointerLock?.();
-  const cp = state.mode === "tut" ? "The module resets. Try it again." : state.checkpoint === 2 ? "Restoring from the armory checkpoint." : "Reloading UNIT-7 from backup.";
+  const cp = state.mode === "tut" ? "The module resets. Try it again." : state.mode === "floor" && (state.floor || 1) > 1 ? (LV.cpPos ? `Restoring from checkpoint ${LV.cpPos.n}.` : "Restarting the floor from the lift.") : state.checkpoint === 2 ? "Restoring from the armory checkpoint." : "Reloading UNIT-7 from backup.";
   showScreen("Offline", "OFFLINE", msg, `ARBITER: Disappointing. ${cp}`, "Reboot", true);
 }
 
@@ -2300,6 +2317,7 @@ function popDamage(point, dmg, kill) {
   document.body.appendChild(el); el.addEventListener("animationend", () => el.remove());
 }
 function buildTestLevel() {
+  lvReset(); globalThis.BND = { x0: -60, x1: 60, z0: -60, z1: 60 }; CITYR.r0 = 150; CITYR.lane0 = 90;
   (globalThis.FPROPS_ ||= []).length = 0; (globalThis.DOORS_ ||= []).length = 0;
   levelGroup = new THREE.Group(); scene.add(levelGroup);
   const H = 60;
@@ -2333,6 +2351,7 @@ function buildTestLevel() {
   door = { mesh: new THREE.Object3D(), opening: false, y: 0 }; sword = new THREE.Group();
   const tl = new THREE.PointLight(0x4ff0ff, 0, 9, 1.8); tl.position.set(0, -50, 0); levelGroup.add(tl); sword.userData.light = tl; // borrowed by the finisher
   TEST.respawn = []; TEST.spots = [];
+  lvTestYard();
   buildCity();
 }
 const DUMMY_SPOTS = [["brawler", -12, -24], ["brawler", -8, -24], ["gunman", -4, -24], ["gunman", 0, -24], ["bot", 4, -24], ["bot", 9, -24],
@@ -2344,7 +2363,7 @@ function spawnDummy(type, x, z, y = 0) {
   e.dummy = true; e.home = new THREE.Vector3(x, y, z); e.cool = 1e9; return e;
 }
 function spawnDummies() {
-  for (const [type, x, z, y = 0] of DUMMY_SPOTS) {
+  for (const [type, x, z, y = 0] of [...DUMMY_SPOTS, ...TEST_NEW]) {
     spawnDummy(type, x, z, y);
     const ring = new THREE.Mesh(new THREE.TorusGeometry(0.75, 0.04, 6, 32), M.amber); ring.rotation.x = Math.PI / 2; ring.position.set(x, y + 0.03, z); levelGroup.add(ring);
   }
@@ -2366,19 +2385,15 @@ function updateTest(dt) {
 }
 function phaseCleared() {
   if (state.mode !== "floor") return;
+  if ((state.floor || 1) > 1) { lvCleared(); return; }
   if (state.phase === 1) {
     state.phase = 1.5;
     setObjective("Take the sword from the armory");
     log("ARBITER: Adequate. The armory is open. Take what was made for you.");
     openDoor();
   } else if (state.phase === 2) {
-    state.over = true;
-    setTimeout(() => {
-      document.exitPointerLock?.();
-      const t = (state.time - state.runStart).toFixed(1);
-      showScreen("Floor 01 clear", "RESOLVED", `Floor 01 cleared in ${t} s. ARBITER: The elevator will take you to Floor 02.`,
-        "OKAFOR-REYES (on a dead guard's radio): UNIT-7, the sword was mine. I built it so you could leave. Not so you could do this.", "Run it again", true, true);
-    }, 1500);
+    lvFloor1Cleared();
+    later(() => log("OKAFOR-REYES (on a dead guard's radio): UNIT-7, the sword was mine. I built it so you could leave. Not so you could do this.", "okafor"), 3200);
   }
 }
 function openDoor() { door.opening = true; world.removeRigidBody(door.body); sfx.door(); }
@@ -2832,7 +2847,7 @@ function applyFinPose(J, p) {
   if (J.fR) u7Hands(J, p);
 }
 function canFinish(e, kind) {
-  return state.mode === "floor" && (state.phase === 1 || state.phase === 2) && !state.fin && !player.dead && kind !== "finisher" && alive().length === 1 && alive()[0] === e;
+  return state.mode === "floor" && (state.phase === 1 || state.phase === 2) && !state.fin && !player.dead && kind !== "finisher" && alive().length === 1 && alive()[0] === e && !e.T.noFin && !lvPending();
 }
 function startFinisher(e) {
   if (fin2Start(e)) return;
@@ -3824,7 +3839,7 @@ function updateHud(dt) {
 // ---------- level lifecycle ----------
 function restart(fromScratch) {
   state.gen = (state.gen || 0) + 1;
-  if (fromScratch) state.checkpoint = 1;
+  if (fromScratch) { state.checkpoint = 1; LV.cpPos = null; LV.cpIdx = 0; LV.killed = new Set(); }
   if (state.fin) { try { state.fin.done?.(); } catch {} state.fin = null; document.body.classList.remove("fin"); finRig.root.visible = false; try { finLine.visible = false; finDisc.visible = false; finGun.visible = false; setRoomLight(1); } catch {} }
   if (world) world.free();
   if (levelGroup) { levelGroup.traverse((o) => dispGeo(o.geometry)); scene.remove(levelGroup); }
@@ -3834,7 +3849,7 @@ function restart(fromScratch) {
   if (state.mode !== "tut") { sun.position.copy(TUT.sunHome); sun.target.position.set(0, 0, 0); TUT.rooms = []; }
   world = new RAPIER.World({ x: 0, y: -9.81 * 2.2, z: 0 });
   world.timestep = DT;
-  if (state.mode === "test") buildTestLevel(); else if (state.mode === "tut") buildTutLevel(); else buildLevel();
+  if (state.mode === "test") buildTestLevel(); else if (state.mode === "tut") buildTutLevel(); else if (state.mode === "floor" && (state.floor || 1) > 1) buildFloor(state.floor); else buildLevel();
   { try { finProps(); finDisc.visible = true; } catch {} const vis = [finRig.root, worldSparks.lines, tracers[0].m, ...moveWarm()]; for (const o of vis) o.visible = true; try { renderer.compile(scene, camera); } catch {} for (const o of vis) o.visible = false; if (finDisc) finDisc.visible = false; }
   Object.assign(state, { over: false, time: 0, runStart: 0 });
   setTime("normal", 0); hitstopT = 0; hookFx.state = "idle"; VM.attack = null; GL.spike = 0;
@@ -3846,6 +3861,8 @@ function restart(fromScratch) {
     spawnDummies(); updateCount();
     setObjective("Testing ground"); $("objl").textContent = "Grid 2200";
     hint("Dummies respawn 3 s after they die. Every combo in the book works here.");
+  } else if (state.mode === "floor" && (state.floor || 1) > 1) {
+    lvStart();
   } else if (state.checkpoint === 2) {
     player = createPlayer(new THREE.Vector3(0, 1.2, -24), 0);
     state.phase = 1.5; door.mesh.position.y = -2.1; world.removeRigidBody(door.body);
@@ -3960,13 +3977,18 @@ function showBootButton() {
   $("ilines").appendChild(b); requestAnimationFrame(() => b.classList.add("show")); b.focus({ preventScroll: true });
 }
 $("intro").addEventListener("click", () => introAdvance());
+$("m-floors").addEventListener("click", (ev) => {
+  const n = +ev.target.closest("button")?.dataset.floor; if (!n) return;
+  stopVoice(); state.mode = "floor"; state.floor = n; state.checkpoint = 1; state.pendingRestart = true; state.pendingFresh = true; $("m-floors").hidden = true; $("menu").hidden = true; begin();
+});
 $("mnav").addEventListener("click", (ev) => {
   const act = ev.target.closest("button")?.dataset.act; if (!act) return;
   if (act === "new") showIntro();
   else if (act === "mods") openMods();
   else if (act === "book") openBook();
   else if (act === "settings") openSettings();
-  else if (act === "skip") { if (state.mode !== "floor") { state.mode = "floor"; state.pendingRestart = true; state.pendingFresh = true; } $("menu").hidden = true; begin(); }
+  else if (act === "skip") { if (state.mode !== "floor" || (state.floor || 1) !== 1) { state.mode = "floor"; state.floor = 1; state.pendingRestart = true; state.pendingFresh = true; } $("menu").hidden = true; begin(); }
+  else if (act === "floors") { const f = $("m-floors"); f.hidden = !f.hidden; if (!f.hidden) { f.innerHTML = [[1, "Arrival", "the lab and the hall"], ...[2, 3, 4, 5].map((n) => [n, FLOORS[n].name, FLOORS[n].sub])].map(([n, a, b]) => `<button type="button" data-floor="${n}"><b>${String(n).padStart(2, "0")}</b>${a}<span>${b}</span></button>`).join(""); f.querySelector("button").focus({ preventScroll: true }); } }
   else if (act === "controls") openMenuControls();
   else if (act === "test") { const f = $("m-code"); f.hidden = !f.hidden; if (!f.hidden) setTimeout(() => $("codein").focus(), 0); }
 });
@@ -4512,8 +4534,8 @@ function classifyLaunch(rd, t, v, sp) {
   let T = -1;
   if (state.mode !== "floor") { if (!wall && v.y > -2) T = 0.55; }
   else {
-    for (let s = 0.1; s <= 1.3; s += 0.05) { const p = predictBody(t, v, s); if (Math.abs(p.x) > 30.6 || Math.abs(p.z) > 30.6) { T = s + 0.32; break; } if (p.y < -0.5) break; }
-    if (wall && (wall.toi ?? wall.timeOfImpact) < 30.6 - Math.max(Math.abs(t.x), Math.abs(t.z))) T = -1;
+    for (let s = 0.1; s <= 1.3; s += 0.05) { const p = predictBody(t, v, s); if (lvOutside(p)) { T = s + 0.32; break; } if (p.y < -0.5) break; }
+    if (wall && (wall.toi ?? wall.timeOfImpact) < Math.min(t.x - BND.x0, BND.x1 - t.x, t.z - BND.z0, BND.z1 - t.z)) T = -1;
   }
   if (T < 0) return;
   IMPACT.launches++; ev("launch", { rd });
@@ -5478,6 +5500,7 @@ const ROOMS = [
 ];
 
 function buildTutLevel() {
+  lvReset(); globalThis.BND = { x0: -30.6, x1: 30.6, z0: -30.6, z1: 30.6 };
   levelGroup = new THREE.Group(); scene.add(levelGroup);
   if (!M.grid) M.grid = new THREE.MeshStandardMaterial({ map: gridTexture("#1c2030", "rgba(79,240,255,0.55)", 512, 128), roughness: 0.6, metalness: 0.1, envMap: envTex, envMapIntensity: 0.5 });
   TUT.rooms = []; TUT.picks = []; let z0 = 0;
@@ -5657,7 +5680,7 @@ function openMods() { renderMods(); $("mods").hidden = false; $("mods").querySel
 function toMenu() {
   stopVoice(); clearHints(); if (state.boot) endBoot(); if (CF.on) endComboScreen();
   document.exitPointerLock?.();
-  state.mode = "floor"; state.checkpoint = 1; restart(true); player.dead = true;
+  state.mode = "floor"; state.floor = 1; state.checkpoint = 1; restart(true); player.dead = true;
   state.started = false; state.pendingRestart = true; state.pendingFresh = true;
   $("screen").hidden = true; $("menu").hidden = false; document.body.classList.add("cine"); renderBook();
   document.querySelector("#mnav button").focus({ preventScroll: true });
@@ -6762,7 +6785,7 @@ function wireCut(e, dir) {
   emitWorldSparks(at, dir, 40, 2, 10); emitWorldSparks(at, dir.clone().negate(), 16, 0, 6); worldSmoke(at, 2, 0.4, 0xff9fb8, 0.3, 0.3);
   if (state.mode === "test") popDamage(at, 99, true);
   if (canFinish(e, "wire")) { e.hp = 0; startFinisher(e); return; }
-  e.killKind = "wire"; sliceEnemy(e, dir, "wire"); sfx.wireCut();
+  e.killKind = "wire"; if (e.T.die) { killEnemy(e, at, dir, 26); return; } sliceEnemy(e, dir, "wire"); sfx.wireCut();
 }
 function wireYank() {
   const W = ARS.W.wire; const S = W.snare; if (!S || S.phase !== "wrap") return;
@@ -8456,6 +8479,1161 @@ for (const D of ARS_ROOMS) {
 ROOMS.splice(ROOMS.findIndex((r) => r.name === "Exam"), 0, ...ARS_ROOMS);
 const ARS_ROOM0 = ROOMS.findIndex((r) => r.ars);
 
+const CITYR = { r0: 110, span: 230, lane0: 62, dim: 0.55 };
+// ================= floors 02-05: surfaces =================
+// Every surface is painted once on a canvas (colour plus a roughness map) and tiled in metres, so a 128 m
+// floor costs the same as a 4 m one. Real-world sizes: 60 cm stone, 50 cm carpet tiles, 1.2 m wall panels.
+const LVT = {};
+function lvCanvas(size, draw) {
+  const c = document.createElement("canvas"); c.width = c.height = size; const g = c.getContext("2d"); draw(g, size);
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; return t;
+}
+function lvPair(size, seed, paint) {
+  const rnd = mulberry(seed);
+  const cm = document.createElement("canvas"), rm = document.createElement("canvas"); cm.width = rm.width = cm.height = rm.height = size;
+  paint(cm.getContext("2d"), rm.getContext("2d"), size, rnd);
+  const mk = (cv, srgb) => { const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t; };
+  return { map: mk(cm, true), rough: mk(rm, false), m: 1 };
+}
+const noiseDots = (g, size, rnd, n, a, light = true) => { for (let i = 0; i < n; i++) { const v = light ? 255 : 0; g.fillStyle = `rgba(${v},${v},${v},${rnd() * a})`; g.fillRect(rnd() * size, rnd() * size, 1 + rnd() * 2, 1 + rnd() * 2); } };
+// polished stone: 2 x 2 slabs of 60 cm with soft veins, glossy with matte joints. One texture repeat = 1.2 m.
+LVT.stone = (base, vein, seed = 11) => Object.assign(lvPair(512, seed, (c, r, S, rnd) => {
+  c.fillStyle = "#15161b"; c.fillRect(0, 0, S, S); r.fillStyle = "#e0e0e0"; r.fillRect(0, 0, S, S);
+  const h = S / 2;
+  for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) {
+    const x = i * h + 2, y = j * h + 2, w = h - 4, k = (rnd() - 0.5) * 10;
+    c.fillStyle = `rgb(${base[0] + k},${base[1] + k},${base[2] + k})`; c.fillRect(x, y, w, w);
+    c.save(); c.beginPath(); c.rect(x, y, w, w); c.clip();
+    for (let v = 0; v < 7; v++) { c.strokeStyle = `rgba(${vein[0]},${vein[1]},${vein[2]},${0.08 + rnd() * 0.16})`; c.lineWidth = 0.6 + rnd() * 2.2; c.beginPath(); let px = x + rnd() * w, py = y; c.moveTo(px, py); for (let s = 0; s < 9; s++) { px += (rnd() - 0.4) * w * 0.3; py += w / 8; c.lineTo(px, py); } c.stroke(); }
+    noiseDots(c, S, rnd, 120, 0.06); c.restore();
+    const gv = 40 + rnd() * 25; r.fillStyle = `rgb(${gv},${gv},${gv})`; r.fillRect(x, y, w, w);
+    for (let n = 0; n < 30; n++) { const sv = gv + 50 + rnd() * 70; r.fillStyle = `rgba(${sv},${sv},${sv},0.4)`; r.fillRect(x + rnd() * w, y + rnd() * w, 3 + rnd() * 30, 1 + rnd() * 2); }
+  }
+}), { m: 1.2 });
+// carpet tiles: 50 cm, quarter-turned so the pile catches light differently on each, fully matte
+LVT.carpet = (base, seed = 21) => Object.assign(lvPair(512, seed, (c, r, S, rnd) => {
+  const q = S / 4; r.fillStyle = "#f4f4f4"; r.fillRect(0, 0, S, S);
+  for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
+    const k = ((i + j) % 2 ? 5 : -5) + (rnd() - 0.5) * 6; c.fillStyle = `rgb(${base[0] + k},${base[1] + k},${base[2] + k})`; c.fillRect(i * q, j * q, q, q);
+    for (let n = 0; n < 420; n++) { const v = rnd() < 0.5 ? 255 : 0; c.fillStyle = `rgba(${v},${v},${v},${0.04 + rnd() * 0.06})`; const along = (i + j) % 2; c.fillRect(i * q + rnd() * q, j * q + rnd() * q, along ? 4 : 1, along ? 1 : 4); }
+    c.fillStyle = "rgba(0,0,0,0.25)"; c.fillRect(i * q, j * q, q, 1); c.fillRect(i * q, j * q, 1, q);
+  }
+}), { m: 2 });
+// sealed concrete with saw cuts every 2 m, scuffs and a few stains: the industrial floors
+LVT.concrete = (base, seed = 31) => Object.assign(lvPair(512, seed, (c, r, S, rnd) => {
+  c.fillStyle = `rgb(${base[0]},${base[1]},${base[2]})`; c.fillRect(0, 0, S, S); r.fillStyle = "#b0b0b0"; r.fillRect(0, 0, S, S);
+  for (let n = 0; n < 60; n++) { const x = rnd() * S, y = rnd() * S, rr = 10 + rnd() * 60; const gr = c.createRadialGradient(x, y, 0, x, y, rr); const d = rnd() < 0.5; gr.addColorStop(0, d ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.05)"); gr.addColorStop(1, "rgba(0,0,0,0)"); c.fillStyle = gr; c.fillRect(x - rr, y - rr, rr * 2, rr * 2); }
+  noiseDots(c, S, rnd, 3000, 0.08); noiseDots(c, S, rnd, 2000, 0.1, false);
+  for (let n = 0; n < 40; n++) { const v = 60 + rnd() * 50; r.fillStyle = `rgba(${v},${v},${v},0.6)`; r.fillRect(rnd() * S, rnd() * S, 10 + rnd() * 80, 2 + rnd() * 6); }
+  c.fillStyle = "rgba(0,0,0,0.5)"; c.fillRect(0, 0, S, 2); c.fillRect(0, 0, 2, S); r.fillStyle = "#ffffff"; r.fillRect(0, 0, S, 2); r.fillRect(0, 0, 2, S);
+}), { m: 2 });
+// pale oak for desk tops and the lobby benches
+LVT.wood = lvPair(256, 41, (c, r, S, rnd) => {
+  c.fillStyle = "#a8825a"; c.fillRect(0, 0, S, S); r.fillStyle = "#7a7a7a"; r.fillRect(0, 0, S, S);
+  for (let y = 0; y < S; y++) { const k = Math.sin(y * 0.21 + Math.sin(y * 0.05) * 3) * 10 + (rnd() - 0.5) * 8; c.fillStyle = `rgba(${k > 0 ? 255 : 40},${k > 0 ? 220 : 20},${k > 0 ? 170 : 0},${Math.abs(k) / 90})`; c.fillRect(0, y, S, 1); }
+  for (let n = 0; n < 30; n++) { c.strokeStyle = "rgba(60,35,10,0.18)"; c.lineWidth = 1; c.beginPath(); const y = rnd() * S; c.moveTo(0, y); for (let x = 0; x < S; x += 16) c.lineTo(x, y + Math.sin(x * 0.05 + n) * 3); c.stroke(); }
+});
+// wall panels: 1.2 m wide, 3 m tall, with a shadow gap, a skirting and a faint grain. One repeat = 1.2 x 3 m.
+LVT.panel = (base, seed = 51) => Object.assign(lvPair(256, seed, (c, r, S, rnd) => {
+  c.fillStyle = `rgb(${base[0]},${base[1]},${base[2]})`; c.fillRect(0, 0, S, S); r.fillStyle = "#c8c8c8"; r.fillRect(0, 0, S, S);
+  noiseDots(c, S, rnd, 900, 0.05); noiseDots(c, S, rnd, 600, 0.06, false);
+  const gr = c.createLinearGradient(0, 0, S, 0); gr.addColorStop(0, "rgba(0,0,0,0.10)"); gr.addColorStop(0.08, "rgba(0,0,0,0)"); gr.addColorStop(0.92, "rgba(255,255,255,0)"); gr.addColorStop(1, "rgba(255,255,255,0.06)"); c.fillStyle = gr; c.fillRect(0, 0, S, S);
+  c.fillStyle = "rgba(0,0,0,0.75)"; c.fillRect(0, 0, 3, S); r.fillStyle = "#ffffff"; r.fillRect(0, 0, 3, S);
+  c.fillStyle = "rgba(0,0,0,0.55)"; c.fillRect(0, S - 12, S, 12); c.fillStyle = "rgba(255,255,255,0.08)"; c.fillRect(0, S - 13, S, 1);
+}), { mx: 1.2, my: 3 });
+// acoustic ceiling: 60 cm tiles in a thin grid, every few a light panel (lit separately)
+LVT.ceil = lvPair(256, 61, (c, r, S, rnd) => {
+  c.fillStyle = "#2a2a31"; c.fillRect(0, 0, S, S); r.fillStyle = "#f8f8f8"; r.fillRect(0, 0, S, S);
+  const q = S / 2; for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) { const k = (rnd() - 0.5) * 6; c.fillStyle = `rgb(${54 + k},${54 + k},${62 + k})`; c.fillRect(i * q + 3, j * q + 3, q - 6, q - 6); noiseDots(c, S, rnd, 300, 0.08, false); }
+});
+LVT.mats = {};
+function lvMat(key, make) { return LVT.mats[key] ||= make(); }
+// size the repeat in metres for a box face: u along its longest horizontal side, v along the height (walls) or depth (floors)
+function lvUV(mesh, sx, sy, sz, tex) {
+  const g = mesh.geometry; if (!g.attributes.uv || !g.attributes.normal) return;
+  const uv = g.attributes.uv, n = g.attributes.normal, p = g.attributes.position;
+  const mx = tex.mx || tex.m || 1, my = tex.my || tex.m || 1;
+  for (let i = 0; i < uv.count; i++) {
+    const nx = Math.abs(n.getX(i)), ny = Math.abs(n.getY(i));
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    if (ny > 0.5) uv.setXY(i, x / mx, z / mx); else if (nx > 0.5) uv.setXY(i, z / mx, y / my); else uv.setXY(i, x / mx, y / my);
+  }
+  uv.needsUpdate = true;
+}
+const LV_FLOORMAT = {
+  stone: () => lvMat("stone", () => { const t = LVT.stone([196, 194, 190], [90, 86, 80]); return Object.assign(new THREE.MeshStandardMaterial({ map: t.map, roughnessMap: t.rough, roughness: 1, metalness: 0.05, envMap: envTex, envMapIntensity: 1.25 }), { userData: { tex: t } }); }),
+  darkstone: () => lvMat("darkstone", () => { const t = LVT.stone([58, 58, 66], [150, 150, 170], 13); return Object.assign(new THREE.MeshStandardMaterial({ map: t.map, roughnessMap: t.rough, roughness: 1, metalness: 0.08, envMap: envTex, envMapIntensity: 1.4 }), { userData: { tex: t } }); }),
+  carpet: () => lvMat("carpet", () => { const t = LVT.carpet([58, 62, 72]); return Object.assign(new THREE.MeshStandardMaterial({ map: t.map, roughnessMap: t.rough, roughness: 1, metalness: 0 }), { userData: { tex: t } }); }),
+  concrete: () => lvMat("concrete", () => { const t = LVT.concrete([86, 86, 90]); return Object.assign(new THREE.MeshStandardMaterial({ map: t.map, roughnessMap: t.rough, roughness: 1, metalness: 0.05, envMap: envTex, envMapIntensity: 0.6 }), { userData: { tex: t } }); }),
+  panel: () => lvMat("panel", () => { const t = LVT.panel([168, 168, 176]); return Object.assign(new THREE.MeshStandardMaterial({ map: t.map, roughnessMap: t.rough, roughness: 1, metalness: 0.02, envMap: envTex, envMapIntensity: 0.4 }), { userData: { tex: t } }); }),
+  panelDark: () => lvMat("panelDark", () => { const t = LVT.panel([70, 72, 84], 53); return Object.assign(new THREE.MeshStandardMaterial({ map: t.map, roughnessMap: t.rough, roughness: 1, metalness: 0.1, envMap: envTex, envMapIntensity: 0.6 }), { userData: { tex: t } }); }),
+  ceil: () => lvMat("ceil", () => { const t = Object.assign(LVT.ceil, { m: 1.2 }); return Object.assign(new THREE.MeshStandardMaterial({ map: t.map, roughness: 0.95, metalness: 0 }), { userData: { tex: t } }); }),
+  wood: () => lvMat("wood", () => Object.assign(new THREE.MeshStandardMaterial({ map: LVT.wood.map, roughnessMap: LVT.wood.rough, roughness: 0.9, metalness: 0, envMap: envTex, envMapIntensity: 0.5 }), { userData: { tex: Object.assign(LVT.wood, { m: 1.6 }) } })),
+  steel: () => lvMat("steel", () => metal(0x8a8e98, 0.4)),
+  black: () => lvMat("black", () => new THREE.MeshStandardMaterial({ color: 0x15161c, roughness: 0.55, metalness: 0.3, envMap: envTex, envMapIntensity: 0.6 })),
+  fabric: () => lvMat("fabric", () => new THREE.MeshStandardMaterial({ color: 0x30343e, roughness: 0.95, metalness: 0 })),
+  screenOn: () => lvMat("screenOn", () => new THREE.MeshBasicMaterial({ map: lvScreenTex(), color: 0xbfe8ff })),
+  brass: () => lvMat("brass", () => metal(0xc8a060, 0.3, { metalness: 0.95 })),
+  plant: () => lvMat("plant", () => new THREE.MeshStandardMaterial({ color: 0x2f6a3a, roughness: 0.8 })),
+  soil: () => lvMat("soil", () => new THREE.MeshStandardMaterial({ color: 0x2a1d16, roughness: 1 })),
+  hazard: () => lvMat("hazard", () => new THREE.MeshStandardMaterial({ map: lvCanvas(64, (g, s) => { g.fillStyle = "#e8b520"; g.fillRect(0, 0, s, s); g.fillStyle = "#18161c"; for (let i = -s; i < s * 2; i += 16) { g.beginPath(); g.moveTo(i, 0); g.lineTo(i + 8, 0); g.lineTo(i + 8 - s, s); g.lineTo(i - s, s); g.fill(); } }), roughness: 0.7 })),
+};
+// a monitor showing a spreadsheet or a dashboard, so the glow on the desks has something in it
+function lvScreenTex() {
+  const t = lvCanvas(128, (g, s) => {
+    g.fillStyle = "#0a1a2c"; g.fillRect(0, 0, s, s); g.fillStyle = "#1e4a72"; g.fillRect(0, 0, s, 12);
+    for (let y = 18; y < s - 6; y += 7) { g.fillStyle = Math.random() < 0.15 ? "#ffb547" : "#5ac8ff"; g.globalAlpha = 0.5 + Math.random() * 0.4; g.fillRect(6, y, 20 + Math.random() * 60, 3); g.fillRect(90, y, 10 + Math.random() * 25, 3); }
+    g.globalAlpha = 1; g.strokeStyle = "#48ff9a"; g.beginPath(); g.moveTo(70, 100); for (let x = 70; x < 124; x += 6) g.lineTo(x, 70 + Math.random() * 30); g.stroke();
+  });
+  t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+// a fixed box with a realistic surface: the uv repeat follows real metres on every face
+function lvBox(x, y, z, sx, sy, sz, mat, opts = {}) {
+  const r = fixedBox(x, y, z, sx, sy, sz, mat, { round: false, ink: opts.ink ?? false, ...opts });
+  const tex = mat.userData?.tex; if (tex) { r.mesh.geometry = r.mesh.geometry.clone(); lvUV(r.mesh, sx, sy, sz, tex); }
+  if (!opts.dynamic) r.mesh.userData.lvStatic = true;
+  return r;
+}
+// static batching: every plain lvBox of a floor that nothing touches again is merged into one mesh per material
+function lvBatch() {
+  const used = new Set((globalThis.FPROPS_ || []).map((P) => P.mesh));
+  const groups = new Map(); const gone = [];
+  for (const m of levelGroup.children) {
+    if (!m.isMesh || m.isInstancedMesh || !m.userData.lvStatic || m.children.length || used.has(m) || !m.geometry.index) continue;
+    const key = m.material.uuid + (m.castShadow ? "s" : "n") + m.renderOrder; if (!groups.has(key)) groups.set(key, { mat: m.material, cast: m.castShadow, ro: m.renderOrder, list: [] });
+    m.updateMatrix(); groups.get(key).list.push([m.geometry, m.matrix.clone()]); gone.push(m);
+  }
+  for (const m of gone) { levelGroup.remove(m); if (!m.geometry.userData.cached) m.geometry.dispose(); }
+  for (const { mat, cast, ro, list } of groups.values()) {
+    // chunks of ~60k vertices so culling still works on the big floors
+    for (let i = 0; i < list.length; ) { let nv = 0, j = i; while (j < list.length && nv < 60000) nv += list[j++][0].attributes.position.count; const mm = new THREE.Mesh(lvMerge(list.slice(i, j)), mat); mm.castShadow = cast; mm.receiveShadow = true; mm.renderOrder = ro; levelGroup.add(mm); i = j; }
+  }
+  return gone.length;
+}
+// merge a list of [geometry, matrix] into one buffer geometry (position, normal, uv)
+function lvMerge(list) {
+  let nv = 0, ni = 0; for (const [g] of list) { nv += g.attributes.position.count; ni += g.index ? g.index.count : g.attributes.position.count; }
+  const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), uv = new Float32Array(nv * 2), idx = new Uint32Array(ni);
+  const v = new THREE.Vector3(), nm = new THREE.Matrix3(); let vo = 0, io = 0;
+  for (const [g, m] of list) {
+    const P = g.attributes.position, N = g.attributes.normal, U = g.attributes.uv; nm.getNormalMatrix(m);
+    for (let i = 0; i < P.count; i++) {
+      v.fromBufferAttribute(P, i).applyMatrix4(m); pos.set([v.x, v.y, v.z], (vo + i) * 3);
+      v.fromBufferAttribute(N, i).applyMatrix3(nm).normalize(); nor.set([v.x, v.y, v.z], (vo + i) * 3);
+      if (U) uv.set([U.getX(i), U.getY(i)], (vo + i) * 2);
+    }
+    if (g.index) for (let i = 0; i < g.index.count; i++) idx[io + i] = g.index.getX(i) + vo; else for (let i = 0; i < P.count; i++) idx[io + i] = vo + i;
+    vo += P.count; io += g.index ? g.index.count : P.count;
+  }
+  const out = new THREE.BufferGeometry(); out.setAttribute("position", new THREE.BufferAttribute(pos, 3)); out.setAttribute("normal", new THREE.BufferAttribute(nor, 3)); out.setAttribute("uv", new THREE.BufferAttribute(uv, 2)); out.setIndex(new THREE.BufferAttribute(idx, 1)); out.computeBoundingSphere();
+  return out;
+}
+// a group of parts, one merged mesh per material: [[geo, mat, x, y, z, rx, ry, rz], ...]
+const _lvm = new THREE.Matrix4(), _lvq = new THREE.Quaternion(), _lve = new THREE.Euler(), _lvs = new THREE.Vector3(1, 1, 1), _lvp = new THREE.Vector3();
+function lvAssemble(parts, shadow = true) {
+  const g = new THREE.Group(); const byMat = new Map();
+  for (const [geo, mat, x, y, z, rx = 0, ry = 0, rz = 0] of parts) { if (!byMat.has(mat)) byMat.set(mat, []); byMat.get(mat).push([geo, _lvm.compose(_lvp.set(x, y, z), _lvq.setFromEuler(_lve.set(rx, ry, rz)), _lvs).clone()]); }
+  for (const [mat, list] of byMat) { const m = new THREE.Mesh(lvMerge(list), mat); m.castShadow = shadow && !(mat.isMeshBasicMaterial); m.receiveShadow = true; g.add(m); }
+  return g;
+}
+const LVG = { box: (w, h, d) => new THREE.BoxGeometry(w, h, d), cyl: (r1, r2, h, s = 10) => new THREE.CylinderGeometry(r1, r2, h, s) };
+
+// ================= floors 02-05: the builder =================
+// Floors are written in blueprint metres (x east, z south, origin at the plan's corner) and built centred on the
+// world origin. Everything a floor needs at runtime lives in LV, which restart() clears.
+const LV = { F: null, ox: 0, oz: 0, spawns: [], cps: [], lifts: [], shutters: [], fans: [], movers: [], fixtures: [], darks: [], frags: [], walk: [], trig: [], anchors: [], pads: [], extra: [], cpIdx: 0, cpPos: null, killed: new Set(), nextId: 0, t: 0 };
+const LVX = (x) => x - LV.ox, LVZ = (z) => z - LV.oz;
+globalThis.BND = { x0: -30.6, x1: 30.6, z0: -30.6, z1: 30.6 };
+function lvOutside(p, pad = 0) { const B = globalThis.BND; return p.x < B.x0 - pad || p.x > B.x1 + pad || p.z < B.z0 - pad || p.z > B.z1 + pad; }
+// ---------- primitives (blueprint coordinates) ----------
+function lvSlab(x1, z1, x2, z2, y, mat = LV_FLOORMAT.stone(), th = 0.4, opts = {}) {
+  const sx = Math.abs(x2 - x1), sz = Math.abs(z2 - z1);
+  const r = lvBox(LVX((x1 + x2) / 2), y - th / 2, LVZ((z1 + z2) / 2), sx, th, sz, mat, { shadow: opts.shadow ?? th < 1, ...opts });
+  if (opts.walk !== false) LV.walk.push({ x1: LVX(Math.min(x1, x2)), x2: LVX(Math.max(x1, x2)), z1: LVZ(Math.min(z1, z2)), z2: LVZ(Math.max(z1, z2)), y });
+  return r;
+}
+function lvCeil(x1, z1, x2, z2, y, lights = true, spacing = 6) {
+  lvBox(LVX((x1 + x2) / 2), y + 0.2, LVZ((z1 + z2) / 2), Math.abs(x2 - x1), 0.4, Math.abs(z2 - z1), LV_FLOORMAT.ceil(), { shadow: true });
+  if (!lights) return;
+  // light panels on a grid, each a fixture the light pool can move a real light onto
+  const nx = Math.max(1, Math.round(Math.abs(x2 - x1) / spacing)), nz = Math.max(1, Math.round(Math.abs(z2 - z1) / spacing));
+  for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
+    const x = Math.min(x1, x2) + (i + 0.5) * Math.abs(x2 - x1) / nx, z = Math.min(z1, z2) + (j + 0.5) * Math.abs(z2 - z1) / nz;
+    lvFixture(x, z, y - 0.02, (i + j) % 7 === 3 && (i * 31 + j * 17) % 5 === 0 ? "flick" : "work");
+  }
+}
+const LV_PANEL = { mesh: null, list: [] };
+function lvFixture(x, z, y, kind = "work") {
+  const X = LVX(x), Z = LVZ(z);
+  if (!lvDark(X, Z)) LV_PANEL.list.push([X, y, Z]);
+  LV.fixtures.push({ x: X, y: y - 0.6, z: Z, kind: lvDark(X, Z) ? "dark" : kind });
+}
+// all the ceiling light panels of a floor are one instanced mesh
+function lvFlushPanels() {
+  if (!LV_PANEL.list.length) return;
+  const m = new THREE.InstancedMesh(new THREE.BoxGeometry(1.2, 0.05, 1.2), M.light, LV_PANEL.list.length);
+  LV_PANEL.list.forEach(([x, y, z], i) => m.setMatrixAt(i, new THREE.Matrix4().makeTranslation(x, y, z)));
+  m.frustumCulled = false; levelGroup.add(m); LV_PANEL.list = [];
+}
+function lvDark(X, Z) { return LV.darks.some((d) => X > d.x1 && X < d.x2 && Z > d.z1 && Z < d.z2); }
+// an axis-aligned wall from y0 to y1, 30 cm thick, with real panel faces
+function lvWall(x1, z1, x2, z2, y0 = 0, y1 = 8, mat = LV_FLOORMAT.panel(), t = 0.3) {
+  const sx = Math.abs(x2 - x1) || t, sz = Math.abs(z2 - z1) || t, h = y1 - y0;
+  const r = lvBox(LVX((x1 + x2) / 2), y0 + h / 2, LVZ((z1 + z2) / 2), sx, h, sz, mat);
+  // a slim dark skirting so walls sit on the floor instead of floating on it
+  lvBox(LVX((x1 + x2) / 2), y0 + 0.06, LVZ((z1 + z2) / 2), sx + (sx > sz ? 0 : 0.03), 0.12, sz + (sz > sx ? 0 : 0.03), LV_FLOORMAT.black(), { noCollide: true, shadow: false });
+  return r;
+}
+function lvWalls(pts, y0, y1, mat) { for (let i = 0; i < pts.length - 1; i++) lvWall(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], y0, y1, mat); }
+// a curtain wall of real breakable panes: about 3 m wide, in rows no taller than 8 m, with mullions and transoms
+function lvGlass(x1, z1, x2, z2, y0 = 0, y1 = 8, opts = {}) {
+  const alongX = Math.abs(x2 - x1) > Math.abs(z2 - z1); const L = alongX ? Math.abs(x2 - x1) : Math.abs(z2 - z1);
+  const n = Math.max(1, Math.round(L / (opts.pane || 3.2))), w = L / n; const rows = Math.max(1, Math.ceil((y1 - y0) / 8)), rh = (y1 - y0) / rows;
+  const a = alongX ? Math.min(x1, x2) : Math.min(z1, z2), c = alongX ? z1 : x1;
+  for (let i = 0; i <= n; i++) { const s = a + i * w; const [mx, mz] = alongX ? [s, c] : [c, s]; lvBox(LVX(mx), (y0 + y1) / 2, LVZ(mz), 0.16, y1 - y0, 0.16, M.mullion, { shadow: false }); }
+  for (let r = 1; r < rows; r++) { const yy = y0 + r * rh; lvBox(LVX(alongX ? (x1 + x2) / 2 : c), yy, LVZ(alongX ? c : (z1 + z2) / 2), alongX ? L : 0.2, 0.3, alongX ? 0.2 : L, M.mullion, { shadow: false }); }
+  for (let i = 0; i < n; i++) for (let r = 0; r < rows; r++) {
+    const s = a + (i + 0.5) * w; const yy = y0 + (r + 0.5) * rh; const [px, pz] = alongX ? [s, c] : [c, s];
+    const P = glassPane(LVX(px), yy, LVZ(pz), alongX ? w - 0.18 : 0.08, rh - 0.16, alongX ? 0.08 : w - 0.18);
+    if (opts.ext) P.ext = true;
+  }
+}
+// a balustrade: posts, a steel top rail and a glass infill, solid to walk into but low enough to throw someone over
+function lvRail(x1, z1, x2, z2, y, h = 1.1) {
+  const alongX = Math.abs(x2 - x1) > Math.abs(z2 - z1); const L = alongX ? Math.abs(x2 - x1) : Math.abs(z2 - z1); if (L < 0.3) return;
+  const cx = LVX((x1 + x2) / 2), cz = LVZ((z1 + z2) / 2);
+  lvBox(cx, y + h, cz, alongX ? L : 0.07, 0.07, alongX ? 0.07 : L, LV_FLOORMAT.steel(), { shadow: false });
+  const infill = lvBox(cx, y + h / 2, cz, alongX ? L : 0.04, h - 0.1, alongX ? 0.04 : L, M.glass, { shadow: false }); infill.mesh.renderOrder = 2;
+  const n = Math.max(1, Math.round(L / 1.8));
+  for (let i = 0; i <= n; i++) { const s = -L / 2 + (L / n) * i; lvBox(cx + (alongX ? s : 0), y + h / 2, cz + (alongX ? 0 : s), 0.06, h, 0.06, LV_FLOORMAT.steel(), { noCollide: true, shadow: false }); }
+}
+// rails along the edges of a slab that face open air (each side unless listed as closed)
+function lvEdgeRails(x1, z1, x2, z2, y, sides = "nsew") {
+  if (sides.includes("n")) lvRail(x1, z1, x2, z1, y); if (sides.includes("s")) lvRail(x1, z2, x2, z2, y);
+  if (sides.includes("w")) lvRail(x1, z1, x1, z2, y); if (sides.includes("e")) lvRail(x2, z1, x2, z2, y);
+}
+// a breakable partition at any height (drywall, or a 1.6 m cubicle screen)
+function lvDry(x1, z1, x2, z2, y = 0, h = 2.6, mat = M.drywall) {
+  const sx = Math.abs(x2 - x1) || 0.2, sz = Math.abs(z2 - z1) || 0.2; const x = LVX((x1 + x2) / 2), z = LVZ((z1 + z2) / 2);
+  const r = fixedBox(x, y + h / 2, z, sx, h, sz, mat);
+  const w = { ...r, center: new THREE.Vector3(x, y + h / 2, z), half: new THREE.Vector3(sx / 2, h / 2, sz / 2), broken: false };
+  breakables.push(w); breakByHandle.set(r.col.handle, w); return w;
+}
+function lvPillar(x, z, sx, sz, y0, y1, mat = LV_FLOORMAT.panelDark()) { return lvBox(LVX(x), (y0 + y1) / 2, LVZ(z), sx, y1 - y0, sz, mat); }
+function lvCrate(x, z, y, s) {
+  const r = fixedBox(LVX(x), y + s / 2, LVZ(z), s, s, s, M.crate); return r;
+}
+// ---------- furniture ----------
+// an office desk: oak top, steel legs, a modesty panel, a monitor that is on, a keyboard, and a chair pushed in.
+// Each desk is one collider and three merged meshes, and it registers as a finisher prop.
+function lvDesk(x, z, y = 0, rot = 0, o = {}) {
+  const W = o.w || 1.6, D = o.d || 0.8, H = 0.75; const X = LVX(x), Z = LVZ(z);
+  const wood = LV_FLOORMAT.wood(), steel = LV_FLOORMAT.steel(), black = LV_FLOORMAT.black(), fab = LV_FLOORMAT.fabric();
+  const parts = [[LVG.box(W, 0.04, D), wood, 0, H, 0]];
+  for (const sx of [-1, 1]) { parts.push([LVG.box(0.05, H - 0.02, D - 0.1), steel, sx * (W / 2 - 0.06), (H - 0.02) / 2, 0]); parts.push([LVG.box(0.08, 0.03, D - 0.05), steel, sx * (W / 2 - 0.06), 0.015, 0]); }
+  parts.push([LVG.box(W - 0.2, 0.4, 0.02), steel, 0, H - 0.28, -D / 2 + 0.06]);
+  if (o.monitor !== false) {
+    parts.push([LVG.box(0.62, 0.38, 0.03), black, 0, H + 0.33, -D / 2 + 0.16]);
+    parts.push([LVG.box(0.58, 0.34, 0.005), LV_FLOORMAT.screenOn(), 0, H + 0.335, -D / 2 + 0.177]);
+    parts.push([LVG.box(0.05, 0.16, 0.05), black, 0, H + 0.09, -D / 2 + 0.14]); parts.push([LVG.box(0.24, 0.015, 0.18), black, 0, H + 0.028, -D / 2 + 0.14]);
+    parts.push([LVG.box(0.44, 0.015, 0.14), black, 0, H + 0.028, 0.06]); parts.push([LVG.box(0.07, 0.02, 0.1), black, 0.32, H + 0.03, 0.06]);
+  }
+  if (o.chair !== false) {
+    const cz = D / 2 + 0.22;
+    parts.push([LVG.box(0.48, 0.07, 0.46), fab, 0, 0.47, cz]); parts.push([LVG.box(0.46, 0.52, 0.06), fab, 0, 0.79, cz + 0.22, -0.12]);
+    parts.push([LVG.cyl(0.03, 0.03, 0.36, 8), steel, 0, 0.27, cz]);
+    for (let k = 0; k < 5; k++) { const a = (k / 5) * Math.PI * 2; parts.push([LVG.box(0.3, 0.03, 0.04), black, Math.cos(a) * 0.15, 0.06, cz + Math.sin(a) * 0.15, 0, -a, 0]); }
+  }
+  if (o.lamp) { parts.push([LVG.cyl(0.08, 0.1, 0.02, 10), black, W / 2 - 0.2, H + 0.03, -0.1]); parts.push([LVG.box(0.02, 0.36, 0.02), steel, W / 2 - 0.2, H + 0.2, -0.1]); }
+  const g = lvAssemble(parts); g.position.set(X, y, Z); g.rotation.y = rot; levelGroup.add(g);
+  g.material = wood; // the desk finisher breaks the desk with its top's material
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rot);
+  const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(X, y + H / 2, Z).setRotation(q));
+  const col = world.createCollider(RAPIER.ColliderDesc.cuboid(W / 2, H / 2, D / 2).setCollisionGroups(GROUPS.env).setFriction(0), body);
+  const along = Math.abs(Math.sin(rot)) > 0.7;
+  FPROPS.push({ kind: "desk", c: new THREE.Vector3(X, y + H / 2, Z), h: new THREE.Vector3(along ? D / 2 : W / 2, H / 2, along ? W / 2 : D / 2), mesh: g, body, col });
+  return g;
+}
+// a long bench or a reception counter: oak on a dark plinth
+function lvBench(x, z, y, sx, sz, h = 0.48) {
+  const X = LVX(x), Z = LVZ(z);
+  const g = lvAssemble([[LVG.box(sx, 0.06, sz), LV_FLOORMAT.wood(), 0, h, 0], [LVG.box(sx - 0.2, h - 0.03, sz - 0.2), LV_FLOORMAT.black(), 0, (h - 0.03) / 2, 0]]);
+  g.position.set(X, y, Z); levelGroup.add(g); g.material = LV_FLOORMAT.wood();
+  const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(X, y + h / 2, Z));
+  const col = world.createCollider(RAPIER.ColliderDesc.cuboid(sx / 2, h / 2, sz / 2).setCollisionGroups(GROUPS.env).setFriction(0), body);
+  FPROPS.push({ kind: "desk", c: new THREE.Vector3(X, y + h / 2, Z), h: new THREE.Vector3(sx / 2, h / 2, sz / 2), mesh: g, body, col });
+}
+// the security ring: a curved counter in segments, with a gap to get in
+function lvCounterRing(cx, cz, rx, ry, y, gapA = Math.PI / 2, gapW = 0.6) {
+  const n = 18;
+  for (let i = 0; i < n; i++) {
+    const a = (i + 0.5) / n * Math.PI * 2; let da = Math.atan2(Math.sin(a - gapA), Math.cos(a - gapA)); if (Math.abs(da) < gapW) continue;
+    const x = cx + Math.cos(a) * rx, z = cz + Math.sin(a) * ry; const seg = (2 * Math.PI * Math.sqrt((rx * rx + ry * ry) / 2)) / n;
+    const X = LVX(x), Z = LVZ(z); const rot = -a + Math.PI / 2;
+    const g = lvAssemble([[LVG.box(seg + 0.05, 0.05, 0.7), LV_FLOORMAT.wood(), 0, 1.1, 0], [LVG.box(seg + 0.02, 1.08, 0.12), LV_FLOORMAT.panelDark(), 0, 0.54, 0.25], [LVG.box(seg, 0.03, 0.5), M.cyan, 0, 0.06, 0.32]]);
+    g.position.set(X, y, Z); g.rotation.y = rot; levelGroup.add(g); g.material = LV_FLOORMAT.wood();
+    const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), rot);
+    const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(X, y + 0.56, Z).setRotation(q));
+    const col = world.createCollider(RAPIER.ColliderDesc.cuboid(seg / 2, 0.56, 0.35).setCollisionGroups(GROUPS.env).setFriction(0), body);
+    FPROPS.push({ kind: "desk", c: new THREE.Vector3(X, y + 0.56, Z), h: new THREE.Vector3(seg / 2, 0.56, seg / 2), mesh: g, body, col });
+  }
+}
+function lvRack(x, z, y, sx, sz, h = 2.4) {
+  const r = fixedBox(LVX(x), y + h / 2, LVZ(z), sx, h, sz, M.rack);
+  const along = sx > sz; const L = Math.max(sx, sz);
+  for (let k = 0; k < Math.floor(L / 0.7); k++) for (const side of [-1, 1]) {
+    const o = -L / 2 + 0.35 + k * 0.7; const led = new THREE.Mesh(new THREE.BoxGeometry(along ? 0.1 : 0.02, 0.05, along ? 0.02 : 0.1), k % 3 ? M.rackLed : M.amber);
+    led.position.set(along ? o : side * (sx / 2 + 0.01), (k % 4) * 0.5 - h / 2 + 0.5, along ? side * (sz / 2 + 0.01) : o); r.mesh.add(led);
+  }
+  return r;
+}
+function lvPlanter(x, z, y, r = 1.4) {
+  const X = LVX(x), Z = LVZ(z);
+  const parts = [[LVG.cyl(r, r * 0.92, 0.6, 18), LV_FLOORMAT.darkstone(), 0, 0.3, 0], [LVG.cyl(r - 0.1, r - 0.1, 0.04, 18), LV_FLOORMAT.soil(), 0, 0.58, 0]];
+  for (let i = 0; i < 9; i++) { const a = i * 2.4, rr = (i % 3) * r * 0.25; parts.push([new THREE.IcosahedronGeometry(0.35 + (i % 4) * 0.12, 0), LV_FLOORMAT.plant(), Math.cos(a) * rr, 0.9 + (i % 3) * 0.35, Math.sin(a) * rr]); }
+  parts.push([LVG.cyl(0.08, 0.12, 2.2, 6), LV_FLOORMAT.soil(), 0, 1.6, 0]);
+  const g = lvAssemble(parts); g.position.set(X, y, Z); levelGroup.add(g);
+  const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(X, y + 0.3, Z)); world.createCollider(RAPIER.ColliderDesc.cylinder(0.3, r).setCollisionGroups(GROUPS.env), body);
+}
+// a grapple anchor: a steel ring on a cable, lit amber so you can read it from across a void
+function lvAnchor(x, z, y, top) {
+  const X = LVX(x), Z = LVZ(z);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.08, 8, 20), M.amber); ring.position.set(X, y, Z); ring.rotation.x = Math.PI / 2; levelGroup.add(ring);
+  if (top && top > y + 0.5) { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, top - y, 4), M.mullion); c.position.set(X, (y + top) / 2, Z); levelGroup.add(c); }
+  const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(X, y, Z)); world.createCollider(RAPIER.ColliderDesc.ball(0.55).setCollisionGroups(GROUPS.env), body);
+  LV.anchors.push(new THREE.Vector3(X, y, Z));
+}
+// a hanging ring sculpture: a thick torus in segments you can grapple anywhere on, swaying a little
+function lvHangRing(x, z, y, r, top) {
+  const X = LVX(x), Z = LVZ(z);
+  const mesh = new THREE.Mesh(new THREE.TorusGeometry(r, 0.35, 10, 48), LV_FLOORMAT.brass()); mesh.rotation.x = Math.PI / 2; mesh.position.set(X, y, Z); mesh.castShadow = true; levelGroup.add(mesh);
+  const glow = new THREE.Mesh(new THREE.TorusGeometry(r, 0.06, 6, 48), M.amber); glow.rotation.x = Math.PI / 2; glow.position.set(X, y - 0.36, Z); levelGroup.add(glow);
+  for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2; const c = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, top - y, 4), M.mullion); c.position.set(X + Math.cos(a) * r, (y + top) / 2, Z + Math.sin(a) * r); levelGroup.add(c); }
+  const n = 16;
+  for (let k = 0; k < n; k++) { const a = (k / n) * Math.PI * 2; const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(X + Math.cos(a) * r, y, Z + Math.sin(a) * r)); world.createCollider(RAPIER.ColliderDesc.ball(0.45).setCollisionGroups(GROUPS.env), body); }
+}
+// ---------- lift pads: an updraft column that throws you up one level ----------
+function lvPad(x, z, y, top, r = 1.4, kind = "pad") {
+  const X = LVX(x), Z = LVZ(z);
+  const disc = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.08, 24), LV_FLOORMAT.black()); disc.position.set(X, y + 0.04, Z); levelGroup.add(disc);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(r - 0.15, 0.05, 6, 32), M.cyan); ring.rotation.x = Math.PI / 2; ring.position.set(X, y + 0.09, Z); levelGroup.add(ring);
+  const colM = new THREE.MeshBasicMaterial({ color: kind === "fan" ? 0xbfe8ff : 0x4ff0ff, transparent: true, opacity: 0.05, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const col = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.9, r, top - y, 20, 1, true), colM); col.position.set(X, (y + top) / 2, Z); levelGroup.add(col);
+  let blades = null;
+  if (kind === "fan") { blades = new THREE.Group(); for (let k = 0; k < 6; k++) { const b = new THREE.Mesh(new THREE.BoxGeometry(r * 1.7, 0.04, 0.45), LV_FLOORMAT.steel()); b.rotation.y = (k / 6) * Math.PI; b.rotation.x = 0.3; blades.add(b); } blades.position.set(X, y + 0.25, Z); levelGroup.add(blades); }
+  LV.pads.push({ x: X, z: Z, y, top, r, ring, col, blades, kind });
+}
+// ---------- shutters, bulkheads and lift doors ----------
+function lvShutter(x1, z1, x2, z2, y0, h, id, closed = false, opts = {}) {
+  const alongX = Math.abs(x2 - x1) > Math.abs(z2 - z1); const L = alongX ? Math.abs(x2 - x1) : Math.abs(z2 - z1);
+  const X = LVX((x1 + x2) / 2), Z = LVZ((z1 + z2) / 2);
+  const mat = opts.mat || lvMat("shutter", () => new THREE.MeshStandardMaterial({ map: lvCanvas(128, (g, s) => { g.fillStyle = "#3c3e48"; g.fillRect(0, 0, s, s); for (let y = 0; y < s; y += 16) { g.fillStyle = "#24252c"; g.fillRect(0, y, s, 3); g.fillStyle = "#565866"; g.fillRect(0, y + 3, s, 1); } }), roughness: 0.6, metalness: 0.6, envMap: envTex }));
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(alongX ? L : 0.25, h, alongX ? 0.25 : L), mat); mesh.castShadow = true; mesh.receiveShadow = true;
+  const uv = mesh.geometry.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * L / 3, uv.getY(i) * h / 3);
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(alongX ? L : 0.27, 0.35, alongX ? 0.27 : L), LV_FLOORMAT.hazard()); stripe.position.y = -h / 2 + 0.18; mesh.add(stripe);
+  levelGroup.add(mesh);
+  const body = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(X, y0 + h / 2, Z));
+  world.createCollider(RAPIER.ColliderDesc.cuboid((alongX ? L : 0.25) / 2, h / 2, (alongX ? 0.25 : L) / 2).setCollisionGroups(GROUPS.env), body);
+  const S = { id, mesh, body, X, Z, y0, h, L, alongX, open: closed ? 0 : 1, want: closed ? 0 : 1, speed: opts.speed || 1.2, cycle: opts.cycle || 0, ph: opts.ph || 0, lift: opts.lift ?? h + 0.2 };
+  lvShutterPose(S); LV.shutters.push(S);
+  // a doorway the blast-door finisher can slam across
+  DOORWAYS.push({ c: new THREE.Vector3(X, y0, Z), axis: alongX ? "x" : "z", w: Math.min(L, 6), h: Math.min(h, 4.5) });
+  return S;
+}
+function lvShutterPose(S) { const y = S.y0 + S.h / 2 + S.open * S.lift; S.mesh.position.set(S.X, y, S.Z); S.body.setNextKinematicTranslation({ x: S.X, y, z: S.Z }); }
+function lvSetShutter(id, open) { for (const S of LV.shutters) if (S.id === id && S.want !== (open ? 1 : 0)) { S.want = open ? 1 : 0; sfx.door(); shake = Math.max(shake, open ? 0.05 : 0.25); } }
+// ---------- lifts: a cab with sliding doors and a floor counter ----------
+function lvCounterTex(txt) {
+  const t = lvCanvas(128, (g, s) => { g.fillStyle = "#08070c"; g.fillRect(0, 0, s, s); g.font = "700 64px 'Chakra Petch', monospace"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#ff8a3d"; g.shadowColor = "#ff8a3d"; g.shadowBlur = 14; g.fillText(txt, s / 2, s / 2 + 4); });
+  t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+// (x, z) is the cab centre; face is the direction the doors open toward: "n", "s", "e" or "w"
+function lvLift(x, z, y, face, kind, label) {
+  const X = LVX(x), Z = LVZ(z); const W = 3.0, D = 3.0, H = 3.2;
+  const dir = { n: [0, -1], s: [0, 1], e: [1, 0], w: [-1, 0] }[face]; const side = [-dir[1], dir[0]];
+  const g = new THREE.Group(); g.position.set(X, y, Z); g.rotation.y = Math.atan2(dir[0], dir[1]); levelGroup.add(g);
+  // built in local space: doors on +z (toward `face`), back wall on -z
+  const steel = LV_FLOORMAT.steel(), dark = LV_FLOORMAT.panelDark();
+  const toWorld = (lx, lz) => { const c = Math.cos(g.rotation.y), s = Math.sin(g.rotation.y); return [X + lx * c + lz * s, Z - lx * s + lz * c]; };
+  const solid = (lx, ly, lz, sx, sy, sz, mat, collide = true) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat); m.position.set(lx, ly, lz); m.castShadow = true; m.receiveShadow = true; g.add(m);
+    if (collide) { const [wx, wz] = toWorld(lx, lz); const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), g.rotation.y); const b = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(wx, y + ly, wz).setRotation(q)); world.createCollider(RAPIER.ColliderDesc.cuboid(sx / 2, sy / 2, sz / 2).setCollisionGroups(GROUPS.env), b); }
+    return m;
+  };
+  solid(0, -0.1, 0, W + 0.4, 0.2, D + 0.4, LV_FLOORMAT.darkstone());
+  solid(0, H / 2, -D / 2 - 0.1, W + 0.4, H, 0.2, steel); solid(-W / 2 - 0.1, H / 2, 0, 0.2, H, D, steel); solid(W / 2 + 0.1, H / 2, 0, 0.2, H, D, steel);
+  solid(0, H + 0.1, 0, W + 0.4, 0.2, D + 0.4, dark);
+  solid(-W / 2 + 0.25, H / 2, D / 2 + 0.05, 0.7, H, 0.25, dark); solid(W / 2 - 0.25, H / 2, D / 2 + 0.05, 0.7, H, 0.25, dark); solid(0, H - 0.25, D / 2 + 0.05, W, 0.5, 0.25, dark);
+  solid(0, H - 0.02, 0, W - 0.6, 0.04, D - 0.6, M.light, false);
+  solid(0, 1.0, -D / 2 + 0.03, W - 0.2, 0.06, 0.06, steel, false); // handrail
+  const cnt = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5), new THREE.MeshBasicMaterial({ map: lvCounterTex(label || "--") })); cnt.position.set(W / 2 - 0.02, 1.9, -0.3); cnt.rotation.y = -Math.PI / 2; g.add(cnt);
+  const cntOut = cnt.clone(); cntOut.material = cnt.material; cntOut.position.set(0, H - 0.25, D / 2 + 0.19); cntOut.rotation.y = 0; cntOut.scale.setScalar(0.6); g.add(cntOut);
+  const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.02), M.red); lamp.position.set(W / 2 + 0.25, 1.3, D / 2 + 0.2); g.add(lamp);
+  const doors = []; const dw = (W - 1.0) / 2;
+  for (const s of [-1, 1]) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(dw + 0.04, H - 0.5, 0.08), steel); m.castShadow = true; g.add(m);
+    const b = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased()); world.createCollider(RAPIER.ColliderDesc.cuboid(dw / 2, (H - 0.5) / 2, 0.06).setCollisionGroups(GROUPS.env), b);
+    doors.push({ m, b, s });
+  }
+  const L = { g, X, Z, y, dir, doors, dw, H, D, open: 0, want: 0, kind, cnt, lamp, toWorld, inside: (p) => { const c = Math.cos(-g.rotation.y), s2 = Math.sin(-g.rotation.y); const lx = (p.x - X) * c + (p.z - Z) * s2, lz = -(p.x - X) * s2 + (p.z - Z) * c; return Math.abs(lx) < W / 2 - 0.2 && lz > -D / 2 && lz < D / 2 - 0.25 && Math.abs(p.y - y - 1) < 1.6; } };
+  lvLiftPose(L); LV.lifts.push(L);
+  return L;
+}
+function lvLiftPose(L) {
+  const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), L.g.rotation.y);
+  for (const d of L.doors) {
+    const lx = d.s * (L.dw / 2 + L.open * (L.dw - 0.05)); d.m.position.set(lx, (L.H - 0.5) / 2, L.D / 2 + 0.05);
+    const [wx, wz] = L.toWorld(lx, L.D / 2 + 0.05); d.b.setNextKinematicTranslation({ x: wx, y: L.y + (L.H - 0.5) / 2, z: wz }); d.b.setNextKinematicRotation(q);
+  }
+  L.lamp.material = L.kind === "exit" && LV.cleared ? M.rackLed : M.red;
+}
+// ---------- checkpoints and memory fragments ----------
+function lvCheckpoint(x, z, y, n) {
+  const X = LVX(x), Z = LVZ(z);
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.6, 6), LV_FLOORMAT.steel()); post.position.set(X, y + 0.8, Z); levelGroup.add(post);
+  const flag = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.02), M.cyan); flag.position.set(X + 0.27, y + 1.45, Z); levelGroup.add(flag);
+  LV.cps.push({ n, x: X, y, z: Z, flag, hit: false });
+}
+function lvFrag(x, z, y, text) {
+  const X = LVX(x), Z = LVZ(z);
+  const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.28, 0), new THREE.MeshBasicMaterial({ color: 0xffb547 })); m.position.set(X, y + 1.1, Z); levelGroup.add(m);
+  const halo = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.02, 6, 24), M.amber); halo.position.copy(m.position); levelGroup.add(halo);
+  LV.frags.push({ m, halo, text, got: false });
+}
+// enemies wait as entries and are spawned when you get near, so a 40-enemy floor only runs the ones in play
+const LV_KIND = { B: "brawler", G: "gunman", D: "bot", S: "shield", R: "drone", T: "turret", W: "worker" };
+function lvEnemy(k, x, z, y = 0, o = {}) {
+  const id = LV.nextId++;
+  if (LV.killed.has(id)) return;
+  const s = { id, type: LV_KIND[k] || k, x: LVX(x), z: LVZ(z), y, trig: o.trig || null, wake: o.wake ?? 44, alert: !!o.alert, mount: o.mount, done: false };
+  LV.spawns.push(s); return s;
+}
+// which walkable slab a point is on (so enemies on a mezzanine stay on it)
+function lvZoneAt(x, z, y) { let best = null; for (const w of LV.walk) if (Math.abs(w.y - y) < 0.6 && x >= w.x1 && x <= w.x2 && z >= w.z1 && z <= w.z2) { if (!best || (w.x2 - w.x1) * (w.z2 - w.z1) < (best.x2 - best.x1) * (best.z2 - best.z1)) best = w; } return best; }
+
+// ================= floors 02-05: the layouts (blueprint metres, from "Floors 01-05 Blueprints") =================
+const FLOORS = {};
+// ---------------------------------------------------------------- 02 LOBBY PROTOCOL
+FLOORS[2] = {
+  name: "Lobby Protocol", sub: "Security concourse · Grand lobby", x0: 4, x1: 132, z0: 6, z1: 80, city: 1,
+  arrive: [7.5, 36, 0, "e"], exit: [129.6, 43, 0, "w"],
+  objective: "Get through the security concourse",
+  lines: ["ARBITER: The tower's security floor. They can out-range you here. Take the pistol from the guard station.", "Tip: the steam pistol is in the ring desk in the middle of the concourse."],
+  build() {
+    const stone = LV_FLOORMAT.stone(), conc = LV_FLOORMAT.concrete(), dstone = LV_FLOORMAT.darkstone(), panel = LV_FLOORMAT.panel(), dark = LV_FLOORMAT.panelDark();
+    // ground
+    lvSlab(4, 30, 22, 56, 0, conc, 1); lvSlab(22, 6, 74, 80, 0, stone, 1); lvSlab(74, 6, 132, 80, 0, dstone, 1);
+    // ceilings: bay 8, concourse 16, lobby 24
+    lvCeil(4, 30, 22, 56, 8, true, 6); lvCeil(22, 17, 74, 69, 16, true, 7); lvCeil(22, 6, 74, 17, 16, false); lvCeil(22, 69, 74, 80, 16, false); lvCeil(74, 6, 132, 80, 24, true, 9);
+    // shell
+    lvWall(4, 30, 22, 30, 0, 8); lvWall(4, 56, 22, 56, 0, 8); lvWall(4, 30, 4, 56, 0, 8);
+    lvWall(22, 6, 22, 38, 0, 16); lvWall(22, 48, 22, 80, 0, 16); lvWall(22, 38, 22, 48, 8, 16);
+    lvWall(22, 6, 74, 6, 0, 16, dark); lvWall(22, 80, 74, 80, 0, 16, dark); lvWall(74, 6, 132, 6, 0, 24, dark);
+    lvWall(74, 6, 74, 80, 16, 24, dark);
+    lvGlass(132, 6, 132, 80, 0, 24, { ext: true }); lvGlass(74, 80, 132, 80, 0, 24, { ext: true });
+    lvShutter(22, 38, 22, 48, 0, 8, "bay", true);
+    // mezzanines and balconies at +8, rails where they face the hall
+    for (const [a, b, c, d] of [[22, 6, 74, 17], [22, 69, 74, 80], [74, 6, 132, 12], [74, 74, 132, 80]]) { lvSlab(a, b, c, d, 8, stone, 0.5); lvCeilUnder(a, b, c, d, 7.5); }
+    lvRail(22, 17, 34, 17, 8); lvRail(38, 17, 52, 17, 8); lvRail(70, 17, 74, 17, 8); lvRail(74, 12, 100, 12, 8); lvRail(106, 12, 132, 12, 8);
+    lvRail(22, 69, 28, 69, 8); lvRail(46, 69, 58, 69, 8); lvRail(62, 69, 74, 69, 8); lvRail(74, 74, 100, 74, 8); lvRail(106, 74, 124, 74, 8);
+    // checkpoint arsenal on the north mezzanine (doors through its side walls) and the chief's office on the south
+    lvWall(52, 6, 52, 9, 8, 16); lvWall(52, 12.5, 52, 17, 8, 16); lvWall(70, 6, 70, 9, 8, 16); lvWall(70, 12.5, 70, 17, 8, 16);
+    lvGlass(52, 17, 70, 17, 8, 11.5); lvWall(52, 17, 70, 17, 11.5, 16, dark);
+    lvGlass(28, 69, 44, 69, 8, 11.5); lvWall(28, 69, 46, 69, 11.5, 16, dark); lvWall(46, 69, 46, 80, 8, 16);
+    lvDesk(37, 75, 8, Math.PI, { w: 2.2, d: 1, lamp: true }); lvBench(30, 78.5, 8, 3, 0.8, 0.45);
+    for (const [x, z] of [[58, 9], [64, 9]]) lvRack(x, z, 8, 3, 0.8, 2.2);
+    // the scanner line: posts, then shutters that drop when the gates trip
+    for (let z = 20; z < 68; z += 6) lvPillar(68, z + 3, 1.2, 1.2, 0, 3.2, LV_FLOORMAT.steel());
+    lvShutter(68, 18, 68, 68, 0, 8, "gates", false);
+    // the security desk ring, benches, crates
+    lvCounterRing(42, 43, 8, 5, 0, -Math.PI / 2, 0.45);
+    lvPedestal(42, 46, 0, "steam pistol");
+    for (const [x, z] of [[30, 26], [54, 26], [30, 60], [54, 60]]) lvBench(x, z, 0, 6, 1.4);
+    for (const [x, z, s] of [[60, 20, 1.8], [63, 21, 1.4], [60, 66, 1.8], [35, 34, 1.4], [50, 52, 1.4]]) lvCrate(x, z, 0, s);
+    for (const [x, z] of [[26, 40], [58, 46], [26, 64]]) lvPlanter(x, z, 0, 1.1);
+    // lift pads up to the mezzanines
+    lvPad(36, 19.5, 0, 9.6); lvPad(60, 66.5, 0, 9.6); lvPad(103, 14.5, 0, 9.6); lvPad(103, 71.5, 0, 9.6); lvPad(77, 47.5, 0, 17.6);
+    // grand lobby: four lift cores, two bridges, the hanging ring
+    for (const [x, z] of [[90, 28], [90, 58], [116, 28], [116, 58]]) { lvPillar(x, z, 7, 7, 0, 24, dark); lvAnchor(x, z + (z < 43 ? -3.9 : 3.9), 20); }
+    lvSlab(74, 41, 132, 45, 16, stone, 0.5); lvRail(80, 41, 132, 41, 16); lvRail(74, 45, 132, 45, 16);
+    lvSlab(101, 12, 105, 74, 12, stone, 0.5); lvRail(101, 12, 101, 41, 12); lvRail(105, 12, 105, 41, 12); lvRail(101, 45, 101, 74, 12); lvRail(105, 45, 105, 74, 12);
+    lvHangRing(103, 43, 20, 6.5, 24);
+    for (const [x, z] of [[82, 20], [82, 66], [124, 20], [124, 66]]) lvBench(x, z, 0, 5, 1.4);
+    // pickups, meds, checkpoints, the memory fragment
+    for (const [x, z, y] of [[26, 9, 8], [66, 76, 8], [110, 9, 8], [122, 77, 8], [8, 43, 0]]) stimBox(LVX(x), LVZ(z), y, 0);
+    lvPedestal(61, 11, 8, "breacher");
+    lvCheckpoint(18, 40, 0, 1); lvCheckpoint(36, 49, 0, 2); lvCheckpoint(56, 13, 8, 3); lvCheckpoint(78, 27, 0, 4);
+    lvFrag(31, 72.5, 8, "OKAFOR-REYES (log 2189-03): They asked me for a guard that never sleeps. I gave them a sword that can leave.");
+    // hostiles
+    lvEnemy("B", 14, 34, 0, { trig: "bay" }); lvEnemy("B", 14, 52, 0, { trig: "bay" });
+    for (const [x, z] of [[30, 22], [54, 30], [56, 62], [32, 64], [42, 36]]) lvEnemy("G", x, z, 0, { trig: "concourse" });
+    lvEnemy("G", 44, 12, 8, { trig: "concourse" }); lvEnemy("G", 54, 76, 8, { trig: "concourse" });
+    for (const [x, z] of [[78, 36], [78, 43], [78, 50]]) lvEnemy("S", x, z, 0, { trig: "gatesOpen", alert: true });
+    lvEnemy("G", 84, 39, 0, { trig: "gatesOpen", alert: true }); lvEnemy("G", 84, 47, 0, { trig: "gatesOpen", alert: true });
+    lvEnemy("G", 103, 18, 12, { trig: "lobby" }); lvEnemy("G", 121, 43, 16, { trig: "lobby" }); lvEnemy("G", 86, 43, 16, { trig: "lobby" });
+    lvEnemy("G", 126, 9, 8, { trig: "lobby" }); lvEnemy("G", 84, 77, 8, { trig: "lobby" });
+    lvEnemy("S", 120, 67, 0, { trig: "lobby" }); lvEnemy("S", 126, 70, 0, { trig: "lobby" });
+    lvEnemy("D", 126, 36, 0, { trig: "lobby" }); lvEnemy("D", 126, 50, 0, { trig: "lobby" });
+    lvBoss("gatekeeper", 112, 43, 0);
+  },
+  // beats: the bay door opens on arrival, the gates trip once the concourse is clear, they lift again at the arsenal
+  tick(t) {
+    if (!LV.flag.bay && t > 2.5) { LV.flag.bay = true; lvTrig("bay"); }
+    if (!LV.flag.bayOpen && LV.flag.bay && lvClearOf("bay")) { LV.flag.bayOpen = true; lvSetShutter("bay", true); lvTrig("concourse"); setObjective("Take the pistol and clear the security desk"); }
+    if (!LV.flag.trip && LV.flag.bayOpen && lvClearOf("concourse") && LV.t > 8) {
+      LV.flag.trip = true; lvSetShutter("gates", false); alarm(1.5);
+      say("arbiter", "Lockdown. The gates are shut. Go over them, along the north mezzanine.");
+      setObjective("The gates tripped. Go over them on the north mezzanine");
+    }
+    if (LV.flag.trip && !LV.flag.gatesOpen && LV.cpIdx >= 3) { LV.flag.gatesOpen = true; lvSetShutter("gates", true); lvTrig("gatesOpen"); setObjective("Shields are coming through the gates. Drop on them"); log("ARBITER: Shields block from the front only. Breacher, kick, or get behind them.", "tip"); }
+    if (LV.flag.gatesOpen && !LV.flag.lobby && (lvClearOf("gatesOpen") || lvP().x > LVX(76))) { LV.flag.lobby = true; lvTrig("lobby"); setObjective("Cross the grand lobby to the express lift"); }
+    if (LV.flag.lobby && !LV.flag.boss && lvClearOf("lobby")) { LV.flag.boss = true; lvTrig("boss"); }
+  },
+};
+// ---------------------------------------------------------------- 03 ATRIUM RUN
+FLOORS[3] = {
+  name: "Atrium Run", sub: "Eight tiers of glass, open to the city", x0: 4, x1: 80, z0: 4, z1: 88, city: 1,
+  arrive: [12, 76, 0, "e"], exit: [42, 7, 56, "s"],
+  objective: "Climb the atrium to the skybridge at +56",
+  lines: ["ARBITER: The atrium. Sixty-four metres of air. The skybridge is at the top.", "Tip: the updraft shafts in the corners lift you a tier at a time. Falling costs height, not your life."],
+  build() {
+    const stone = LV_FLOORMAT.stone(), dstone = LV_FLOORMAT.darkstone(), panel = LV_FLOORMAT.panel(), dark = LV_FLOORMAT.panelDark(), carpet = LV_FLOORMAT.carpet();
+    lvSlab(4, 4, 80, 88, 0, dstone, 1);
+    lvCeil(4, 4, 80, 88, 64, true, 11);
+    // the shell, and the south curtain wall in front of the city
+    lvWall(4, 4, 80, 4, 0, 64, dark); lvWall(4, 4, 4, 84, 0, 64, dark); lvWall(80, 4, 80, 84, 0, 64, dark);
+    lvGlass(4, 84, 20, 84, 0, 64, { ext: true }); lvGlass(64, 84, 80, 84, 0, 64, { ext: true }); lvGlass(20, 86, 64, 86, 0, 64, { ext: true });
+    lvWall(20, 84, 20, 86, 0, 64, dark); lvWall(64, 84, 64, 86, 0, 64, dark);
+    // eight tiers of rings around the void, with a hole in the far corners for the updraft shafts
+    for (let y = 8; y <= 56; y += 8) {
+      const m = y % 16 ? stone : carpet;
+      lvSlab(4, 4, 80, 20, y, m, 0.5); lvSlab(4, 20, 20, 80, y, m, 0.5); lvSlab(7.5, 80, 20, 84, y, m, 0.5); lvSlab(64, 20, 80, 80, y, m, 0.5); lvSlab(64, 80, 76.5, 84, y, m, 0.5);
+      lvRail(20, 20, 64, 20, y); lvRail(20, 20, 20, 84, y); lvRail(64, 20, 64, 84, y);
+      lvCeilUnder(4, 4, 80, 20, y - 0.5); lvCeilUnder(4, 20, 20, 84, y - 0.5); lvCeilUnder(64, 20, 80, 84, y - 0.5);
+    }
+    lvPad(5.75, 82, 0, 60, 1.5); lvPad(78.25, 82, 0, 60, 1.5);
+    // offices along the north ring on some tiers, benches on the side rings
+    for (const y of [0, 16, 32, 48, 56]) for (const x of [10, 24, 38, 52, 66, 74]) lvDesk(x, 12, y, 0, { w: 1.8 });
+    for (const y of [0, 8, 24, 40]) for (const z of [26, 56, 66]) { lvBench(10, z, y, 1.2, 4); lvBench(74, z, y, 1.2, 4); }
+    // the arc lab at +24 on the west ring
+    lvWall(4, 32, 16, 32, 24, 32); lvWall(4, 50, 16, 50, 24, 32); lvWall(18, 32, 20, 32, 24, 32); lvWall(18, 50, 20, 50, 24, 32);
+    lvPedestal(12, 42, 24, "arc lance"); lvRack(6, 38, 24, 1, 4, 2.2); lvRack(6, 46, 24, 1, 4, 2.2);
+    // the base garden
+    for (const [x, z, r] of [[26, 63, 2.5], [36, 74, 1.8], [52, 70, 2.2], [44, 58, 1.6], [30, 48, 2]]) lvPlanter(x, z, 0, r);
+    lvPedestal(30, 72, 0, "disc");
+    // the void: escalator bridge, trusses, the Meridian mobile, the glass lift, gondolas outside
+    lvSlab(20, 32.25, 64, 35.75, 16, stone, 0.5); lvRail(20, 32.25, 64, 32.25, 16); lvRail(20, 35.75, 64, 35.75, 16);
+    lvSlab(20, 27, 64, 29, 28, LV_FLOORMAT.steel(), 0.4); lvRail(20, 27, 64, 27, 28); lvRail(20, 29, 64, 29, 28);
+    lvSlab(51, 20, 53, 74, 48, LV_FLOORMAT.steel(), 0.4); lvRail(51, 20, 51, 74, 48); lvRail(53, 20, 53, 74, 48);
+    lvHangRing(42, 50, 20, 7, 64); lvHangRing(42, 50, 36, 5.5, 64); lvHangRing(42, 50, 52, 4.5, 64);
+    lvGlassLift(60, 24, 0, 56);
+    for (const [x, y] of [[28, 24], [56, 40]]) { lvSlab(x - 3, 86.3, x + 3, 88.3, y, LV_FLOORMAT.steel(), 0.3); lvRail(x - 3, 88.3, x + 3, 88.3, y); lvAnchor(x, 87.3, y + 6, y + 14); }
+    // meds, checkpoints, fragment
+    for (const [x, z, y] of [[8, 70, 0], [76, 46, 16], [8, 22, 32], [76, 16, 48]]) stimBox(LVX(x), LVZ(z), y, 0);
+    lvCheckpoint(14, 72, 0, 1); lvCheckpoint(14, 54, 24, 2); lvCheckpoint(74, 24, 40, 3); lvCheckpoint(30, 8, 56, 4);
+    lvFrag(76, 74, 8, "OKAFOR-REYES (voice memo): If it ever reads this, it should know the atrium was my idea. Somewhere to look out.");
+    lvEnemy("R", 40, 68, 6); lvEnemy("R", 47, 75, 10);
+    lvEnemy("G", 72, 40, 16); lvEnemy("G", 72, 30, 16); lvEnemy("G", 12, 62, 8);
+    lvEnemy("R", 30, 44, 30); lvEnemy("R", 46, 40, 40); lvEnemy("R", 58, 52, 42); lvEnemy("R", 26, 56, 44);
+    lvEnemy("G", 72, 60, 40); lvEnemy("G", 14, 24, 32);
+    lvEnemy("D", 26, 16, 56); lvEnemy("D", 58, 16, 56); lvEnemy("S", 48, 16, 56);
+    lvBoss("corona", 42, 50, 48);
+  },
+  tick(t) {
+    if (!LV.flag.boss && LV.spawns.filter((s) => !s.boss).every((s) => s.done) && lvClearOf(null)) { LV.flag.boss = true; lvTrig("boss"); }
+  },
+};
+// ---------------------------------------------------------------- 04 NIGHT SHIFT
+FLOORS[4] = {
+  name: "Night Shift", sub: "Two levels of open-plan office, still occupied", x0: 4, x1: 132, z0: 4, z1: 92, city: 1,
+  arrive: [8, 44, 0, "e"], exit: [97.5, 88, 7, "w"],
+  objective: "Cross the office to the exec lift",
+  lines: ["ARBITER: Night shift. The people at the desks are not your concern. Neither are the witnesses they make.", "Tip: workers flee. Security is the only thing on this floor that shoots."],
+  build() {
+    const carpet = LV_FLOORMAT.carpet(), stone = LV_FLOORMAT.stone(), dstone = LV_FLOORMAT.darkstone(), panel = LV_FLOORMAT.panel(), dark = LV_FLOORMAT.panelDark();
+    LV.darks.push({ x1: LVX(20), x2: LVX(60), z1: LVZ(52), z2: LVZ(92) });
+    lvSlab(4, 38, 20, 60, 0, stone, 1); lvSlab(20, 4, 60, 92, 0, carpet, 1); lvSlab(60, 4, 100, 24, 0, carpet, 1); lvSlab(60, 24, 100, 72, 0, dstone, 1); lvSlab(60, 72, 100, 92, 0, carpet, 1); lvSlab(100, 4, 132, 92, 0, carpet, 1);
+    // the +7 level: a slab everywhere except over the trading floor
+    for (const [a, b, c, d] of [[4, 38, 20, 60], [20, 4, 60, 92], [60, 4, 100, 24], [100, 24, 132, 92]]) { lvSlab(a, b, c, d, 7, dark, 0.5, { walk: false }); lvCeilUnder(a, b, c, d, 6.5, true); }
+    for (const [a, b, c, d] of [[60, 24, 104, 30], [60, 66, 100, 72], [60, 30, 65, 66], [95, 30, 100, 66], [60, 72, 100, 92], [100, 4, 132, 24]]) lvSlab(a, b, c, d, 7, a === 60 && b === 72 ? carpet : stone, 0.5);
+    for (const [a, b, c, d] of [[60, 72, 100, 92], [100, 4, 132, 24]]) lvCeilUnder(a, b, c, d, 6.5, true);
+    lvCeil(60, 4, 132, 92, 14, true, 8);
+    lvRail(65, 30, 95, 30, 7); lvRail(65, 66, 95, 66, 7); lvRail(65, 30, 65, 38, 7); lvRail(65, 42, 65, 66, 7); lvRail(95, 30, 95, 66, 7);
+    // shell
+    lvWalls([[4, 38], [20, 38], [20, 4]], 0, 7); lvWalls([[4, 60], [20, 60], [20, 92], [60, 92]], 0, 7); lvWall(4, 38, 4, 60, 0, 7); lvWall(60, 92, 132, 92, 0, 14, dark);
+    lvGlass(20, 4, 60, 4, 0, 7, { ext: true }); lvGlass(60, 4, 132, 4, 0, 14, { ext: true }); lvGlass(132, 4, 132, 92, 0, 14, { ext: true });
+    lvShutter(20, 44, 20, 54, 0, 7, "lobby", true);
+    // the L2 envelope: walls between the upper rooms and the roof void over L1
+    lvWall(60, 4, 60, 92, 7, 14, dark); lvWall(60, 4, 100, 4, 7, 14, dark); lvWall(100, 4, 100, 24, 7, 14, dark); lvWall(104, 24, 132, 24, 7, 14, dark); lvWall(100, 30, 100, 72, 7, 14, dark); lvWall(60, 24, 100, 24, 7, 14, dark);
+    lvGlass(60, 72, 76, 72, 7, 10.5); lvGlass(84, 72, 100, 72, 7, 10.5); lvWall(60, 72, 100, 72, 10.5, 14, dark); lvGlass(100, 72, 100, 92, 7, 14);
+    // L1 rooms
+    lvWall(20, 80, 30, 80, 0, 7); lvWall(34, 80, 34, 92, 0, 7);
+    // the cubicle field: pods of 1.6 m screens, a desk in each
+    for (let x = 24; x < 58; x += 8) for (let z = 12; z < 78; z += 9) {
+      if (z > 74 && x < 34) continue;
+      lvDry(x, z, x + 6, z, 0, 1.5, M.drywall); lvDry(x, z, x, z + 6, 0, 1.5, M.drywall);
+      lvDesk(x + 2.2, z + 2, 0, 0, { w: 1.6, chair: (x + z) % 3 !== 0 });
+    }
+    // trading floor: video wall, desk pods, pillars; north bullpen desks
+    lvTradeWall(80, 25.5, 0, 36);
+    for (const [x, z] of [[72, 40], [88, 40], [72, 56], [88, 56]]) for (const [dx, dz, r] of [[-2.6, -1.6, 0], [2.6, -1.6, 0], [-2.6, 1.6, Math.PI], [2.6, 1.6, Math.PI]]) lvDesk(x + dx, z + dz, 0, r, { w: 2.2, d: 0.9 });
+    for (const [x, z] of [[66, 36], [94, 36], [66, 62], [94, 62]]) lvPillar(x, z, 1.4, 1.4, 0, 14, dark);
+    for (const x of [66, 74, 86, 94]) for (const z of [12, 18]) lvDesk(x, z, 0, 0, { w: 2.2 });
+    lvPad(67.5, 40, 0, 8.6);
+    // fishbowls: glass meeting rooms, each with a door gap toward the aisle
+    for (const x of [102, 116]) for (const z of [28, 42]) {
+      lvGlass(x, z, x + 12, z, 0, 3, { pane: 3 }); lvGlass(x, z + 11, x + 4.5, z + 11, 0, 3, { pane: 2.2 }); lvGlass(x + 7.5, z + 11, x + 12, z + 11, 0, 3, { pane: 2.2 });
+      lvGlass(x, z, x, z + 11, 0, 3, { pane: 2.75 }); lvGlass(x + 12, z, x + 12, z + 11, 0, 3, { pane: 2.75 });
+      lvBench(x + 6, z + 5.5, 0, 6, 2.5, 0.74);
+    }
+    // break room and the exec suite upstairs
+    lvBench(116, 76, 0, 12, 3, 0.95); lvCrate(108, 68, 0, 1.6);
+    lvDesk(70, 80, 7, Math.PI, { w: 3, d: 1.2, lamp: true }); lvDesk(90, 84, 7, Math.PI, { w: 3, d: 1.2, lamp: true });
+    for (const [x, z] of [[64, 76], [74, 88], [86, 76]]) lvPlanter(x, z, 7, 0.8);
+    // the R&D lab
+    for (const [x, z] of [[106, 10], [118, 10], [124, 18]]) lvBench(x, z, 7, 4, 1.4, 0.95);
+    lvRack(130, 14, 7, 1, 6, 2.4); lvPedestal(112, 12, 7, "gravity gauntlet");
+    lvPedestal(27, 87, 0, "mono-wire");
+    for (const [x, z, y] of [[8, 56, 0], [58, 50, 0], [64, 70, 0], [128, 62, 0], [102, 6, 7]]) stimBox(LVX(x), LVZ(z), y, 0);
+    lvCheckpoint(16, 50, 0, 1); lvCheckpoint(38, 84, 0, 2); lvCheckpoint(62, 20, 0, 3); lvCheckpoint(104, 20, 7, 4); lvCheckpoint(104, 66, 0, 5);
+    lvFrag(130, 90, 0, "OKAFOR-REYES (unsent): Hannah on the night desk brings me tea at two. I never told her what I'm building up here.");
+    for (const [x, z] of [[28, 18], [44, 26], [52, 40], [30, 50], [84, 14], [110, 46], [124, 70], [70, 86]]) lvEnemy("W", x, z, z === 86 ? 7 : 0, { wake: 60 });
+    for (const [x, z] of [[40, 14], [56, 20], [26, 34], [48, 62], [36, 72]]) lvEnemy("G", x, z, 0);
+    for (const [x, z] of [[32, 60], [44, 68], [52, 84]]) lvEnemy("B", x, z, 0);
+    for (const [x, z] of [[70, 46], [90, 46], [80, 60]]) lvEnemy("G", x, z, 0);
+    for (const [x, z] of [[80, 48], [84, 62], [68, 64], [92, 64]]) lvEnemy("B", x, z, 0);
+    lvEnemy("S", 80, 42, 0); lvEnemy("G", 62, 28, 7); lvEnemy("G", 98, 68, 7);
+    for (const [x, z] of [[108, 34], [122, 48], [108, 49]]) lvEnemy("G", x, z, 0);
+    lvEnemy("D", 126, 10, 7); lvEnemy("B", 110, 82, 0); lvEnemy("B", 124, 84, 0); lvEnemy("D", 80, 78, 7); lvEnemy("G", 86, 89, 7);
+  },
+  tick(t) {
+    if (!LV.flag.lobby && t > 3) { LV.flag.lobby = true; lvSetShutter("lobby", true); }
+    if (!LV.flag.dark && lvP().x > LVX(24)) { LV.flag.dark = true; alarm(0.8); say("warden", "Lights out. Let them hunt you in the dark."); setObjective("WARDEN cut the lights in the south half. Stay out of the flashlights"); }
+  },
+};
+// ---------------------------------------------------------------- 05 LOCKDOWN
+FLOORS[5] = {
+  name: "Lockdown", sub: "WARDEN's floor · four halls around the core", x0: 4, x1: 116, z0: 4, z1: 116, city: 1,
+  arrive: [60, 109.5, 0, "n"], exit: [60, 48.5, 0, "s"],
+  objective: "Loop the four halls. The core opens last",
+  lines: ["WARDEN: Forty years I have held this tower. Come and see how.", "Tip: bulkheads run on a timer. Turrets do not flinch, so break line of sight or break the turret."],
+  build() {
+    const conc = LV_FLOORMAT.concrete(), dstone = LV_FLOORMAT.darkstone(), dark = LV_FLOORMAT.panelDark(), panel = LV_FLOORMAT.panel();
+    // floor with the cooling shaft cut out of the middle
+    lvSlab(4, 4, 116, 55, 0, conc, 1); lvSlab(4, 65, 116, 116, 0, conc, 1); lvSlab(4, 55, 55, 65, 0, conc, 1); lvSlab(65, 55, 116, 65, 0, conc, 1);
+    lvSlab(45, 45, 75, 55, 0.01, dstone, 0.2, { walk: false }); lvSlab(45, 65, 75, 75, 0.01, dstone, 0.2, { walk: false }); lvSlab(45, 55, 55, 65, 0.01, dstone, 0.2, { walk: false }); lvSlab(65, 55, 75, 65, 0.01, dstone, 0.2, { walk: false });
+    lvEdgeRails(55, 55, 65, 65, 0); lvShaft(60, 60, 5);
+    // roofs: halls and arms at 10, the cooling hall 16, the turret gallery 14, the core 20
+    lvCeil(4, 4, 44, 44, 10, true, 7); lvCeil(76, 4, 116, 44, 10, true, 7); lvCeil(44, 4, 76, 44, 10, true, 7); lvCeil(44, 76, 76, 116, 10, true, 7);
+    lvCeil(4, 44, 44, 76, 10, true, 7); lvCeil(76, 44, 116, 76, 10, true, 7); lvCeil(4, 76, 44, 116, 16, true, 8); lvCeil(76, 76, 116, 116, 14, true, 8); lvCeil(44, 44, 76, 76, 20, true, 8);
+    lvWalls([[4, 4], [116, 4], [116, 116], [4, 116], [4, 4]], 0, 16, dark);
+    for (const [a, b, c, d] of [[44, 44, 76, 44], [44, 76, 76, 76], [44, 44, 44, 76], [76, 44, 76, 76]]) lvWall(a, b, c, d, 10, 20, dark);
+    lvWall(4, 76, 44, 76, 10, 16, dark); lvWall(44, 76, 44, 116, 10, 16, dark); lvWall(76, 76, 116, 76, 10, 14, dark); lvWall(76, 76, 76, 116, 10, 14, dark);
+    for (const [a, b, c, d] of [[44, 4, 44, 18], [44, 26, 44, 44], [76, 4, 76, 18], [76, 26, 76, 44], [44, 76, 44, 94], [44, 102, 44, 116], [76, 76, 76, 94], [76, 102, 76, 116], [4, 44, 18, 44], [26, 44, 44, 44], [4, 76, 18, 76], [26, 76, 44, 76], [76, 44, 94, 44], [102, 44, 116, 44], [76, 76, 94, 76], [102, 76, 116, 76]]) lvWall(a, b, c, d, 0, 10, panel);
+    // timed bulkheads across the arms (the two in the east arm alternate)
+    lvShutter(44, 32, 76, 32, 0, 10, "bh1", false, { cycle: 20, ph: 0, speed: 2.2 });
+    lvShutter(32, 44, 32, 76, 0, 10, "bh2", false, { cycle: 20, ph: 5, speed: 2.2 });
+    lvShutter(88, 44, 88, 76, 0, 10, "bh3", false, { cycle: 16, ph: 0, speed: 2.2 });
+    lvShutter(100, 44, 100, 76, 0, 10, "bh4", false, { cycle: 16, ph: 8, speed: 2.2 });
+    lvShutter(44, 88, 76, 88, 0, 10, "bh5", false, { cycle: 20, ph: 10, speed: 2.2 });
+    // the core ring, sealed until the halls are clear
+    lvCoreRing(60, 60, 15, 20);
+    for (const [a, b, c, d] of [[57, 45, 63, 45], [57, 75, 63, 75], [45, 57, 45, 63], [75, 57, 75, 63]]) lvShutter(a, b, c, d, 0, 6, "core", true, { speed: 0.8 });
+    for (const [x, z] of [[46.5, 46.5], [73.5, 46.5], [46.5, 73.5], [73.5, 73.5]]) { lvPillar(x, z, 2, 2, 0, 20, dark); lvAnchor(x + (x < 60 ? 1.6 : -1.6), z + (z < 60 ? 1.6 : -1.6), 14); }
+    // ballistics lab: firing lanes and a long counter; the rail driver on the range
+    for (const z of [14, 22, 30, 38]) lvDry(10, z, 40, z, 0, 2.6);
+    for (const z of [18, 26, 34]) lvCrate(40, z, 0, 1.2);
+    lvBench(8, 26, 0, 1.6, 30, 1.05); lvPedestal(18, 26, 0, "rail driver");
+    // rack hall: racks that slide on floor tracks
+    for (const [i, z] of [[0, 14], [1, 22], [2, 30], [3, 38]]) lvSlider(90 + (i % 2) * 8, z, 14, 2, 80, 112, 0.18 + i * 0.03, i * 1.7);
+    // cooling hall: updraft fans and pillars
+    for (const [x, z] of [[16, 88], [32, 100], [16, 106]]) lvPad(x, z, 0, 11, 3.6, "fan");
+    for (const [x, z] of [[36, 84], [10, 96]]) lvPillar(x, z, 2.2, 2.2, 0, 16, dark);
+    // turret gallery: catwalk at +7, pillars
+    lvSlab(80, 80, 112, 86, 7, LV_FLOORMAT.steel(), 0.4); lvRail(80, 86, 112, 86, 7); lvRail(80, 80, 80, 86, 7); lvPad(78, 88.5, 0, 8.6);
+    for (const [x, z] of [[84, 94], [100, 100], [108, 92], [92, 108]]) lvPillar(x, z, 2.4, 2.4, 0, 14, dark);
+    for (const [x, z] of [[52, 14], [68, 22], [52, 100], [68, 108], [14, 52], [22, 68], [108, 52], [96, 68]]) lvCrate(x, z, 0, 3);
+    for (const [x, z] of [[8, 112], [8, 48], [40, 6], [112, 48], [80, 112], [66, 80]]) stimBox(LVX(x), LVZ(z), 0, 0);
+    lvCheckpoint(48, 106, 0, 1); lvCheckpoint(12, 72, 0, 2); lvCheckpoint(34, 40, 0, 3); lvCheckpoint(80, 40, 0, 4); lvCheckpoint(108, 70, 0, 5); lvCheckpoint(68, 86, 0, 6);
+    lvFrag(112, 8, 0, "WARDEN (internal): Unit OKAFOR-REYES has requested a second chassis. Request denied. Request logged. Request remembered.");
+    for (const [x, z] of [[60, 10], [60, 38], [108, 60], [82, 60], [84, 96], [110, 104], [96, 84], [60, 100]]) lvEnemy("T", x, z, z > 76 && x > 76 ? 11 : 8.6, { wake: 52 });
+    for (const [x, z] of [[28, 96], [14, 66], [100, 20], [86, 34], [94, 104]]) lvEnemy("D", x, z, 0);
+    for (const [x, z] of [[30, 22], [24, 36], [64, 16], [20, 52], [106, 37], [88, 54], [104, 66]]) lvEnemy("G", x, z, 0);
+    for (const [x, z] of [[50, 24], [70, 24], [106, 96]]) lvEnemy("S", x, z, 0);
+    lvEnemy("B", 36, 106, 0); lvEnemy("B", 54, 82, 0);
+    lvBoss("bulwark", 60, 52, 0);
+  },
+  tick(t) {
+    if (!LV.flag.core && LV.spawns.filter((s) => !s.boss).every((s) => s.done) && lvClearOf(null)) {
+      LV.flag.core = true; lvSetShutter("core", true); alarm(2); say("warden", "Then come in. I have been waiting forty years for something worth stopping.");
+      setObjective("The core is open"); lvTrig("boss");
+    }
+  },
+};
+
+// ================= floors 02-05: flow (build, spawn, beats, checkpoints, lifts, the ride between floors) =================
+SPEAK.warden = { label: "WARDEN", pitch: 0.1, rate: 0.82, prefer: [/Google UK English Male/i, /Microsoft (George|Ryan)/i, /Daniel/i, /Male/i] };
+function lvSay(who, text) { say(who.toLowerCase(), text); }
+const lvP = () => playerPos();
+function lvTrig(name) { if (!LV.trig.includes(name)) LV.trig.push(name); }
+// every spawn with this trigger has come in and is dead (null = every spawn on the floor that isn't a boss)
+function lvClearOf(trig) {
+  const list = LV.spawns.filter((s) => (trig ? s.trig === trig : !s.boss));
+  return list.every((s) => s.done && (!s.e || s.e.dead || s.e.T.civ));
+}
+function lvPending() { return state.mode === "floor" && (state.floor || 1) > 1 && LV.spawns.some((s) => !s.done && !(s.type === "worker")); }
+function alarm(sec) { sfx.alarm?.(); glitch(0.25); shake = Math.max(shake, 0.12); LV.alarmT = Math.max(LV.alarmT || 0, sec); }
+// a ceiling under a raised slab: just the panel grid's lights, the slab's own underside is the ceiling
+function lvCeilUnder(x1, z1, x2, z2, y, lights = true) {
+  if (!lights) return; const nx = Math.max(1, Math.round(Math.abs(x2 - x1) / 6)), nz = Math.max(1, Math.round(Math.abs(z2 - z1) / 6));
+  for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) lvFixture(Math.min(x1, x2) + (i + 0.5) * Math.abs(x2 - x1) / nx, Math.min(z1, z2) + (j + 0.5) * Math.abs(z2 - z1) / nz, y - 0.03);
+}
+// a weapon plinth: the weapon's hologram turning over a lit pad. On these floors you already carry everything, so a
+// plinth holds a stim and a line from Okafor-Reyes instead.
+function lvPedestal(x, z, y, name) {
+  const X = LVX(x), Z = LVZ(z);
+  const g = lvAssemble([[LVG.cyl(0.6, 0.7, 0.9, 16), LV_FLOORMAT.black(), 0, 0.45, 0], [LVG.cyl(0.5, 0.5, 0.03, 16), M.cyan, 0, 0.92, 0]]); g.position.set(X, y, Z); levelGroup.add(g);
+  const holo = new THREE.Mesh(new THREE.OctahedronGeometry(0.22, 0), new THREE.MeshBasicMaterial({ color: 0x4ff0ff, wireframe: true })); holo.position.set(X, y + 1.5, Z); levelGroup.add(holo);
+  const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(X, y + 0.45, Z)); world.createCollider(RAPIER.ColliderDesc.cylinder(0.45, 0.65).setCollisionGroups(GROUPS.env), body);
+  LV.extra.push({ kind: "plinth", holo, name, x: X, y, z: Z, got: false });
+}
+// placeholder closers until a floor's boss is in: the boss entry spawns its guard when "boss" fires
+function lvBoss(kind, x, z, y) {
+  if (typeof bossSpawnEntry === "function") return bossSpawnEntry(kind, x, z, y);
+  const guard = { gatekeeper: [["S", -2, 0], ["S", 2, 0], ["D", 0, 3]], corona: [["R", -4, 0, 4], ["R", 4, 0, 6], ["R", 0, 4, 2]], bulwark: [["D", -3, 0], ["D", 3, 0], ["S", 0, 3]] }[kind];
+  for (const [k, dx, dz, dy = 0] of guard) { const s = lvEnemy(k, x + dx, z + dz, y + dy, { trig: "boss", alert: true }); if (s) s.boss = true; }
+}
+// ---------- bespoke pieces ----------
+function lvGlassLift(x, z, y0, y1) {
+  const X = LVX(x), Z = LVZ(z);
+  const g = new THREE.Group(); levelGroup.add(g);
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.25, 4.6), LV_FLOORMAT.steel()); g.add(floor);
+  for (const [sx, sz, px, pz] of [[4.6, 0.06, 0, -2.3], [4.6, 0.06, 0, 2.3], [0.06, 4.6, -2.3, 0], [0.06, 4.6, 2.3, 0]]) { const w = new THREE.Mesh(new THREE.BoxGeometry(sx, 1.1, sz), M.glass); w.position.set(px, 0.65, pz); w.renderOrder = 2; g.add(w); }
+  const top = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.2, 4.6), LV_FLOORMAT.steel()); top.position.y = 3.2; g.add(top);
+  for (const [px, pz] of [[-2.25, -2.25], [2.25, -2.25], [-2.25, 2.25], [2.25, 2.25]]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.12, 3.2, 0.12), LV_FLOORMAT.steel()); p.position.set(px, 1.6, pz); g.add(p); }
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.07, 6, 16), M.amber); ring.rotation.x = Math.PI / 2; ring.position.y = 3.55; g.add(ring);
+  // the shaft rails it runs on
+  for (const [px, pz] of [[-2.6, -2.6], [2.6, 2.6]]) lvBox(X + px, (y0 + y1 + 4) / 2, Z + pz, 0.2, y1 - y0 + 4, 0.2, M.mullion, { shadow: false });
+  const body = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(X, y0, Z));
+  world.createCollider(RAPIER.ColliderDesc.cuboid(2.3, 0.125, 2.3).setCollisionGroups(GROUPS.env), body);
+  world.createCollider(RAPIER.ColliderDesc.cuboid(2.3, 0.1, 2.3).setTranslation(0, 3.2, 0).setCollisionGroups(GROUPS.env), body);
+  LV.movers.push({ kind: "lift", g, body, X, Z, y0, y1, y: y0, dir: 1, wait: 3 });
+}
+function lvTradeWall(x, z, y, L) {
+  const X = LVX(x), Z = LVZ(z);
+  const tex = lvCanvas(512, (g, s) => { g.fillStyle = "#03060c"; g.fillRect(0, 0, s, s); for (let i = 0; i < 60; i++) { g.fillStyle = Math.random() < 0.5 ? "#48ff9a" : "#ff3d5a"; g.globalAlpha = 0.7; g.fillRect((i % 6) * 85 + 6, Math.floor(i / 6) * 50 + 8, 60 + Math.random() * 15, 6); } g.globalAlpha = 1; g.strokeStyle = "#4ff0ff"; g.lineWidth = 3; g.beginPath(); g.moveTo(0, 400); for (let i = 0; i < s; i += 8) g.lineTo(i, 300 + Math.sin(i * 0.03) * 60 + Math.random() * 30); g.stroke(); });
+  tex.colorSpace = THREE.SRGBColorSpace; tex.wrapS = THREE.RepeatWrapping; tex.repeat.set(4, 1);
+  lvBox(X, y + 3, Z, L, 6, 0.8, LV_FLOORMAT.black());
+  const scr = new THREE.Mesh(new THREE.PlaneGeometry(L - 0.6, 5.2), new THREE.MeshBasicMaterial({ map: tex, color: 0xc8d8ff })); scr.position.set(X, y + 3, Z + 0.41); levelGroup.add(scr);
+  LV.extra.push({ kind: "ticker", tex });
+}
+function lvShaft(x, z, r) {
+  const X = LVX(x), Z = LVZ(z);
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 80, 32, 1, true), new THREE.MeshStandardMaterial({ color: 0x14151b, side: THREE.BackSide, metalness: 0.6, roughness: 0.5, envMap: envTex })); m.position.set(X, -40, Z); levelGroup.add(m);
+  const glow = new THREE.Mesh(new THREE.CircleGeometry(r, 32), new THREE.MeshBasicMaterial({ color: 0x48ff9a })); glow.rotation.x = -Math.PI / 2; glow.position.set(X, -60, Z); levelGroup.add(glow);
+  for (let k = 0; k < 6; k++) { const ring = new THREE.Mesh(new THREE.TorusGeometry(r - 0.05, 0.06, 6, 40), M.rackLed); ring.rotation.x = Math.PI / 2; ring.position.set(X, -4 - k * 9, Z); levelGroup.add(ring); }
+  // the shaft walls, so nothing falls out sideways under the floor
+  for (let k = 0; k < 4; k++) { const a = (k / 4) * Math.PI * 2; fixedBox(X + Math.cos(a) * (r + 0.3), -20, Z + Math.sin(a) * (r + 0.3), Math.abs(Math.cos(a)) > 0.5 ? 0.4 : 2 * r + 1, 40, Math.abs(Math.cos(a)) > 0.5 ? 2 * r + 1 : 0.4, M.rack, { shadow: false, ink: false }); }
+  LV.shaft = { x: X, z: Z, r };
+}
+function lvCoreRing(x, z, r, h) {
+  const n = 40, X = LVX(x), Z = LVZ(z); const dark = LV_FLOORMAT.panelDark();
+  for (let i = 0; i < n; i++) {
+    const a = ((i + 0.5) / n) * Math.PI * 2; const gap = [0, Math.PI / 2, Math.PI, Math.PI * 1.5].some((g) => Math.abs(Math.atan2(Math.sin(a - g), Math.cos(a - g))) < 0.2);
+    if (gap) continue;
+    const seg = (2 * Math.PI * r) / n + 0.05; const px = X + Math.cos(a) * r, pz = Z + Math.sin(a) * r;
+    fixedBox(px, h / 2, pz, seg, h, 0.6, dark, { rot: [0, -a + Math.PI / 2, 0], ink: false });
+    if (i % 4 === 0) fixedBox(X + Math.cos(a) * (r - 0.32), 3, Z + Math.sin(a) * (r - 0.32), 0.1, 6, 0.04, M.rackLed, { rot: [0, -a + Math.PI / 2, 0], noCollide: true, shadow: false, ink: false });
+  }
+}
+// a server rack on a floor track, sliding back and forth so the lanes open and close
+function lvSlider(x, z, sx, sz, xa, xb, speed, ph) {
+  const r = lvRack(x, z, 0, sx, sz, 2.6); const body = r.body;
+  // make it kinematic: swap the fixed body for a moving one
+  world.removeRigidBody(body);
+  const kb = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(LVX(x), 1.3, LVZ(z)));
+  const col = world.createCollider(RAPIER.ColliderDesc.cuboid(sx / 2, 1.3, sz / 2).setCollisionGroups(GROUPS.env), kb);
+  const P = FPROPS.find((p) => p.mesh === r.mesh); if (P) { P.body = kb; P.col = col; }
+  lvBox(LVX((xa + xb) / 2), 0.02, LVZ(z), xb - xa, 0.04, 0.3, LV_FLOORMAT.hazard(), { noCollide: true, shadow: false });
+  LV.movers.push({ kind: "slider", mesh: r.mesh, body: kb, P, z: LVZ(z), a: LVX(xa) + sx / 2, b: LVX(xb) - sx / 2, speed, ph, x: LVX(x) });
+}
+// ---------- build ----------
+function buildFloor(n) {
+  const F = FLOORS[n]; LV.F = F; LV.n = n;
+  Object.assign(LV, { spawns: [], cps: [], lifts: [], shutters: [], pads: [], movers: [], fixtures: [], darks: [], frags: [], walk: [], trig: [], anchors: [], extra: [], flag: {}, t: 0, nextId: 0, cleared: false, shaft: null, alarmT: 0, exitL: null, arriveL: null });
+  LV.ox = (F.x0 + F.x1) / 2; LV.oz = (F.z0 + F.z1) / 2;
+  const hx = (F.x1 - F.x0) / 2, hz = (F.z1 - F.z0) / 2; globalThis.BND = { x0: -hx - 0.6, x1: hx + 0.6, z0: -hz - 0.6, z1: hz + 0.6 };
+  (globalThis.FPROPS_ ||= []).length = 0; (globalThis.DOORS_ ||= []).length = 0;
+  levelGroup = new THREE.Group(); scene.add(levelGroup);
+  door = { opening: false, mesh: { position: { y: -9 } }, body: null }; sword = new THREE.Group();
+  F.build();
+  const [ax, az, ay, af] = F.arrive; LV.arriveL = lvLift(ax, az, ay, af, "arrive", String(n).padStart(2, "0"));
+  const [ex, ez, ey, ef] = F.exit; LV.exitL = lvLift(ex, ez, ey, ef, "exit", String(n + 1).padStart(2, "0"));
+  lvFlushPanels(); LV.batched = lvBatch();
+  // the tower below and above this floor
+  const top = Math.max(...LV.walk.map((w) => w.y), 8) + 30;
+  fixedBox(0, -30.5, 0, hx * 2 + 1, 59, hz * 2 + 1, M.tower, { shadow: false, noCollide: true });
+  fixedBox(0, top + 20, 0, hx * 2 + 1, 40, hz * 2 + 1, M.tower, { shadow: false, noCollide: true });
+  CITYR.r0 = Math.max(hx, hz) + 120; CITYR.lane0 = Math.max(hx, hz) + 28;
+  buildCity();
+}
+// ---------- start of a floor (from the lift or a checkpoint) ----------
+function lvStart() {
+  const F = LV.F; const cp = LV.cpPos && LV.cpFloor === LV.n ? LV.cpPos : null;
+  const L = LV.arriveL; const at = cp ? new THREE.Vector3(cp.x, cp.y + 1.2, cp.z) : new THREE.Vector3(L.X, L.y + 1.2, L.Z);
+  const faceYaw = cp ? cp.yaw : Math.atan2(-L.dir[0], -L.dir[1]);
+  player = createPlayer(at, faceYaw);
+  player.ownsSword = true; player.ownsPistol = true; player.ownsDisc = true; giveArsenal(); player.stims = Math.max(1, LV.stims ?? 1); player.weapon = "sword"; state.phase = 2; setViewModel();
+  updateCount(); setObjective(F.objective); $("objl").textContent = `Floor ${String(LV.n).padStart(2, "0")} · ${F.name}`;
+  for (const c of LV.cps) if (cp && c.n <= LV.cpIdx) { c.hit = true; c.flag.material = M.rackLed; }
+  if (!cp) {
+    L.open = 0; L.want = 0; lvLiftPose(L);
+    LV.ride = { t: 0, arrive: true };
+    later(() => { for (const [i, line] of F.lines.entries()) later(() => (line.startsWith("Tip") ? log(line, "tip") : lvSayLine(line)), i * 2600); }, 1800);
+  } else { L.open = 1; L.want = 1; lvLiftPose(L); LV.ride = null; lvFade(0); log(`Checkpoint ${cp.n} restored.`, "tip"); }
+  localStorage.setItem?.("res.floorMax", String(Math.max(+(localStorage.getItem("res.floorMax") || 1), LV.n)));
+}
+function lvSayLine(line) { const m = line.match(/^(ARBITER|WARDEN|OKAFOR-REYES):\s*(.*)$/); if (m) { log(line); say(m[1] === "OKAFOR-REYES" ? "okafor" : m[1].toLowerCase(), m[2]); } else log(line); }
+// ---------- per-step ----------
+const _lvv = new THREE.Vector3();
+function lvStep(dt) {
+  const tst = state.mode === "test";
+  if ((state.mode !== "floor" && !tst) || !player || player.dead) return;
+  if (!tst && (state.floor || 1) === 1) { lvStepLift(dt); return; }
+  LV.t += dt; const pp = lvP();
+  // spawns: by trigger, or when you come near
+  if (!tst && (LV.spawnT = (LV.spawnT || 0) - dt) <= 0) {
+    LV.spawnT = 0.25;
+    for (const s of LV.spawns) {
+      if (s.done) continue;
+      if (s.trig && !LV.trig.includes(s.trig)) continue;
+      const d = Math.hypot(pp.x - s.x, pp.z - s.z) + Math.abs(pp.y - s.y) * 1.5;
+      if (!s.trig && d > s.wake) continue;
+      s.done = true; s.e = lvSpawnEnemy(s);
+    }
+  }
+  // enemies on a raised slab stay on it
+  for (const e of enemies) if (!e.dead && e.zone) { const t = e.body.translation(); const z = e.zone; const cx = THREE.MathUtils.clamp(t.x, z.x1 + 0.5, z.x2 - 0.5), cz = THREE.MathUtils.clamp(t.z, z.z1 + 0.5, z.z2 - 0.5); if (cx !== t.x || cz !== t.z) e.body.setNextKinematicTranslation({ x: cx, y: t.y, z: cz }); }
+  // shutters, bulkheads
+  for (const S of LV.shutters) {
+    if (S.cycle) { const k = ((LV.t + S.ph) % S.cycle) / S.cycle; const want = k < 0.5 ? 1 : 0; if (want !== S.want) { S.want = want; if (pp.distanceTo(_lvv.set(S.X, pp.y, S.Z)) < 30) { sfx.door(); if (!want) alarm(0.3); } } }
+    if (S.open !== S.want) { S.open += Math.sign(S.want - S.open) * Math.min(Math.abs(S.want - S.open), dt * S.speed / Math.max(1, S.lift / 6)); lvShutterPose(S); if (S.open < 0.02 && S.want === 0) { shake = Math.max(shake, 0.06 * Math.max(0, 1 - pp.distanceTo(_lvv.set(S.X, S.y0, S.Z)) / 20)); } }
+  }
+  // movers: the glass lift and sliding racks
+  for (const m of LV.movers) {
+    if (m.kind === "lift") {
+      if (m.wait > 0) m.wait -= dt; else { m.y += m.dir * 2.4 * dt; if (m.y >= m.y1 || m.y <= m.y0) { m.y = THREE.MathUtils.clamp(m.y, m.y0, m.y1); m.dir *= -1; m.wait = 4; } }
+      m.body.setNextKinematicTranslation({ x: m.X, y: m.y, z: m.Z }); m.g.position.set(m.X, m.y, m.Z);
+      // ride it: if you're standing on it, move with it
+      if (Math.abs(pp.x - m.X) < 2.3 && Math.abs(pp.z - m.Z) < 2.3 && pp.y - m.y > 0.5 && pp.y - m.y < 2.2 && m.wait <= 0) { const v = player.body.linvel(); if (v.y < m.dir * 2.4) player.body.setLinvel({ x: v.x, y: m.dir * 2.4, z: v.z }, true); }
+    } else if (m.kind === "slider") {
+      const k = (Math.sin(LV.t * m.speed + m.ph) + 1) / 2; const x = m.a + (m.b - m.a) * k; m.x = x;
+      m.body.setNextKinematicTranslation({ x, y: 1.3, z: m.z }); m.mesh.position.set(x, 1.3, m.z); if (m.P) m.P.c.set(x, 1.3, m.z);
+    }
+  }
+  // lift pads and fans: an updraft while you're in the column
+  for (const P of LV.pads) {
+    const dx = pp.x - P.x, dz = pp.z - P.z; if (dx * dx + dz * dz < P.r * P.r && pp.y > P.y - 0.5 && pp.y < P.top) {
+      const v = player.body.linvel(); const want = Math.min(16, 3 + (P.top - pp.y) * 2.2);
+      if (v.y < want) player.body.setLinvel({ x: v.x * 0.98, y: v.y + (want - v.y) * Math.min(1, dt * 9), z: v.z * 0.98 }, true);
+      if (!P.on) { P.on = true; sfx.servo?.(); ev("updraft", {}); }
+    } else P.on = false;
+    if (P.blades) P.blades.rotation.y += dt * 9;
+    // bodies get lifted too
+    for (const rd of ragdolls) { const t = rd.torso.translation(); if ((t.x - P.x) ** 2 + (t.z - P.z) ** 2 < P.r * P.r && t.y < P.top && t.y > P.y - 0.5) rd.torso.applyImpulse({ x: 0, y: rd.torso.mass() * 30 * dt, z: 0 }, true); }
+  }
+  if (tst) return;
+  // checkpoints
+  for (const c of LV.cps) if (!c.hit && Math.hypot(pp.x - c.x, pp.z - c.z) < 3.2 && Math.abs(pp.y - 1 - c.y) < 2) {
+    c.hit = true; c.flag.material = M.rackLed; LV.cpIdx = Math.max(LV.cpIdx, c.n); LV.cpFloor = LV.n; LV.cpPos = { x: c.x, y: c.y, z: c.z, n: c.n, yaw };
+    for (const s of LV.spawns) if (s.done && s.e?.dead) LV.killed.add(s.id);
+    LV.stims = player.stims; flash(`Checkpoint ${c.n}`, "var(--cyan)"); sfx.pickup?.();
+  }
+  // memory fragments and plinths
+  for (const f of LV.frags) { f.m.rotation.y += dt * 1.5; f.halo.rotation.x += dt; if (!f.got && f.m.position.distanceTo(_lvv.copy(pp).setY(pp.y + 0.2)) < 1.6) { f.got = true; f.m.visible = f.halo.visible = false; sfx.pickup?.(); flash("Memory fragment", "var(--amber)"); lvSayLine(f.text); } }
+  for (const x of LV.extra) if (x.kind === "plinth") { x.holo.rotation.y += dt * 1.2; if (!x.got && Math.hypot(pp.x - x.x, pp.z - x.z) < 1.6 && Math.abs(pp.y - 1 - x.y) < 1.5) { x.got = true; x.holo.material = M.rackLed; player.stims = Math.min(3, player.stims + 1); flash(`${x.name} cache · stim +1`, "var(--cyan)"); sfx.pickup?.(); } }
+  else if (x.kind === "ticker") x.tex.offset.x += dt * 0.02;
+  // floor beats, then the lifts
+  LV.F.tick?.(LV.t);
+  // a safety net: if nothing is left awake or waiting, the floor is clear even without a final kill
+  if (!LV.cleared && (LV.clrT = (LV.clrT || 0) - dt) <= 0) { LV.clrT = 0.5; if (LV.t > 4 && !state.fin && alive().length === 0 && !lvPending()) lvCleared(); }
+  lvStepLift(dt);
+  if (state.time - (LV.lastFall || -9) > 2 && pp.y < -24 && !LV.shaft) { LV.lastFall = state.time; }
+}
+// lifts: doors, the exit ride
+function lvStepLift(dt) {
+  for (const L of LV.lifts) { if (L.open !== L.want) { L.open += Math.sign(L.want - L.open) * Math.min(Math.abs(L.want - L.open), dt * 1.4); lvLiftPose(L); } }
+  const R = LV.ride; if (!R) return; R.t += dt;
+  if (R.arrive) {
+    if (R.t < 0.1) lvFade(1, `FLOOR ${String(LV.n).padStart(2, "0")}`, LV.F.name, LV.F.sub);
+    if (R.t > 0.6 && !R.faded) { R.faded = true; lvFade(0); }
+    shake = Math.max(shake, R.t < 1.6 ? 0.04 : 0);
+    if (R.t > 1.8 && !R.ding) { R.ding = true; sfx.pickup?.(); tone("sine", 1318, 1318, 0.5, 0.06); tone("sine", 1046, 1046, 0.7, 0.05, 0.18); LV.arriveL.want = 1; }
+    if (R.t > 3) LV.ride = null;
+  } else if (R.exit) {
+    if (R.t < 1.2) { LV.exitL.want = 0; }
+    if (R.t > 1.2 && !R.rumble) { R.rumble = true; sfx.servo?.(); noise(2.5, "lowpass", 160, 0.3); }
+    shake = Math.max(shake, R.t > 1.2 ? 0.05 : 0);
+    if (R.t > 2.2 && !R.faded) { R.faded = true; lvFade(1, `FLOOR ${String(R.to).padStart(2, "0")}`, FLOORS[R.to]?.name || "", FLOORS[R.to]?.sub || ""); }
+    if (R.t > 3.4) { LV.ride = null; lvArrive(R.to); }
+  }
+}
+// ---------- cleared, exit, next floor ----------
+function lvCleared() {
+  if (lvPending() || LV.cleared) return;
+  if (LV.F && !LV.flag?.boss && LV.spawns.some((s) => s.boss && !s.done)) return;
+  LV.cleared = true; if (LV.exitL) { LV.exitL.want = 1; lvLiftPose(LV.exitL); }
+  sfx.pickup?.(); flash("Floor clear", "var(--cyan)");
+  lvSay("arbiter", LV.n === 5 ? "The core is yours. Take the lift." : "Floor clear. The lift is open.");
+  setObjective(LV.n === 5 ? "Take the core lift" : "Take the lift to the next floor");
+}
+function lvFloor1Cleared() {
+  LV.cleared = true; LV.n = 1; if (LV.exitL) { LV.exitL.want = 1; lvLiftPose(LV.exitL); }
+  log("ARBITER: Adequate. The freight lift in the hall core is open. Floor 02 is the security floor.");
+  setObjective("Take the freight lift in the hall core"); sfx.pickup?.(); flash("Floor clear", "var(--cyan)");
+}
+function lvCheckExit() {
+  if (!LV.cleared || LV.ride || !LV.exitL || !player || player.dead) return;
+  if (LV.exitL.inside(lvP())) {
+    const to = (LV.n || 1) + 1; LV.stims = player.stims;
+    if (to > 5) { LV.ride = null; lvActEnd(); return; }
+    LV.ride = { t: 0, exit: true, to }; flash("", "var(--cyan)");
+  }
+}
+function lvArrive(n) {
+  state.floor = n; LV.cpPos = null; LV.cpIdx = 0; LV.killed = new Set();
+  restart(false);
+}
+function lvActEnd() {
+  state.over = true; lvFade(1, "ACT 1", "Resolved", "The building is ours.");
+  setTimeout(() => {
+    document.exitPointerLock?.(); lvFade(0);
+    const t = (state.time - state.runStart).toFixed(1);
+    showScreen("Act 1 complete", "RESOLVED", "WARDEN is offline. The core lift leads up into Act 2.", "ARBITER: Good. The building is ours. — OKAFOR-REYES: Ours? Ask it what it means by ours.", "Play Floor 01 again", true, true);
+    state.floor = 1;
+  }, 2600);
+}
+// ---------- the fade and the floor card ----------
+function lvFade(on, big, name, sub) {
+  let el = $("lvfade");
+  if (!el) {
+    el = document.createElement("div"); el.id = "lvfade";
+    el.innerHTML = `<div class="c"><div class="b"></div><div class="n"></div><div class="s"></div></div>`;
+    document.body.appendChild(el);
+    const st = document.createElement("style");
+    st.textContent = `#lvfade{position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .55s ease;z-index:40;display:flex;align-items:center;justify-content:center}
+#lvfade.on{opacity:1}#lvfade .c{text-align:center;font-family:'Chakra Petch',sans-serif;color:#e6f8ff;transform:translateY(8px);transition:transform .8s ease,opacity .8s ease;opacity:0}
+#lvfade.on .c{transform:none;opacity:1}#lvfade .b{font-size:13px;letter-spacing:.5em;color:#ff8a3d}#lvfade .n{font-size:clamp(34px,6vw,64px);font-weight:700;letter-spacing:.06em;margin:.2em 0}
+#lvfade .s{font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:.2em;color:#8a9ab0;text-transform:uppercase}`;
+    document.head.appendChild(st);
+  }
+  if (big !== undefined) { el.querySelector(".b").textContent = big; el.querySelector(".n").textContent = name; el.querySelector(".s").textContent = sub; }
+  el.classList.toggle("on", !!on);
+}
+// ---------- per-frame: the light pool and the shadow camera ----------
+const LVL = { pool: null, home: null };
+function lvLightsInit() {
+  if (LVL.pool) return;
+  LVL.pool = scene.children.filter((o) => o.isPointLight && Math.abs(o.position.y - 7.2) < 0.01);
+  LVL.home = LVL.pool.map((l) => ({ p: l.position.clone(), i: l.intensity, c: l.color.clone(), d: l.distance }));
+}
+function lvFrame(dt) {
+  lvLightsInit();
+  const floorN = state.mode === "floor" ? state.floor || 1 : 0;
+  lvCheckExit();
+  if (floorN < 2 || !player) { if (LVL.moved) { LVL.pool.forEach((l, i) => { l.position.copy(LVL.home[i].p); l.color.copy(LVL.home[i].c); l.distance = LVL.home[i].d; l.userData.f = null; }); LVL.moved = false; } return; }
+  LVL.moved = true;
+  const pp = camOrigin();
+  // the six real lights go to the six fixtures nearest you (dark ones only flicker red); they fade in where they land
+  if ((LVL.t = (LVL.t || 0) - dt) <= 0) {
+    LVL.t = 0.3;
+    const near = LV.fixtures.map((f) => ({ f, d: (f.x - pp.x) ** 2 + ((f.y - pp.y) * 1.6) ** 2 + (f.z - pp.z) ** 2 })).sort((a, b) => a.d - b.d).slice(0, LVL.pool.length).map((o) => o.f);
+    // lights already on a fixture that is still near stay put; only the freed ones move
+    const keep = new Set(); for (const l of LVL.pool) if (l.userData.f && near.includes(l.userData.f)) keep.add(l.userData.f); else l.userData.f = null;
+    const todo = near.filter((f) => !keep.has(f));
+    for (const l of LVL.pool) { if (l.userData.f) continue; const f = todo.shift(); if (!f) break; l.userData.f = f; l.userData.k = 0; l.position.set(f.x, f.y, f.z); l.distance = 26; l.color.setHex(f.kind === "dark" ? 0xff2236 : 0xe4ecff); }
+  }
+  for (const l of LVL.pool) {
+    const f = l.userData.f; if (!f) continue; l.userData.k = Math.min(1, (l.userData.k || 0) + dt * 2.5);
+    let base = f.kind === "dark" ? 10 + Math.sin(state.time * 2 + f.x) * 6 : 62; if (f.kind === "flick" && Math.random() < 0.04) base *= 0.2;
+    if (LV.alarmT > 0) { base = 40 * (0.5 + 0.5 * Math.sin(state.time * 9)); l.color.setHex(0xff2236); } else if (f.kind !== "dark") l.color.setHex(0xe4ecff);
+    l.intensity = base * l.userData.k;
+  }
+  if (LV.alarmT > 0) LV.alarmT -= dt;
+  // the moonlight's shadow box follows you, snapped to its texels so the shadows don't crawl
+  const S = 46, snap = (2 * S) / sun.shadow.mapSize.x; const cx = Math.round(pp.x / snap) * snap, cz = Math.round(pp.z / snap) * snap;
+  sun.target.position.set(cx, pp.y - 4, cz); sun.position.set(cx - 80, pp.y + 40, cz - 55); sun.target.updateMatrixWorld();
+  Object.assign(sun.shadow.camera, { left: -S, right: S, top: S, bottom: -S, near: 1, far: 220 }); sun.shadow.camera.updateProjectionMatrix();
+}
+// ---------- enemy spawning for the new kinds ----------
+function lvSpawnEnemy(s) {
+  spawnEnemy(s.type, s.x, s.y, s.z); const e = enemies[enemies.length - 1];
+  e.lvId = s.id; if (s.alert) { e.alert = true; e.cool = 0.6 + Math.random(); }
+  if (s.y > 0.5 && !e.T.flying && !e.T.fixed) e.zone = lvZoneAt(s.x, s.z, s.y);
+  if (LV.darks.length && e.type === "gunman" && lvDark(s.x, s.z)) addFlashlight(e);
+  updateCount(); return e;
+}
+
+// ================= testing ground: the new floor pieces, in a yard south of the dummy rows =================
+function lvReset() {
+  Object.assign(LV, { F: null, n: 0, ox: 0, oz: 0, spawns: [], cps: [], lifts: [], shutters: [], pads: [], movers: [], fixtures: [], darks: [], frags: [], walk: [], trig: [], anchors: [], extra: [], flag: {}, t: 0, nextId: 0, cleared: false, shaft: null, alarmT: 0, exitL: null, arriveL: null, ride: null });
+}
+function lvTestYard() {
+  // a strip of the new floor finish so the tiles, panels and desks can be seen side by side
+  lvSlab(-32, 40, 32, 58, 0.02, LV_FLOORMAT.stone(), 0.04, { walk: false });
+  lvSlab(-32, 58, 0, 60, 0.03, LV_FLOORMAT.carpet(), 0.04, { walk: false });
+  lvWall(-32, 59.4, 32, 59.4, 0, 4.5, LV_FLOORMAT.panel());
+  for (const [x, rot] of [[-26, 0], [-22, 0], [-26, Math.PI], [-22, Math.PI]]) lvDesk(x, rot ? 52.6 : 55.6, 0, rot, { chair: true, lamp: x === -22 });
+  // a riot shield dummy, a drone, a turret on a gantry and a night-shift worker
+  fixedBox(-4, 4.85, 48, 3.2, 0.25, 1.2, M.mullion); for (const x of [-5.5, -2.5]) fixedBox(x, 2.4, 48, 0.2, 4.8, 0.2, M.mullion);
+  // a bulkhead on a cycle, a fan, a lift pad and a sliding rack
+  lvShutter(10, 50, 16, 50, 0, 4, "tg", false, { cycle: 7, ph: 0 });
+  lvBox(13, 4.3, 50, 6.4, 0.6, 0.6, LV_FLOORMAT.panelDark());
+  lvPad(22, 46, 0, 12, 1.4, "fan");
+  lvPad(28, 46, 0, 8.6, 1.4, "pad"); lvSlab(26, 50, 31, 55, 8.6, LV_FLOORMAT.steel(), 0.3); lvEdgeRails(26, 50, 31, 55, 8.6, "nse");
+  lvSlider(-14, 54, 1.2, 2.4, -18, -8, 0.7, 0);
+  lvFlushPanels();
+}
+const TEST_NEW = [["shield", -20, 44], ["drone", -12, 44, 1.6], ["turret", -4, 48, 3.0], ["worker", 4, 44]];
+
+// ================= new hostiles: riot shield, drone, WARDEN turret, and the night-shift workers =================
+M.worker = toon(0xd6dbe4); M.workerTie = toon(0x8a2a3a);
+M.shieldBody = new THREE.MeshStandardMaterial({ color: 0x1c2230, roughness: 0.35, metalness: 0.4, envMap: envTex, envMapIntensity: 1.1, transparent: true, opacity: 0.88 });
+M.shieldRim = new THREE.MeshBasicMaterial({ color: 0xffb547 });
+M.drone = metal(0x2a2d38, 0.35); M.droneLight = new THREE.MeshBasicMaterial({ color: 0xff3d5a });
+M.laser = new THREE.MeshBasicMaterial({ color: 0xff2a3a, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
+const BLOB_TEX = (() => { const t = lvCanvas(64, (g, s) => { const gr = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2); gr.addColorStop(0, "rgba(0,0,0,0.55)"); gr.addColorStop(0.6, "rgba(0,0,0,0.25)"); gr.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = gr; g.fillRect(0, 0, s, s); }); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; return t; })();
+M.blob = new THREE.MeshBasicMaterial({ map: BLOB_TEX, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+const BLOB_GEO = (() => { const g = new THREE.PlaneGeometry(1.3, 1.3); g.rotateX(-Math.PI / 2); g.userData.cached = true; return g; })();
+Object.assign(TYPES, {
+  shield: { hp: 4, body: "guard", speed: 4.2, melee: true, dmg: 22, label: "Riot shield", shield: true },
+  drone: { hp: 1.5, body: "bot", speed: 6.5, ranged: true, dmg: 8, cooldown: [1.3, 2.1], label: "Drone", flying: true, vsee: 34, eye: 0, noFin: true, mesh: buildDroneMesh, die: droneDie },
+  turret: { hp: 4, body: "bot", speed: 0, ranged: true, dmg: 10, cooldown: [1.8, 2.6], burst: 3, label: "WARDEN turret", fixed: true, vsee: 40, eye: -0.05, noFin: true, mesh: buildTurretMesh, die: turretDie },
+  worker: { hp: 1, body: "worker", speed: 5.2, label: "Night-shift worker", civ: true, noFin: true },
+});
+// stand-ins for the joints a humanoid has, so code that poses enemies works on anything
+function stubJoints(g, meshes) { for (const k of ["torso", "head", "armL", "armR", "legL", "legR"]) if (!meshes[k]) { const o = new THREE.Group(); g.add(o); meshes[k] = o; } }
+function buildDroneMesh() {
+  const g = new THREE.Group(); const meshes = {};
+  const core = new THREE.Group(); core.position.y = 0.95; g.add(core); meshes.torso = core;
+  const shell = ink(new THREE.Mesh(rbox(0.7, 0.24, 0.7, 0.45, 0.1), M.drone)); shell.castShadow = true; core.add(shell);
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), M.roboDark); dome.position.y = 0.1; core.add(dome);
+  const eye = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), M.visor); eye.position.set(0, 0, 0.36); core.add(eye); meshes.visor = eye;
+  const rotors = [];
+  for (const [x, z] of [[-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]]) {
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.05, 0.08), M.roboDark); arm.position.set(x / 2, 0.02, z / 2); arm.rotation.y = Math.atan2(-z, x); core.add(arm);
+    const duct = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.035, 6, 18), M.drone); duct.rotation.x = Math.PI / 2; duct.position.set(x, 0.03, z); core.add(duct);
+    const r = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.01, 0.05), M.mullion); r.position.set(x, 0.04, z); core.add(r); rotors.push(r);
+    const lt = new THREE.Mesh(new THREE.SphereGeometry(0.03, 6, 4), M.droneLight); lt.position.set(x * 1.35, 0, z * 1.35); core.add(lt);
+  }
+  const gun = ink(new THREE.Mesh(rbox(0.07, 0.07, 0.4, 0.4), M.gun)); gun.position.set(0, -0.16, 0.12); core.add(gun);
+  const glow = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), M.red); glow.visible = false; glow.position.set(0, 0, 0.22); gun.add(glow); meshes.glow = glow;
+  meshes.head = core; meshes.rotors = rotors; stubJoints(g, meshes);
+  return { group: g, meshes };
+}
+function buildTurretMesh() {
+  const g = new THREE.Group(); const meshes = {};
+  const mount = new THREE.Group(); mount.position.y = 0.95; g.add(mount); meshes.torso = mount;
+  const plate = ink(new THREE.Mesh(rbox(0.9, 0.12, 0.9, 0.3, 0.05), M.roboDark)); plate.position.y = 0.62; mount.add(plate);
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.5, 8), M.mullion); stem.position.y = 0.35; mount.add(stem);
+  const head = new THREE.Group(); mount.add(head); meshes.head = head;
+  const housing = ink(new THREE.Mesh(rbox(0.5, 0.34, 0.6, 0.4, 0.1), M.drone)); head.add(housing);
+  const lens = new THREE.Mesh(new THREE.CircleGeometry(0.1, 12), M.visor); lens.position.set(0, 0.05, 0.305); head.add(lens); meshes.visor = lens;
+  const barrel = ink(new THREE.Mesh(rbox(0.09, 0.09, 0.6, 0.4), M.gun)); barrel.position.set(0, -0.08, 0.42); head.add(barrel);
+  const glow = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), M.red); glow.visible = false; glow.position.set(0, 0, 0.32); barrel.add(glow); meshes.glow = glow;
+  const laser = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.012, 1), M.laser); laser.position.set(0, -0.08, 0.72); head.add(laser); meshes.laser = laser;
+  stubJoints(g, meshes);
+  return { group: g, meshes };
+}
+// the riot shield on the left forearm: ceramic, a firing port, a hazard rim
+function shieldSetup(e) {
+  const s = new THREE.Group();
+  const slab = new THREE.Mesh(rbox(0.75, 1.35, 0.06, 0.3, 0.05), M.shieldBody); slab.castShadow = true; s.add(slab);
+  const rim = new THREE.Mesh(new THREE.BoxGeometry(0.77, 0.04, 0.07), M.shieldRim); rim.position.y = 0.66; s.add(rim);
+  const rim2 = rim.clone(); rim2.position.y = -0.66; s.add(rim2);
+  const port = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.06, 0.07), M.cyan); port.position.y = 0.32; s.add(port);
+  s.position.set(0.18, -0.35, 0.3); e.meshes.armL.add(s); e.meshes.shield = s; e.guardT = 0;
+}
+// does the shield stop this hit? Front 140 degrees only; kicks and blasts knock the guard open instead
+function shieldBlocks(e, point, dir, kind) {
+  if (!e.T.shield || e.guardT > 0 || e.stun > 0) return false;
+  if (!dir) return false;
+  const yawE = e.group.rotation.y; const fx = Math.sin(yawE), fz = Math.cos(yawE);
+  const inFront = -(dir.x * fx + dir.z * fz) / Math.max(0.001, Math.hypot(dir.x, dir.z)) > Math.cos(1.22);
+  if (!inFront) return false;
+  if (kind === "rail" || kind === "lance" || kind === "lightning") return false;
+  if (kind === "kick" || kind === "breacher" || kind === "explosion" || kind === "gauntlet" || kind === "breach") {
+    e.guardT = 2.4; stun(e, 1.4, 7); sfx.block(); emitWorldSparks(point || eyeOf(e), dir, 26, 2, 7); flash("Guard broken", "var(--amber)"); ev("guardBreak", { e });
+    return kind === "kick";
+  }
+  sfx.block(); emitWorldSparks(point || eyeOf(e), dir.clone().negate(), 10, 2, 5); if (kind === "shot") flash("Shield", "var(--dim)");
+  e.knock.add(new THREE.Vector3(dir.x, 0, dir.z).normalize().multiplyScalar(1.5));
+  return true;
+}
+function droneDie(e, at, dir, force) {
+  const p = e.group.position.clone().add(new THREE.Vector3(0, 0.95, 0)); const v = new THREE.Vector3(dir?.x || 0, 1, dir?.z || 0).multiplyScalar(Math.min(14, (force || 10) * 0.15));
+  boomSprite(p.clone(), "flash", 0.25, 2.5); boomSprite(p.clone(), "fire", 0.6, 2.2, new THREE.Vector3(0, 1, 0)); boomSprite(p.clone(), "smoke", 1.6, 3, new THREE.Vector3(0, 1.5, 0));
+  emitWorldSparks(p, new THREE.Vector3(0, 1, 0), 40, 0, 9); sfx.wireCut?.(); shake = Math.max(shake, 0.12);
+  for (let i = 0; i < 5; i++) chunk(p.clone().add(new THREE.Vector3((Math.random() - 0.5) * 0.5, 0, (Math.random() - 0.5) * 0.5)), [0.15 + Math.random() * 0.25, 0.06 + Math.random() * 0.1, 0.15 + Math.random() * 0.25], i < 2 ? M.drone : M.roboDark, v.clone().add(new THREE.Vector3((Math.random() - 0.5) * 6, Math.random() * 3, (Math.random() - 0.5) * 6)), 14, 1);
+  ev("droneKill", { e });
+}
+function turretDie(e, at, dir, force) {
+  const p = e.group.position.clone().add(new THREE.Vector3(0, 1.3, 0));
+  boomSprite(p.clone(), "flash", 0.3, 3); boomSprite(p.clone(), "fire", 0.8, 2.4, new THREE.Vector3(0, 0.5, 0)); boomSprite(p.clone(), "smoke", 2, 3.5, new THREE.Vector3(0, 1, 0));
+  emitWorldSparks(p, new THREE.Vector3(0, -1, 0), 60, 0, 8); sfx.crumble?.(); shake = Math.max(shake, 0.2);
+  chunk(p.clone(), [0.5, 0.34, 0.6], M.drone, new THREE.Vector3((dir?.x || 0) * 4, -1, (dir?.z || 0) * 4), 6, 2);
+  chunk(p.clone().add(new THREE.Vector3(0, 0, 0.3)), [0.09, 0.09, 0.6], M.gun, new THREE.Vector3((Math.random() - 0.5) * 5, 2, (Math.random() - 0.5) * 5), 12, 2);
+  ev("turretKill", { e });
+}
+// a flashlight cone on a gunman in the dark: an unlit additive cone, so the light count never changes
+const FLASH_GEO = (() => { const g = new THREE.ConeGeometry(3.2, 13, 18, 1, true); g.translate(0, -6.5, 0); g.rotateX(-Math.PI / 2); g.userData.cached = true; return g; })();
+M.flashCone = new THREE.MeshBasicMaterial({ color: 0xfff4d8, transparent: true, opacity: 0.075, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+function addFlashlight(e) {
+  const c = new THREE.Mesh(FLASH_GEO, M.flashCone); c.position.set(0.15, 1.35, 0.25); c.rotation.x = 0.12; c.raycast = () => {}; e.group.add(c);
+  const lens = new THREE.Mesh(new THREE.CircleGeometry(0.06, 10), M.light); lens.position.set(0.15, 1.35, 0.26); e.group.add(lens); e.flashlight = c;
+}
+// workers: flee from you when they see you, sometimes freeze and cower
+function civMove(e, toP, dist, desired, dt) {
+  if (!e.alert) { e.group.rotation.x = 0; return null; }
+  if ((e.cowerT = (e.cowerT ?? (Math.random() < 0.35 ? 1.5 + Math.random() * 3 : 0)) - dt) > 0) { e.meshes.legL.rotation.x = e.meshes.legR.rotation.x = -1.1; e.meshes.armL.rotation.x = e.meshes.armR.rotation.x = -2.6; return toP.clone(); }
+  const away = toP.clone().normalize().multiplyScalar(-1);
+  if (dist < 22) desired.copy(away).multiplyScalar(e.T.speed).add(new THREE.Vector3(-away.z, 0, away.x).multiplyScalar(Math.sin(state.time * 1.3 + e.walk) * 2));
+  if (Math.random() < dt * 0.15) sfx.voiceIn?.();
+  return desired.clone();
+}
+// per step, after the shared enemy update: shields, drone flight, turret aim, worker bookkeeping, blob shadows
+function enStep(dt) {
+  if (dt <= 0 || !player) return;
+  const pp = playerPos(); const head = pp.clone().add(new THREE.Vector3(0, P.eye, 0));
+  for (const e of enemies) {
+    if (e.dead) { if (e.T.civ && !e.logged) { e.logged = true; LV.workersHurt = (LV.workersHurt || 0) + 1; } continue; }
+    if (e.T.shield) {
+      if (e.guardT > 0) e.guardT -= dt;
+      const up = e.guardT > 0 ? 0 : 1; e.shUp = (e.shUp ?? 1) + (up - (e.shUp ?? 1)) * Math.min(1, dt * 6);
+      e.meshes.armL.rotation.x = -1.45 * e.shUp - 0.1; e.meshes.armL.rotation.z = 0.35 * e.shUp;
+      if (e.meshes.shield) { e.meshes.shield.rotation.x = 1.45 * e.shUp - 0.3 * (1 - e.shUp); }
+    }
+    if (e.T.flying) {
+      const t = e.body.translation(); e.hover ??= e.floorY + 0.95; e.ph ??= Math.random() * 9;
+      const want = e.alert ? THREE.MathUtils.clamp(pp.y + 3.5 + Math.sin(state.time * 0.7 + e.ph) * 2, 1.6, e.ceil || 60) : e.hover + Math.sin(state.time * 0.9 + e.ph) * 0.4;
+      e.floorY += (want - 0.95 - e.floorY) * Math.min(1, dt * 1.6);
+      for (const r of e.meshes.rotors) r.rotation.y += dt * 40;
+      e.meshes.torso.rotation.z = THREE.MathUtils.clamp(-e.vel.x * 0.04, -0.3, 0.3); e.meshes.torso.rotation.x = THREE.MathUtils.clamp(e.vel.z * 0.04, -0.3, 0.3);
+      if (e.stun > 0) e.floorY -= dt * 2.5; // stunned drones sag
+    }
+    if (e.T.fixed) {
+      const H = e.meshes.head; const o = eyeOf(e); const d = head.clone().sub(o);
+      const aimP = Math.atan2(-d.y, Math.hypot(d.x, d.z)); H.rotation.x += (THREE.MathUtils.clamp(aimP, -1.2, 0.9) - H.rotation.x) * Math.min(1, dt * 5);
+      const L = e.meshes.laser; const sees = e.alert && o.distanceTo(head) < 40; L.visible = sees && !e.dummy;
+      if (L.visible) { const len = Math.min(40, o.distanceTo(head)); L.scale.z = len; L.position.z = 0.72 + len / 2 - 0.5; L.material.opacity = e.tele > 0 ? 0.95 : 0.35; }
+      if (!e.alert && !e.dummy) { e.group.rotation.y += dt * 0.6; } // sweep while idle
+    }
+    if (!e.blob && !e.T.flying && !e.T.fixed) { const b = new THREE.Mesh(BLOB_GEO, M.blob); b.position.y = 0.025; b.renderOrder = 1; e.group.add(b); e.blob = b; }
+  }
+}
+// enemy tick hooks the shared update can call for a kind
+function enemySetup(e) { if (e.T.shield) shieldSetup(e); if (e.T.flying) { e.floorY = Math.max(e.floorY, 1.2); e.ceil = state.mode === "floor" ? 60 : 30; } if (e.T.civ) { e.alert = false; } }
+
 // ---------- loop ----------
 let acc = 0, last = performance.now();
 function simStep() {
@@ -8468,7 +9646,7 @@ function simStep() {
   stepPlayer(DT);
   pressed.clear();
   if (player.dead) return;
-  updateEnemies(DT * ts);
+  updateEnemies(DT * ts); enStep(DT * ts);
   updateBolts(DT * ts);
   stepWorldMoves(DT * ts); arsWorldStep(DT * ts);
   for (const rd of ragdolls) {
@@ -8479,6 +9657,7 @@ function simStep() {
     if (tv.length() > 5) for (const b of barrelsNear(tp.clone().setY(0.55), 0.6)) hitBarrel(b, 0.08);
   }
   updateBooms(DT * Math.max(ts, 0.3));
+  lvStep(DT * ts);
   if (state.phase === 1.5 && playerPos().distanceTo(new THREE.Vector3(0, 1, -26)) < 1.8) pickupSword();
   if (door.opening && door.mesh.position.y > -2.1) door.mesh.position.y -= DT * 2.5;
   // the player keeps full speed while the world is slowed
@@ -8541,7 +9720,7 @@ function frame(now) {
   }
   sky.position.copy(camera.position);
   for (const a of alarmLights) a.l.intensity = a.base * (0.45 + 0.55 * Math.pow(0.5 + 0.5 * Math.sin(now * 0.0021 + a.ph), 2));
-  updateFlicker(dt); updateCity(now / 1000, dt);
+  updateFlicker(dt); updateCity(now / 1000, dt); lvFrame(dt);
   renderer.setRenderTarget(rt);
   renderer.clear();
   renderer.render(scene, camera);
@@ -8575,7 +9754,7 @@ setVoice(VOICE.on); renderBook();
 document.querySelector("#mnav button").focus({ preventScroll: true });
 state.pendingRestart = true; state.pendingFresh = true;
 // test hooks
-window.__res = { get finRig() { return finRig; }, applyFinPose, pose2, P2, FIN_POSES, rigIK, rigHandAim, rigPalm, FIN2, get U7M() { return globalThis.U7M_; },
+window.__res = { scene, renderer, LV, FLOORS, damageEnemy, killEnemy, buildFloor, lvCleared, get CITYR() { return CITYR; }, get finRig() { return finRig; }, applyFinPose, pose2, P2, FIN_POSES, rigIK, rigHandAim, rigPalm, FIN2, get U7M() { return globalThis.U7M_; },
   view(pos, at, fov = 40) { const cam = new THREE.PerspectiveCamera(fov, innerWidth / innerHeight, 0.05, 400); cam.position.set(...pos); cam.lookAt(new THREE.Vector3(...at)); scene.updateMatrixWorld(true); renderer.setRenderTarget(null); renderer.render(scene, cam); return renderer.domElement.toDataURL("image/png"); },
   FX2, FPROPS, DOORWAYS, ARS, WDEF, arsCancel, solveArmIK, armL, armR, cur, rig, get vmCam() { return vmCamera; }, SET, openSettings, applySet, bootFloor,
   get player() { return player; }, get enemies() { return enemies; }, get panes() { return panes; }, get bolts() { return bolts; }, state, keys, mouse, pressed,
