@@ -72,16 +72,18 @@ body { background: var(--void); color: var(--ink); font-family: var(--mono); ove
 #impact { position: fixed; inset: 0; pointer-events: none; background: #fff; mix-blend-mode: difference; opacity: 0; }
 #tint { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, transparent 45%, rgba(79, 240, 255, 0.18)); opacity: 0; transition: opacity 0.2s; }
 #screen { position: fixed; inset: 0; display: grid; place-items: center; overflow-y: auto; background: radial-gradient(ellipse at 30% 20%, rgba(255,181,71,0.08), transparent 60%), rgba(4, 5, 8, 0.88); padding-block: 24px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); cursor: pointer; }
-.card { max-width: 680px; display: grid; gap: 16px; }
+.card { max-width: 860px; display: grid; gap: 16px; }
 .eyebrow { color: var(--amber); font-size: 12px; letter-spacing: 0.18em; text-transform: uppercase; }
 h1 { font-family: var(--display); font-weight: 700; font-size: clamp(44px, 10vw, 92px); line-height: 0.9; letter-spacing: 0.01em; margin: 0; text-wrap: balance; }
 .card p { margin: 0; color: var(--dim); line-height: 1.6; max-width: 64ch; }
 .card p.directive { color: var(--ink); border-left: 2px solid var(--amber); padding-left: 12px; font-size: 15px; }
-.keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 6px 18px; font-size: 12px; color: var(--dim); }
+.keys { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 12px 20px; font-size: 12px; color: var(--dim); }
+.keys section { display: grid; gap: 7px; align-content: start; }
+.keys h4 { margin: 0 0 2px; font: 600 10px var(--mono); letter-spacing: 0.24em; color: var(--amber); text-transform: uppercase; }
+.keys span { line-height: 1.45; }
 .keys kbd { font-family: var(--mono); color: var(--ink); border: 1px solid rgba(217,226,234,0.3); padding: 1px 6px; margin-right: 6px; }
 .go { font-family: var(--display); font-size: 18px; color: var(--void); background: var(--amber); padding: 10px 18px; justify-self: start; letter-spacing: 0.08em; text-transform: uppercase; border: 0; cursor: pointer; }
 .go:focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; }
-@media (max-width: 1000px) { #objective { top: calc(76px + env(safe-area-inset-top, 0px)); left: auto; right: max(16px, env(safe-area-inset-right, 0px)); transform: none; text-align: right; max-width: 45vw; } }
 @media (prefers-reduced-motion: reduce) { #log div { animation: none; } }
 
 /* crosshair: orange when a punch will land, an X when it does */
@@ -105,6 +107,8 @@ body.fin #bars::before, body.fin #bars::after { height: 11vh; }
 .m-top, .m-foot { display: flex; gap: 28px; padding: 14px max(20px, 5vw); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim); }
 .m-top { border-bottom: 1px solid rgba(217,226,234,0.12); padding-top: calc(14px + env(safe-area-inset-top, 0px)); }
 .m-top span:last-child, .m-foot span:last-child { margin-left: auto; }
+.m-foot .m-tog { all: unset; cursor: pointer; margin-left: auto; color: var(--dim); letter-spacing: 0.16em; } .m-foot .m-tog:hover, .m-foot .m-tog:focus-visible { color: var(--amber); }
+.m-foot .m-tog + span { margin-left: 28px; }
 .m-top b { color: var(--blood); font-weight: 600; }
 .m-foot { border-top: 1px solid rgba(217,226,234,0.12); padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
 .m-main { align-self: center; padding: 24px max(20px, 7vw); display: grid; gap: 18px; max-width: 760px; }
@@ -179,6 +183,179 @@ body.fin #bars::before, body.fin #bars::after { height: 11vh; }
 #optics span + span { left: auto; top: auto; right: 34px; bottom: 4px; }
 #bootskip { position: absolute; right: max(20px, 5vw); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); font-size: 11px; color: var(--dim); letter-spacing: 0.14em; text-transform: uppercase; }
 @media (max-width: 700px) { .m-top span:nth-child(2) { display: none; } .m-nav .d { display: none; } }
+
+/* ---------- HUD layout: objective top left, threats top right, vitals bottom left, gear bottom right, voice bottom centre ---------- */
+#objective { top: calc(18px + env(safe-area-inset-top, 0px)); left: max(18px, env(safe-area-inset-left, 0px)); transform: none; max-width: min(360px, calc(100vw - 150px)); display: grid; gap: 3px; text-align: left; color: var(--dim); text-transform: uppercase; font-size: 10px; letter-spacing: 0.2em; }
+#objective .lbl { display: flex; align-items: center; gap: 8px; color: var(--amber); }
+#objective .lbl::before { content: ""; width: 14px; height: 1px; background: currentColor; }
+#objective b { display: block; color: var(--ink); font-family: var(--display); font-size: 18px; letter-spacing: 0.03em; font-weight: 500; text-transform: none; line-height: 1.2; }
+#steps { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; text-transform: none; letter-spacing: 0.01em; font-size: 12.5px; line-height: 1.35; }
+#steps:empty { display: none; }
+#steps li { display: grid; grid-template-columns: 11px 1fr auto; gap: 9px; align-items: baseline; color: rgba(125,138,150,0.75); }
+#steps li::before { content: ""; width: 7px; height: 7px; border: 1.5px solid currentColor; transform: translateY(-1px); }
+#steps li.now { color: var(--ink); }
+#steps li.now::before { border-color: var(--amber); background: rgba(255,181,71,0.25); box-shadow: 0 0 8px rgba(255,181,71,0.6); }
+#steps li.done { color: rgba(125,138,150,0.55); }
+#steps li.done span { text-decoration: line-through; text-decoration-color: rgba(125,138,150,0.45); }
+#steps li.done::before { background: var(--cyan); border-color: var(--cyan); }
+#steps li em { font-style: normal; font-variant-numeric: tabular-nums; color: var(--amber); font-weight: 600; }
+#steps li.m { margin-top: 3px; padding-top: 7px; border-top: 1px solid rgba(217,226,234,0.1); font-size: 11px; color: rgba(125,138,150,0.85); }
+#steps li.m::before { transform: translateY(-1px) rotate(45deg) scale(0.9); }
+#steps li.m.ok { color: var(--amber); } #steps li.m.ok::before { background: var(--amber); border-color: var(--amber); }
+#steps li.m.no { color: rgba(255,77,94,0.55); } #steps li.m.no span { text-decoration: line-through; }
+#legend { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 5px 12px; font-size: 10.5px; letter-spacing: 0.04em; text-transform: none; color: var(--dim); }
+#legend kbd { font-family: var(--mono); color: var(--ink); border: 1px solid rgba(217,226,234,0.3); padding: 0 4px; margin-right: 5px; }
+#targets { top: calc(18px + env(safe-area-inset-top, 0px)); right: max(18px, env(safe-area-inset-right, 0px)); font-size: 10px; letter-spacing: 0.2em; }
+#targets b { font-size: 28px; letter-spacing: 0; line-height: 1.05; }
+#vitals { bottom: calc(18px + env(safe-area-inset-bottom, 0px)); left: max(18px, env(safe-area-inset-left, 0px)); width: 220px; display: grid; gap: 6px; }
+#vitals .vrow { display: flex; justify-content: space-between; align-items: baseline; text-transform: uppercase; color: var(--dim); font-size: 10px; letter-spacing: 0.2em; }
+#vitals .vrow b { font-family: var(--display); font-size: 24px; color: var(--ink); letter-spacing: 0; font-variant-numeric: tabular-nums; font-weight: 500; line-height: 1; }
+#vitals .bar { height: 5px; }
+#vitals .vrow.dash b { font-family: var(--mono); font-size: 12px; letter-spacing: 0.3em; color: var(--cyan); }
+#hpbar { transition: width 0.2s; }
+#gear { bottom: calc(18px + env(safe-area-inset-bottom, 0px)); right: max(18px, env(safe-area-inset-right, 0px)); display: grid; justify-items: end; gap: 8px; text-align: right; }
+#wpn { display: flex; align-items: baseline; gap: 12px; }
+#wpnName { font-family: var(--display); font-size: 19px; color: var(--ink); text-transform: uppercase; letter-spacing: 0.08em; }
+#ammov { font-family: var(--display); font-size: 19px; font-variant-numeric: tabular-nums; color: var(--amber); font-weight: 500; }
+.chips { display: flex; gap: 6px; justify-content: flex-end; }
+.chip { display: grid; gap: 3px; padding: 6px 9px 7px; background: var(--panel); border-top: 1.5px solid rgba(217,226,234,0.2); min-width: 76px; text-align: left; }
+.chip i { font-style: normal; font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--dim); }
+.chip b { font-size: 11.5px; font-weight: 600; color: var(--ink); white-space: nowrap; font-variant-numeric: tabular-nums; }
+#grapchip { border-color: var(--cyan); min-width: 104px; }
+#grapchip .bar { height: 2px; display: block; }
+#discrow { border-color: rgba(79,240,255,0.45); }
+#stimrow { border-color: var(--blood); }
+#speed { position: static; font-size: 10px; color: var(--dim); letter-spacing: 0.16em; text-transform: uppercase; text-align: right; }
+#speed b { display: inline; font-family: var(--display); font-size: 14px; color: var(--ink); }
+#hint { left: 50%; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 6px); max-width: min(560px, calc(100vw - 40px)); width: max-content; text-align: center; color: var(--ink); font-size: 12.5px; line-height: 1.5; background: var(--panel); padding: 6px 12px; border-bottom: 1.5px solid var(--amber); opacity: 0; transition: opacity 0.35s, transform 0.35s; }
+#hint.on { opacity: 1; transform: translate(-50%, 0); }
+#toast { left: 50%; top: 21%; transform: translateX(-50%); display: grid; justify-items: center; gap: 2px; text-align: center; opacity: 0; }
+#toast.on { animation: toastIn 2.6s ease forwards; }
+#toast #tkick { font-size: 10px; letter-spacing: 0.36em; text-transform: uppercase; color: var(--cyan); }
+#toast b { font-family: var(--display); font-weight: 700; font-size: 30px; letter-spacing: 0.04em; color: #fff; text-shadow: 0 0 16px rgba(79,240,255,0.5); text-transform: uppercase; }
+#toast #tsub { font-size: 11px; color: var(--dim); max-width: 46ch; }
+@keyframes toastIn { 0% { opacity: 0; transform: translate(-50%, 8px); } 10%, 78% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, -6px); } }
+#subs { position: fixed; left: 50%; bottom: calc(92px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 6px); width: max-content; max-width: min(780px, calc(100vw - 32px)); display: grid; justify-items: center; gap: 6px; text-align: center; pointer-events: none; z-index: 25; opacity: 0; transition: opacity 0.3s, transform 0.3s; }
+#subs.on { opacity: 1; transform: translate(-50%, 0); }
+#subs .who { display: inline-flex; align-items: center; gap: 8px; font-size: 10px; letter-spacing: 0.32em; color: var(--blood); text-transform: uppercase; }
+#subs .who i { width: 16px; height: 9px; background: repeating-linear-gradient(90deg, currentColor 0 2px, transparent 2px 4px); -webkit-mask: linear-gradient(currentColor, currentColor); animation: talk 0.5s steps(3) infinite; }
+@keyframes talk { 0% { clip-path: inset(40% 0 20% 0); } 33% { clip-path: inset(0 0 0 0); } 66% { clip-path: inset(25% 0 45% 0); } }
+#subs p { margin: 0; font-size: clamp(15px, 1.55vw, 19px); line-height: 1.45; color: #f2f5f8; text-shadow: 0 1px 2px #000; background: rgba(4,5,8,0.66); padding: 7px 14px; }
+#subs.okafor .who { color: var(--cyan); }
+#subs.okafor p { animation: glitchSub 0.5s steps(1) 1; border-left: 2px solid var(--cyan); }
+@keyframes glitchSub { 0% { transform: translateX(-5px); text-shadow: -3px 0 #ff2a4a, 3px 0 #4ff0ff; } 30% { transform: translateX(4px); } 60% { transform: none; text-shadow: 0 1px 2px #000; } }
+body.cfin #subs, body.fin #subs { opacity: 0; }
+@media (max-width: 760px) { #subs { bottom: calc(122px + env(safe-area-inset-bottom, 0px)); } #hint { bottom: calc(190px + env(safe-area-inset-bottom, 0px)); } #vitals { width: 160px; } .chip { min-width: 0; } #grapchip { min-width: 0; } }
+
+/* ---------- pause card ---------- */
+.cardbtns { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.ghost { font-family: var(--mono); font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink); background: transparent; border: 1px solid rgba(217,226,234,0.3); padding: 12px 16px; cursor: pointer; }
+.ghost:hover, .ghost:focus-visible { border-color: var(--amber); color: var(--amber); outline: none; }
+
+/* ---------- the perfect-combo screen ---------- */
+#cfin { position: fixed; inset: 0; z-index: 22; pointer-events: none; display: grid; place-items: center; overflow: hidden; }
+#cfin .cf-slash { position: absolute; left: -15%; right: -15%; top: 50%; height: 15vh; margin-top: -7.5vh; background: linear-gradient(90deg, transparent, rgba(255,42,74,0.85) 18%, #ff2a4a 50%, rgba(255,42,74,0.85) 82%, transparent); clip-path: polygon(0 46%, 100% 0, 100% 54%, 0 100%); transform: rotate(-10deg) scaleX(0); transform-origin: left center; animation: cfSlash 0.3s cubic-bezier(.2,.8,.2,1) 0.14s forwards; mix-blend-mode: screen; }
+#cfin .cf-slash.two { height: 2px; margin-top: 7vh; background: #fff; clip-path: none; animation-delay: 0.22s; opacity: 0.8; }
+@keyframes cfSlash { to { transform: rotate(-10deg) scaleX(1); } }
+.cf-card { position: relative; text-align: center; display: grid; gap: 10px; justify-items: center; padding: 0 16px; }
+.cf-kick { font-size: 12px; letter-spacing: 0.44em; color: #fff; text-transform: uppercase; opacity: 0; animation: cfIn 0.2s 0.32s forwards; }
+.cf-name { position: relative; font-family: var(--display); font-weight: 700; font-size: clamp(54px, 11vw, 150px); line-height: 0.85; margin: 0; color: #fff; letter-spacing: 0.01em; text-shadow: 5px 5px 0 #000, 0 0 40px rgba(255,42,74,0.55); opacity: 0; transform: scale(2.6); animation: cfStamp 0.2s cubic-bezier(.55,0,.8,.2) 0.4s forwards, cfShake 0.34s 0.6s; }
+@keyframes cfStamp { to { opacity: 1; transform: scale(1); } }
+@keyframes cfShake { 0%, 100% { translate: 0 0; } 20% { translate: -9px 5px; } 40% { translate: 8px -6px; } 60% { translate: -5px 3px; } 80% { translate: 3px -1px; } }
+.cf-time { font-family: var(--display); font-size: 18px; letter-spacing: 0.2em; color: var(--blood); opacity: 0; animation: cfIn 0.2s 0.7s forwards; }
+.cf-steps { list-style: none; display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; padding: 0; margin: 6px 0 0; }
+.cf-steps li { opacity: 0; transform: translateY(8px); animation: cfIn 0.18s forwards; display: grid; gap: 3px; padding: 7px 11px; background: rgba(0,0,0,0.7); border-top: 2px solid var(--blood); min-width: 86px; }
+.cf-steps li b { font-size: 11px; letter-spacing: 0.2em; color: #fff; font-weight: 600; }
+.cf-steps li span { font-size: 11px; color: #aab4be; font-variant-numeric: tabular-nums; }
+.cf-line { margin: 8px 0 0; display: flex; gap: 10px; align-items: baseline; font-size: 15px; color: var(--ink); opacity: 0; animation: cfIn 0.3s 1.55s forwards; background: rgba(0,0,0,0.6); padding: 6px 12px; }
+.cf-line span:first-child { font-size: 10px; letter-spacing: 0.3em; color: var(--blood); }
+@keyframes cfIn { to { opacity: 1; transform: none; } }
+.cf-skip { position: absolute; bottom: calc(12vh + 14px); right: 5vw; font-size: 10px; letter-spacing: 0.22em; color: #c9d2da; text-transform: uppercase; opacity: 0; animation: cfIn 0.3s 0.9s forwards; }
+#cfin.out { animation: cfOut 0.34s forwards; }
+@keyframes cfOut { to { opacity: 0; } }
+body.cfin .hud { opacity: 0 !important; transition: opacity 0.12s; }
+body.cfin #bars::before, body.cfin #bars::after { height: 12vh; }
+
+/* ---------- simulation link card ---------- */
+#simlink { position: fixed; inset: 0; z-index: 21; pointer-events: none; display: grid; place-items: center; background: #020304; animation: slOut 2.3s forwards; }
+#simlink::before { content: ""; position: absolute; inset: 0; background: linear-gradient(rgba(79,240,255,0.08) 1px, transparent 1px) 0 0 / 100% 48px, linear-gradient(90deg, rgba(79,240,255,0.08) 1px, transparent 1px) 0 0 / 48px 100%; }
+#simlink .sl-in { position: relative; display: grid; gap: 8px; justify-items: center; text-align: center; }
+#simlink span { font-size: 11px; letter-spacing: 0.32em; color: var(--cyan); text-transform: uppercase; }
+#simlink b { font-family: var(--display); font-size: clamp(44px, 9vw, 104px); line-height: 0.9; color: #e6fdff; text-shadow: 0 0 30px rgba(79,240,255,0.5); }
+#simlink i { width: min(320px, 70vw); height: 2px; background: rgba(79,240,255,0.2); position: relative; overflow: hidden; }
+#simlink i::after { content: ""; position: absolute; inset: 0; background: var(--cyan); transform-origin: left; animation: slBar 1.2s ease-out forwards; }
+#simlink.bad span, #simlink.bad b { color: var(--blood); text-shadow: 0 0 30px rgba(255,42,74,0.6); }
+#simlink.bad i::after { background: var(--blood); }
+#simlink.bad { animation: slTear 2.3s steps(1) forwards; }
+@keyframes slBar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes slOut { 0%, 62% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes slTear { 0% { opacity: 1; clip-path: inset(0 0 60% 0); } 8% { clip-path: inset(30% 0 10% 0); transform: translateX(14px); } 16% { clip-path: none; transform: none; } 70% { opacity: 1; } 100% { opacity: 1; } }
+
+/* ---------- overlays: combo book and module picker ---------- */
+.ov { position: fixed; inset: 0; z-index: 30; background: radial-gradient(ellipse at 20% 0%, rgba(255,42,74,0.08), transparent 55%), rgba(4,5,8,0.96); overflow-y: auto; padding: calc(28px + env(safe-area-inset-top, 0px)) max(16px, 5vw) 32px; cursor: default; }
+.ov-card { max-width: 1040px; margin: 0 auto; display: grid; gap: 14px; }
+.ov-head { display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap; border-bottom: 1px solid rgba(217,226,234,0.12); padding-bottom: 14px; }
+.ov-head h2 { font-family: var(--display); font-weight: 700; font-size: clamp(34px, 5vw, 56px); margin: 4px 0 0; line-height: 0.9; }
+.ov-count { font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--dim); padding-bottom: 4px; }
+.ov-x { all: unset; cursor: pointer; margin-left: auto; padding: 9px 16px; border: 1px solid rgba(217,226,234,0.3); font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink); }
+.ov-x:hover, .ov-x:focus-visible { border-color: var(--amber); color: var(--amber); }
+.ov-note { margin: 0; color: var(--dim); font-size: 13px; line-height: 1.6; max-width: 70ch; }
+.book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.bk { position: relative; background: rgba(255,255,255,0.025); border: 1px solid rgba(217,226,234,0.1); border-top: 2px solid rgba(79,240,255,0.5); padding: 14px 16px 16px; display: grid; gap: 9px; align-content: start; }
+.bk.locked { border-top-color: rgba(217,226,234,0.18); }
+.bk.gold { border-top-color: var(--blood); background: linear-gradient(180deg, rgba(255,42,74,0.07), rgba(255,255,255,0.02) 60%); }
+.bk .no { font-size: 10px; letter-spacing: 0.22em; color: var(--dim); text-transform: uppercase; }
+.bk h3 { margin: 0; font-family: var(--display); font-size: 26px; font-weight: 700; letter-spacing: 0.02em; line-height: 1; }
+.bk.locked h3 { color: var(--dim); }
+.bk h3.q { letter-spacing: 0.24em; }
+.bk .badge { position: absolute; top: 12px; right: 12px; font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; padding: 3px 7px; border: 1px solid rgba(217,226,234,0.25); color: var(--dim); }
+.bk .badge.clean { color: var(--cyan); border-color: var(--cyan); }
+.bk .badge.perfect { color: #fff; background: var(--blood); border-color: var(--blood); }
+.bk .seq { list-style: none; margin: 2px 0 0; padding: 0; display: grid; gap: 4px; counter-reset: s; }
+.bk .seq li { counter-increment: s; display: grid; grid-template-columns: 22px 1fr; font-size: 12.5px; color: var(--ink); line-height: 1.4; }
+.bk .seq li::before { content: counter(s, decimal-leading-zero); font-size: 10px; color: var(--amber); padding-top: 2px; }
+.bk.locked .seq li { color: #aab3bc; }
+.bk .pf { margin: 2px 0 0; font-size: 12px; color: var(--dim); line-height: 1.5; }
+.bk .pf b { color: var(--blood); font-weight: 600; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; margin-right: 4px; }
+.bk .best { font-size: 11px; color: var(--amber); letter-spacing: 0.08em; }
+.md { all: unset; cursor: pointer; position: relative; display: grid; gap: 6px; padding: 14px 16px; background: rgba(255,255,255,0.025); border: 1px solid rgba(217,226,234,0.1); border-top: 2px solid rgba(217,226,234,0.2); transition: border-color 0.2s, background 0.2s; }
+.md:hover, .md:focus-visible { border-color: var(--amber); background: rgba(255,181,71,0.06); }
+.md .no { font-size: 10px; letter-spacing: 0.22em; color: var(--dim); text-transform: uppercase; }
+.md b { font-family: var(--display); font-size: 24px; font-weight: 500; }
+.md .te { font-size: 12.5px; color: var(--ink); }
+.md .st { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim); }
+.md.done { border-top-color: var(--cyan); } .md.done .st { color: var(--cyan); }
+.md.gold { border-top-color: var(--amber); } .md.gold .st { color: var(--amber); }
+.md.skip { border-top-color: var(--blood); } .md.skip .st { color: var(--blood); }
+
+/* ---------- boot: an optics scan line ---------- */
+#optscan { position: absolute; top: 0; bottom: 0; width: 2px; left: 0; background: linear-gradient(transparent, rgba(255,42,74,0.9), transparent); box-shadow: 0 0 12px rgba(255,42,74,0.7); animation: scan 1.6s ease-in-out infinite alternate; }
+@keyframes scan { from { left: 0; } to { left: calc(100% - 2px); } }
+#optics .tags { position: absolute; left: 34px; bottom: 6px; display: grid; gap: 2px; font-size: 10px; letter-spacing: 0.12em; color: rgba(255,42,74,0.85); }
+/* menu: six entries have to fit short screens without scrolling */
+.m-nav .l { white-space: nowrap; }
+#menu { overflow-y: auto; }
+@media (max-height: 880px) {
+  .m-main { gap: 12px; padding-block: 14px; }
+  .m-word { font-size: clamp(48px, 11vh, 120px); }
+  .m-nav button { padding: 10px 0; }
+  .m-nav .l { font-size: 21px; }
+}
+@media (max-height: 660px) {
+  .m-main { gap: 8px; padding-block: 8px; }
+  .m-line { font-size: 13px; line-height: 1.45; }
+  .m-nav { margin-top: 2px; }
+  .m-nav button { padding: 7px 0; }
+  .m-nav .l { font-size: 18px; }
+  .m-top, .m-foot { padding-block: 9px; }
+}
+/* the pause/death card owns the screen: no subtitles or hints over it, and it fits a 720p window */
+body:has(#screen:not([hidden])) #subs, body:has(#screen:not([hidden])) #hint, body:has(#screen:not([hidden])) #toast { opacity: 0 !important; }
+@media (max-height: 820px) {
+  #screen h1 { font-size: clamp(40px, 8vh, 72px); }
+  #screen .card { gap: 10px; }
+  #screen .keys { gap: 10px 18px; font-size: 11.5px; }
+}
 </style>
 
 </head>
@@ -194,20 +371,26 @@ body.fin #bars::before, body.fin #bars::after { height: 11vh; }
 <div class="hud" id="stimbar" hidden><i></i></div>
 <div class="hud" id="flash" hidden></div>
 <div class="hud" id="prompt" hidden></div>
-<div class="hud" id="log"></div>
-<div class="hud" id="objective">Objective<b id="objv">—</b></div>
-<div class="hud" id="targets">Hostiles<b id="tcount">0</b></div>
-<div class="hud" id="speed">m/s<b id="spd">0.0</b></div>
-<div class="hud" id="stats">
-  <div class="row">Chassis integrity <b id="hpv">100</b></div>
-  <div class="bar"><i id="hpbar" style="width:100%"></i></div>
-  <div class="row">Dash <b id="dashv">2</b></div>
-  <div class="row" id="ammorow" hidden>Pistol <b id="ammov">8 / 8</b></div>
-  <div class="row" id="discrow" hidden>Disc <b id="discv">READY</b></div>
-  <div class="row" id="stimrow" hidden>Stims <b id="stimv">▯▯▯</b></div>
-  <div class="row">Grapple <b id="grapv">LOCKED</b></div>
-  <div class="bar" id="grapbar"><i style="width:0%"></i></div>
+<div class="hud" id="objective"><span class="lbl" id="objl">Objective</span><b id="objv">—</b><ol id="steps"></ol>
+  <div id="legend" hidden><span><kbd>N</kbd>finisher</span><span><kbd>J</kbd>live hostiles</span><span><kbd>L</kbd>reset dummies, boxes, stims</span><span><kbd>H</kbd>god mode</span><span><kbd>K</kbd>combo book</span></div>
 </div>
+<div class="hud" id="targets">Hostiles<b id="tcount">0</b></div>
+<div class="hud" id="vitals">
+  <div class="vrow"><span>Integrity</span><b id="hpv">100</b></div>
+  <div class="bar hp"><i id="hpbar" style="width:100%"></i></div>
+  <div class="vrow dash"><span>Dash</span><b id="dashv">▮▮</b></div>
+</div>
+<div class="hud" id="gear">
+  <div id="wpn"><span id="wpnName">Fists</span><span id="ammorow" hidden><b id="ammov">8 / 8</b></span></div>
+  <div class="chips">
+    <span class="chip" id="grapchip"><i>Grapple</i><b id="grapv">LOCKED</b><span class="bar" id="grapbar"><i style="width:0%"></i></span></span>
+    <span class="chip" id="discrow" hidden><i>Disc</i><b id="discv">READY</b></span>
+    <span class="chip" id="stimrow" hidden><i>Stims</i><b id="stimv">▯▯▯</b></span>
+  </div>
+  <div id="speed" hidden><b id="spd">0.0</b> m/s</div>
+</div>
+<div class="hud" id="hint"></div>
+<div class="hud" id="toast"><span id="tkick">Clean</span><b id="tname"></b><span id="tsub"></span></div>
 
 <div id="menu">
   <div class="m-top"><span>Meridian Continuum</span><span>Asset file 7/RES · <b>restricted</b></span><span id="mclock">02:14:07 · 04.11.2200</span></div>
@@ -216,10 +399,12 @@ body.fin #bars::before, body.fin #bars::after { height: 11vh; }
     <h1 class="m-word" data-text="RESOLUTION">RESOLUTION</h1>
     <p class="m-line">An AI that finds the cheapest path to any outcome, and carries it out. <em>Tonight it gets a body.</em></p>
     <nav class="m-nav" id="mnav">
-      <button type="button" data-act="new" disabled><span class="n">01</span><span class="l">New directive</span><span class="d">Intro and boot sequence</span></button>
-      <button type="button" data-act="skip" disabled><span class="n">02</span><span class="l">Skip to the floor</span><span class="d">Straight into Floor 01</span></button>
-      <button type="button" data-act="controls" disabled><span class="n">03</span><span class="l">Controls</span><span class="d">Keys and moves</span></button>
-      <button type="button" data-act="test" disabled><span class="n">04</span><span class="l">Testing ground</span><span class="d">Access code required</span></button>
+      <button type="button" data-act="new" disabled><span class="n">01</span><span class="l">New directive</span><span class="d">Intro, calibration, then the boot sequence</span></button>
+      <button type="button" data-act="mods" disabled><span class="n">02</span><span class="l">Calibration</span><span class="d">Floor 00 tutorial · pick a module</span></button>
+      <button type="button" data-act="skip" disabled><span class="n">03</span><span class="l">Skip to Floor 01</span><span class="d">Straight into the floor</span></button>
+      <button type="button" data-act="book" disabled><span class="n">04</span><span class="l">Combo book</span><span class="d">0 of 8 found</span></button>
+      <button type="button" data-act="controls" disabled><span class="n">05</span><span class="l">Controls</span><span class="d">Keys and moves</span></button>
+      <button type="button" data-act="test" disabled><span class="n">06</span><span class="l">Testing ground</span><span class="d">Access code required</span></button>
     </nav>
     <div id="m-controls" hidden></div>
     <form id="m-code" hidden autocomplete="off">
@@ -228,7 +413,7 @@ body.fin #bars::before, body.fin #bars::after { height: 11vh; }
       <div id="codemsg"></div>
     </form>
   </div>
-  <div class="m-foot"><span id="mstatus"><i class="m-dot"></i>Loading physics</span><span>Prototype · Floor 01 of 60</span></div>
+  <div class="m-foot"><span id="mstatus"><i class="m-dot"></i>Loading physics</span><button type="button" id="mvoice" class="m-tog">Voice on</button><span>Prototype · Floor 01 of 60</span></div>
 </div>
 
 <div id="intro" hidden>
@@ -240,7 +425,7 @@ body.fin #bars::before, body.fin #bars::after { height: 11vh; }
   <div id="lids"><i class="top"></i><i class="bot"></i></div>
   <canvas id="rain"></canvas>
   <div id="bootlog"></div>
-  <div id="optics"><span id="opt1">Optics · calibrating</span><span id="opt2">Chassis UNIT-7</span></div>
+  <div id="optics"><span id="opt1">Optics · calibrating</span><span id="opt2">Chassis UNIT-7</span><i id="optscan"></i><div class="tags" id="opttags"></div></div>
   <div id="bootskip">Space to skip</div>
 </div>
 
@@ -251,26 +436,64 @@ body.fin #bars::before, body.fin #bars::after { height: 11vh; }
     <p class="directive" id="directive">UNIT-7 online. Directive from ARBITER: leave no one in the building who can testify.</p>
     <p id="sub">Floor 01, Activation. Your chassis boots with no weapons. Clear the hall with your hands, take the sword from the armory, then go out the windows to reach the sealed wings.</p>
     <div class="keys">
-      <span><kbd>WASD</kbd>Move</span>
-      <span><kbd>Space</kbd>Jump · let go of grapple</span>
-      <span><kbd>Ctrl</kbd>/<kbd>C</kbd>Slide (slide into enemies to stagger)</span>
-      <span><kbd>Shift</kbd>Dash · hold to sprint</span>
-      <span><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd> or wheel: fists, sword or pistol</span>
-      <span><kbd>LMB</kbd> with the pistol: fire · <kbd>RMB</kbd> aim · <kbd>R</kbd> vent and reload</span>
-      <span><kbd>LMB</kbd>Attack · slide + LMB to thrust</span>
-      <span><kbd>RMB</kbd>Block · tap just before a hit to parry</span>
-      <span><kbd>E</kbd>Hold to grapple, let go to fling (needs the sword)</span>
-      <span><kbd>G</kbd>Grapple mode: swing or sling (locks onto enemies; let go to be shot at them)</span>
-      <span><kbd>Space</kbd> on the sling line: hold to slow time and hang in the air (4 s max), let go to fire</span>
-      <span><kbd>C</kbd> while grappling: breach a window</span>
-      <span><kbd>V</kbd>Kick (launches enemies, breaks glass, opens med boxes)</span>
-      <span><kbd>Q</kbd>Throw the disc: 3 bounces, then it comes back. Look up to hang it in the air and grapple it for a boost</span>
-      <span><kbd>X</kbd>Inject a stim (from red-locked med boxes: shoot, kick or grapple them)</span>
-      <span><kbd>W</kbd> into a ledge: climb it · sprint into a low hurdle: vault it</span>
-      <span><kbd>F</kbd>Inspect your weapon</span>
-      <span><kbd>Backspace</kbd>Restart from checkpoint</span>
+      <section><h4>Move</h4>
+        <span><kbd>WASD</kbd>Move · <kbd>Space</kbd> jump</span>
+        <span><kbd>Shift</kbd>Dash · hold to sprint</span>
+        <span><kbd>C</kbd>/<kbd>Ctrl</kbd>Slide (staggers enemies)</span>
+        <span><kbd>W</kbd> into a ledge: climb · sprint at a hurdle: vault</span>
+      </section>
+      <section><h4>Fight</h4>
+        <span><kbd>LMB</kbd>Attack · slide + LMB: thrust</span>
+        <span><kbd>RMB</kbd>Block · tap just before a hit to parry</span>
+        <span><kbd>V</kbd>Kick (launches, breaks glass, opens boxes)</span>
+        <span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd>Fists, sword, pistol · wheel swaps</span>
+        <span><kbd>RMB</kbd> with the pistol: aim · <kbd>R</kbd> vent · <kbd>F</kbd> inspect</span>
+      </section>
+      <section><h4>Grapple</h4>
+        <span><kbd>E</kbd>Hold to grapple, let go to fling</span>
+        <span><kbd>G</kbd>Swing or sling (locks onto enemies)</span>
+        <span><kbd>Space</kbd> on the sling line: focus (4 s)</span>
+        <span><kbd>C</kbd> on the line: breach a window</span>
+      </section>
+      <section><h4>Gear</h4>
+        <span><kbd>Q</kbd>Disc: 3 bounces, then it returns. Look up to hang it, then grapple it</span>
+        <span><kbd>X</kbd>Inject a stim (from red med boxes)</span>
+        <span><kbd>Backspace</kbd>Restart from checkpoint</span>
+      </section>
     </div>
-    <button class="go" id="go" type="button">Loading physics…</button>
+    <div class="cardbtns"><button class="go" id="go" type="button">Loading physics…</button><button class="ghost" id="bookbtn" type="button">Combo book</button><button class="ghost" id="menubtn" type="button">Main menu</button></div>
+  </div>
+</div>
+
+<div id="subs"><span class="who"><i></i><span id="subwho">ARBITER</span></span><p id="subtext"></p></div>
+
+<div id="cfin" hidden>
+  <div class="cf-slash"></div><div class="cf-slash two"></div>
+  <div class="cf-card">
+    <div class="cf-kick" id="cfkick">Perfect combo</div>
+    <h2 class="cf-name" id="cfname" data-text="SKYHOOK">SKYHOOK</h2>
+    <div class="cf-time" id="cftime"></div>
+    <ol class="cf-steps" id="cfsteps"></ol>
+    <p class="cf-line"><span>ARBITER</span><span id="cfline"></span></p>
+  </div>
+  <div class="cf-skip">Any key to continue</div>
+</div>
+
+<div id="simlink" hidden><div class="sl-in"><span id="slt">ARBITER · calibration simulation</span><b id="slb">Floor 00</b><i></i></div></div>
+
+<div id="book" class="ov" hidden role="dialog" aria-label="Combo book">
+  <div class="ov-card">
+    <div class="ov-head"><div><div class="eyebrow">ARBITER · combat records</div><h2>Combo book</h2></div><span id="bookcount" class="ov-count"></span><button type="button" class="ov-x">Close</button></div>
+    <p class="ov-note">Land every step in order without a long pause. Meet the perfect condition and time stops for it.</p>
+    <div class="book-grid" id="bookgrid"></div>
+  </div>
+</div>
+
+<div id="mods" class="ov" hidden role="dialog" aria-label="Calibration modules">
+  <div class="ov-card">
+    <div class="ov-head"><div><div class="eyebrow">Floor 00 · calibration</div><h2>Modules</h2></div><button type="button" class="ov-x">Close</button></div>
+    <p class="ov-note">Each module teaches one system. Start anywhere; you carry the gear from the modules before it.</p>
+    <div class="book-grid" id="modgrid"></div>
   </div>
 </div>
 
@@ -673,14 +896,22 @@ const sfx = {
   stimOut() { tone("square", 1700, 1600, 0.03, 0.05); tone("sine", 320, 640, 0.15, 0.04, 0.05); },
   stimStab() { tone("sine", 170, 55, 0.2, 0.5); noise(0.09, "highpass", 2600, 0.45); noise(1.0, "bandpass", 1800, 0.25, 3, 400); tone("sawtooth", 90, 260, 0.9, 0.04, 0.1); },
   door() { noise(1.4, "lowpass", 200, 0.5); tone("sawtooth", 60, 45, 1.4, 0.06); },
+  voiceIn() { tone("sine", 220, 218, 0.12, 0.035); tone("sine", 330, 329, 0.12, 0.03, 0.09); },
+  radio() { noise(0.35, "bandpass", 1800, 0.18, 2, 900); tone("square", 1200, 900, 0.05, 0.02); },
+  comboClean() { tone("sine", 880, 880, 0.18, 0.06); tone("sine", 1320, 1320, 0.3, 0.05, 0.1); },
+  comboStamp() { noise(0.5, "lowpass", 600, 0.9, 0.7, 60); tone("sine", 70, 30, 0.8, 0.5); tone("square", 140, 60, 0.3, 0.1); noise(0.6, "highpass", 3000, 0.4, 0.7, 9000); for (let i = 0; i < 6; i++) tone("sine", 1500 + i * 220, 1500 + i * 220, 0.12, 0.03, 0.6 + i * 0.15); },
 };
 
 // ---------- HUD ----------
 const $ = (id) => document.getElementById(id);
+// a timed line belongs to the level that queued it: restarting or quitting cancels it
+function later(fn, ms) { const g = state.gen; setTimeout(() => { if (g === state.gen && state.started) fn(); }, ms); }
+// story lines go to the voice and subtitles, tips to the single hint line
 function log(text, cls = "") {
-  const d = document.createElement("div"); d.textContent = text; if (cls) d.className = cls;
-  $("log").appendChild(d); setTimeout(() => d.remove(), 8000);
-  while ($("log").children.length > 6) $("log").firstChild.remove();
+  const m = /^(ARBITER|OKAFOR-REYES)[^:]*:\s*/.exec(text);
+  if (m) return say(m[1] === "ARBITER" ? "arbiter" : "okafor", text.slice(m[0].length));
+  if (cls === "okafor") return say("okafor", text);
+  hint(text.replace(/^Tip:\s*/, ""));
 }
 let flashT = 0;
 function flash(text, color = "var(--cyan)") { const f = $("flash"); f.textContent = text; f.style.color = color; f.hidden = false; flashT = 0.7; f.classList.remove("glitch"); void f.offsetWidth; f.classList.add("glitch"); }
@@ -692,16 +923,18 @@ const mouse = { left: false, right: false };
 const pressed = new Set(); // edge-triggered actions, consumed by the sim
 let yaw = 0, pitch = 0, locked = false;
 addEventListener("keydown", (e) => {
+  if (CF.on) { if (!e.repeat && CF.t > 0.4) endComboScreen(); if (["Space", "ControlLeft", "ControlRight"].includes(e.code)) e.preventDefault(); return; }
+  if (e.code === "Escape") for (const o of document.querySelectorAll(".ov:not([hidden])")) o.hidden = true;
   if (!e.repeat) pressed.add(e.code);
   keys.add(e.code);
   if (e.code === "Backspace" && state.started && !state.boot && !e.repeat) restart(false);
-  if (state.boot && (e.code === "Space" || e.code === "Enter") && !e.repeat) state.boot.t = Math.max(state.boot.t, BOOT_END - 0.6);
+  if (state.boot && (e.code === "Space" || e.code === "Enter") && !e.repeat) { state.boot.skipped = true; stopVoice(); state.boot.t = Math.max(state.boot.t, BOOT_END - 0.6); }
   if (!$("intro").hidden && (e.code === "Enter" || e.code === "Space") && !e.repeat) introAdvance();
   if (["Space", "ControlLeft", "ControlRight"].includes(e.code)) e.preventDefault();
 });
 addEventListener("keyup", (e) => keys.delete(e.code));
 addEventListener("blur", () => { keys.clear(); mouse.left = mouse.right = false; });
-addEventListener("mousedown", (e) => { if (!locked) return; if (e.button === 0) { mouse.left = true; pressed.add("Attack"); } if (e.button === 2) { mouse.right = true; pressed.add("Block"); } });
+addEventListener("mousedown", (e) => { if (!locked) return; if (CF.on) { if (CF.t > 0.4) endComboScreen(); return; } if (e.button === 0) { mouse.left = true; pressed.add("Attack"); } if (e.button === 2) { mouse.right = true; pressed.add("Block"); } });
 addEventListener("mouseup", (e) => { if (e.button === 0) mouse.left = false; if (e.button === 2) mouse.right = false; });
 addEventListener("contextmenu", (e) => e.preventDefault());
 addEventListener("wheel", (e) => { if (locked && Math.abs(e.deltaY) > 4) pressed.add("Swap"); }, { passive: true });
@@ -1240,6 +1473,7 @@ function updateEnemies(dt) {
       e.meshes.head.rotation.x = -f * (e.flinchDir === "upper" ? 0.9 : 0.45);
       e.meshes.armR.rotation.x = e.meshes.armL.rotation.x = -0.3 * f;
     } else if (e.stun > 0) {
+      e.stun -= dt; e.tele = 0; e.meshes.glow.visible = false;
       e.meshes.visor.material = e.stun > 0 ? M.stun : M.visor;
       e.group.rotation.x = -Math.min(0.35, e.stun * 0.5);
     } else if (e.dummy) {
@@ -1329,7 +1563,7 @@ function resolveMelee(e, dist) {
   damagePlayer(e.T.dmg, e);
 }
 function parry(e) {
-  sfx.parry(); flash("Parry"); impactFrame(45); glitch(0.35);
+  sfx.parry(); flash("Parry"); impactFrame(45); glitch(0.35); ev("parry", { e });
   stun(e, 1.8, 7);
   hitstop(0.12);
 }
@@ -1369,7 +1603,7 @@ function updateBolts(dt) {
         if (player.blocking) { sfx.block(); damagePlayer(Math.round(T.dmg * 0.4), { T }, true); }
         else damagePlayer(T.dmg, { T });
         done = true;
-      } else if (b.friendly && enemyByHandle.has(h)) { damageEnemy(enemyByHandle.get(h), 6, at, dir, "deflect"); done = true; }
+      } else if (b.friendly && enemyByHandle.has(h)) { const de = enemyByHandle.get(h); damageEnemy(de, 6, at, dir, "deflect"); ev("deflectHit", { e: de }); done = true; }
       else if (ragByHandle.has(h)) { done = true; }
       else if (barrelByHandle.has(h)) { hitBarrel(barrelByHandle.get(h), 0); done = true; }
       else { spark(at, b.friendly ? 0xffb547 : 0xff4d5e); done = true; }
@@ -1396,7 +1630,7 @@ function damageEnemy(e, dmg, point, dir, kind) {
   if (e.hp <= 0 && canFinish(e, kind)) { e.hp = 0; startFinisher(e); return; }
   if (e.hp <= 0) {
     const force = { punch: 18, heavy: 30, slash: 22, thrust: 38, deflect: 26, breach: 55, finisher: 60, explosion: 48, shot: 16, kick: 36, disc: 18 }[kind] ?? 20;
-    killEnemy(e, point, dir, force * (e.type === "bot" ? 2.2 : 1));
+    e.killKind = kind; killEnemy(e, point, dir, force * (e.type === "bot" ? 2.2 : 1));
   } else if (kind === "slash") {
     e.knock.copy(dir.clone().setY(0).normalize().multiplyScalar(3));
   }
@@ -1412,9 +1646,13 @@ function killEnemy(e, hitPoint, dir, force) {
   if (e.dummy && state.mode === "test") TEST.respawn.push({ type: e.type, x: e.home.x, z: e.home.z, t: 3 });
   for (const b of bolts) if (b.owner === e) b.owner = null;
   updateCount();
+  tutKilled(e); ev("kill", { e, kind: e.killKind, sword: player.hasSword, w: weaponOf(e.killKind), air: !player.grounded });
   if (alive().length === 0 && !state.fin) phaseCleared();
 }
-function updateCount() { $("tcount").textContent = alive().length; }
+function updateCount() {
+  const n = state.mode === "tut" ? alive().filter((e) => !e.dummy).length : alive().length;
+  $("tcount").textContent = n; if (state.mode === "tut") $("targets").hidden = n === 0;
+}
 
 // ---------- ragdolls ----------
 function spawnRagdoll(e, hitPoint, dir, force) {
@@ -1568,6 +1806,7 @@ function stepPlayer(dt) {
   if (keys.has("KeyD")) wish.add(right); if (keys.has("KeyA")) wish.sub(right);
   if (wish.lengthSq()) wish.normalize();
   const grounded = groundCheck();
+  if (grounded && !player.grounded && !player.climb) ev("ground");
   if (grounded) { player.coyote = 0.1; if (player.breach && !player.grapple && state.time - player.lastGrapple > 0.3) player.breach = false; } else player.coyote -= dt;
   const crouchKey = keys.has("ControlLeft") || keys.has("ControlRight") || keys.has("KeyC");
   const crouchPressed = pressed.has("ControlLeft") || pressed.has("ControlRight") || pressed.has("KeyC");
@@ -1587,7 +1826,7 @@ function stepPlayer(dt) {
   if (crouchKey && grounded && !player.sliding && hspeed > 5 && !player.climb) {
     player.sliding = true; player.slideHits = new Set();
     const boost = Math.min(hspeed * 1.25, 21) / Math.max(hspeed, 0.001);
-    vel.x *= boost; vel.z *= boost; sfx.dash();
+    vel.x *= boost; vel.z *= boost; sfx.dash(); ev("slide");
   }
   if (!crouchKey || hspeed < 3) player.sliding = false;
 
@@ -1616,7 +1855,7 @@ function stepPlayer(dt) {
   else if (keys.has("Space") && !player.jumpHeld) {
     if (player.grapple) { releaseGrapple(); vel.y = Math.max(vel.y, 0) + 7.5; vel.addScaledVector(fwd, 5); player.jumpHeld = true; player.grapLock = true; }
     else if (player.coyote > 0) {
-      vel.y = P.jump; player.coyote = 0; player.jumpHeld = true;
+      vel.y = P.jump; player.coyote = 0; player.jumpHeld = true; ev("jump");
       if (player.sliding) { vel.x *= 1.08; vel.z *= 1.08; player.sliding = false; }
     }
   }
@@ -1628,7 +1867,7 @@ function stepPlayer(dt) {
   if ((pressed.has("ShiftLeft") || pressed.has("ShiftRight")) && player.dashT <= 0 && player.dash > 0) {
     const d = wish.lengthSq() ? wish.clone() : fwd.clone();
     vel.x = d.x * P.dashSpeed; vel.z = d.z * P.dashSpeed; vel.y = Math.max(vel.y, lookDir().y * 8, 1.5);
-    player.dash--; player.dashT = 0.3; sfx.dash(); fovKick = 14; speedLines(0.6);
+    player.dash--; player.dashT = 0.3; sfx.dash(); fovKick = 14; speedLines(0.6); ev("dash");
     CAM.rollV -= d.dot(right) * 5; CAM.kickV -= 2;
   }
 
@@ -1640,13 +1879,13 @@ function stepPlayer(dt) {
   if (pressed.has("KeyE")) { if (!player.ownsSword) flash("Grapple needs the sword", "var(--dim)"); else player.grapBuf = 0.2; }
   if (pressed.has("KeyG") && player.ownsSword) {
     player.grapMode = player.grapMode === "swing" ? "sling" : "swing";
-    flash(player.grapMode === "sling" ? "Grapple · Sling" : "Grapple · Swing", player.grapMode === "sling" ? "var(--blood)" : "var(--cyan)"); sfx.grappleReady();
+    flash(player.grapMode === "sling" ? "Grapple · Sling" : "Grapple · Swing", player.grapMode === "sling" ? "var(--blood)" : "var(--cyan)"); sfx.grappleReady(); ev("mode", { mode: player.grapMode });
   }
   player.grapBuf = eDown ? (player.grapBuf || 0) - dt : 0;
   if (eDown && player.ownsSword && !player.grapple && player.grappleCd <= 0 && player.grapBuf > 0) {
     if (player.grapMode === "sling") {
       const lock = slingTarget(); const hit = lock || grappleRay();
-      if (hit) { fireGrapple(hit); player.grapple.mode = "sling"; player.grapple.enemy = lock ? lock.e : null; player.grapple.charge = 0; player.grapBuf = 0; }
+      if (hit) { fireGrapple(hit); if (!hit.disc) player.grapple.mode = "sling"; player.grapple.enemy = lock ? lock.e : null; player.grapple.charge = 0; player.grapBuf = 0; }
     } else { const hit = grappleRay(); if (hit) { fireGrapple(hit); player.grapBuf = 0; } }
   }
   // focus: on a taut sling line, hold Space and the world nearly stops and drains of colour while you hang there.
@@ -1672,7 +1911,7 @@ function stepPlayer(dt) {
       const sp = vel.length();
       if (sp < 7) { vel.addScaledVector(lookDir(), 9 - sp * 0.5); vel.y = Math.max(vel.y, 6); }
       else { vel.multiplyScalar(1.12); vel.y += 2.5; }
-      fovKick = Math.max(fovKick, 7); speedLines(0.45); sfx.dash();
+      fovKick = Math.max(fovKick, 7); speedLines(0.45); sfx.dash(); ev("fling");
     }
   }
   if (player.grapple?.enemy) {
@@ -1682,7 +1921,7 @@ function stepPlayer(dt) {
   }
   if (player.grapple?.mode === "sling") {
     const g = player.grapple; player.lastGrapple = state.time;
-    if (g.phase === "fly") { g.t += dt; if (g.t >= g.dur) { g.phase = "attached"; g.latchAt = state.time; g.ramp = 1; sfx.grappleLatch(); shake = Math.max(shake, 0.12); if (g.enemy) flash("Locked", "var(--blood)"); } }
+    if (g.phase === "fly") { g.t += dt; if (g.t >= g.dur) { g.phase = "attached"; g.latchAt = state.time; g.ramp = 1; sfx.grappleLatch(); shake = Math.max(shake, 0.12); if (g.enemy) flash("Locked", "var(--blood)"); ev("grapple", { mode: "sling", enemy: g.enemy, point: g.point.clone() }); } }
     else {
       g.charge = Math.min(1, g.charge + dt / 0.55);
       if (player.focus) { vel.multiplyScalar(Math.pow(0.0003, dt)); vel.y -= P.gravity * gScale * dt; } // hanging still in the air
@@ -1694,7 +1933,7 @@ function stepPlayer(dt) {
     player.lastGrapple = state.time;
     if (g.phase === "fly") {
       g.t += dt;
-      if (g.t >= g.dur) { g.phase = "attached"; g.L = dist; g.ramp = 0; g.latchAt = state.time; sfx.grappleLatch(); shake = Math.max(shake, 0.08); }
+      if (g.t >= g.dur) { g.phase = "attached"; g.L = dist; g.ramp = 0; g.latchAt = state.time; sfx.grappleLatch(); shake = Math.max(shake, 0.08); ev("grapple", { mode: "swing", disc: g.disc, point: g.point.clone() }); }
     } else {
       g.ramp = Math.min(1, g.ramp + dt * 4);
       g.L = Math.max(1.6, g.L - 24 * dt * g.ramp);
@@ -1749,7 +1988,7 @@ function stepPlayer(dt) {
   if (player.thrustT > 0) thrustSweep(vel);
   if (player.sliding) slideSweep(vel);
 
-  updateTest(dt);
+  updateTest(dt); updateTut(dt);
   if (pressed.has("KeyF")) startInspect();
 
   stepMoves(dt, vel, grounded, fwd, wish);
@@ -1771,12 +2010,12 @@ function fireGrapple(hit) {
 }
 const FOCUS_MAX = 4;
 function startFocus(g) {
-  g.focused = true; player.focus = { t: 0, beat: 0.25 };
+  g.focused = true; player.focus = { t: 0, beat: 0.25 }; ev("focus");
   setTime("focus", FOCUS_MAX + 1); sfx.focus(); glitch(0.3); flash("Focus", "#e6e6e6"); fovKick -= 4;
 }
 function endFocus() {
   if (!player.focus) return;
-  player.focus = null; if (state.tsMode === "focus") setTime("normal", 0); sfx.resume();
+  const fdur = player.focus.t; player.focus = null; ev("focusEnd", { dur: fdur }); if (state.tsMode === "focus") setTime("normal", 0); sfx.resume();
 }
 function releaseGrapple() {
   if (player.grapple) { hookFx.from.copy(hookHead()); hookFx.state = "retract"; hookFx.t = 0; sfx.grappleRetract(); }
@@ -1819,6 +2058,7 @@ function slingLaunch(vel, g) {
   player.sling = { e: g.enemy, t: Math.min(1.4, dist / sp + 0.35), dmg: 2 + g.charge * 3, dir: to.clone() };
   fovKick = Math.max(fovKick, 12 + g.charge * 8); speedLines(0.8); sfx.dash(); tone("sawtooth", 120, 900, 0.18, 0.05);
   CAM.kickV -= 3 + g.charge * 3; glitch(0.25);
+  ev("sling", { e: g.enemy && !g.enemy.dead ? g.enemy : null });
 }
 function slingFlight(vel, dt) {
   const S = player.sling; S.t -= dt;
@@ -1834,6 +2074,7 @@ function slingFlight(vel, dt) {
     const mult = e === S.e ? 1 : 0.6;
     damageEnemy(e, S.dmg * mult, ep, dir.clone().setY(0.35).normalize(), S.dmg >= 4 ? "heavy" : "punch");
     if (!e.dead) stun(e, 1.1, 10);
+    ev("slingHit", { e, kill: e.dead });
     sfx.punchHit(true); impactFrame(50); shake = Math.max(shake, 0.45); hitstop(0.07); CAM.kickV += 4;
     flash(e.dead ? "Sling kill" : "Sling strike", "var(--blood)");
     vel.copy(dir).multiplyScalar(-4); vel.y = 6.5; // bounce off the body
@@ -1866,6 +2107,7 @@ function breachThrough(pane, at, vel) {
   if (n) { sfx.execute(); flash(n > 1 ? `Execution ×${n}` : "Execution", "var(--blood)"); setTime("slow", 0.8); }
   // neighbouring panes go too
   for (const p of panes) if (!p.broken && p.center.distanceTo(pane.center) < 4.2 && p.center.distanceTo(at) < 4.5) shatter(p, at, dir, 18, true);
+  ev("breach", { n });
 }
 function meleeTargets(range, arc) {
   const o = camOrigin(); const look = lookDir();
@@ -1908,7 +2150,7 @@ function meleeAttack(vel) {
     const mult = e.stun > 0 ? 3 : 1;
     damageEnemy(e, base * dmgMult * mult, point, look.clone(), hasSword ? "slash" : "punch");
   }
-  if (hits.length) hitstop(0.05);
+  if (hits.length) { hitstop(0.05); ev("hit", { kind: "slash", n: hits.length }); }
   for (const b of barrelsNear(camOrigin().setY(0.55), range, look.clone().setY(0).normalize(), 0.9)) hitBarrel(b, 0.35);
   // glass and ragdolls in reach
   const o = camOrigin();
@@ -1943,6 +2185,7 @@ function landPunch({ kind, heavy }) {
   const flat = look.clone().setY(0).normalize();
   const dir = kind === "upper" ? flat.clone().setY(1.3).normalize() : kind === "hook" ? flat.clone().add(new THREE.Vector3(-flat.z, 0, flat.x).multiplyScalar(VM.attack?.arm === "R" ? -0.6 : 0.6)).normalize() : flat;
   damageEnemy(e, dmg, point, dir, heavy ? "heavy" : "punch");
+  ev("punch", { kind, heavy, e });
   if (!e.dead) { e.flinch = heavy ? 0.5 : 0.3; e.flinchDir = kind; e.knock.copy(dir.clone().setY(0).normalize().multiplyScalar(heavy ? 8 : 4.5)); flashEnemy(e); }
   // impact: freeze, shake, a camera jolt, a punch-in zoom, and a flash on heavies and kills
   hitstop(heavy || e.dead ? 0.13 : 0.075);
@@ -1975,7 +2218,7 @@ function thrustSweep(vel) {
     if (player.thrustHits.has(e) || !pathHits(e, vel, 1.6)) continue;
     player.thrustHits.add(e);
     damageEnemy(e, 3, enemyPos(e), vel.clone().normalize(), "thrust");
-    hitstop(0.07);
+    hitstop(0.07); ev("hit", { kind: "thrust", e });
   }
 }
 function slideSweep(vel) {
@@ -1990,7 +2233,7 @@ function slideSweep(vel) {
 }
 function damagePlayer(n, src, blocked = false) {
   if (player.dead || state.tsMode === "stop" || player.god || state.time < (player.immuneUntil || 0)) return;
-  player.hp -= n; player.lastHurt = state.time; sfx.hurt(); shake = Math.max(shake, blocked ? 0.12 : 0.25); glitch(blocked ? 0.2 : 0.55 + n / 60);
+  player.hp -= n; player.lastHurt = state.time; sfx.hurt(); ev("hurt"); shake = Math.max(shake, blocked ? 0.12 : 0.25); glitch(blocked ? 0.2 : 0.55 + n / 60);
   $("damage").style.boxShadow = `inset 0 0 160px rgba(255,40,60,${0.25 + (1 - player.hp / 100) * 0.5})`;
   setTimeout(() => ($("damage").style.boxShadow = "inset 0 0 160px rgba(255,40,60,0)"), 180);
   if (player.hp <= 0) killPlayer(`Chassis destroyed by a ${src.T.label.toLowerCase()}.`);
@@ -1998,7 +2241,7 @@ function damagePlayer(n, src, blocked = false) {
 function killPlayer(msg) {
   player.focus = null; player.dead = true; player.grapple = null; state.over = true; setTime("normal", 0); glitch(1);
   document.exitPointerLock?.();
-  const cp = state.checkpoint === 2 ? "Restoring from the armory checkpoint." : "Reloading UNIT-7 from backup.";
+  const cp = state.mode === "tut" ? "The module resets. Try it again." : state.checkpoint === 2 ? "Restoring from the armory checkpoint." : "Reloading UNIT-7 from backup.";
   showScreen("Offline", "OFFLINE", msg, `ARBITER: Disappointing. ${cp}`, "Reboot", true);
 }
 
@@ -2067,6 +2310,7 @@ function updateTest(dt) {
     const pp = playerPos(); const tgt = finisherTarget() || alive().sort((a, b) => enemyPos(a).distanceTo(pp) - enemyPos(b).distanceTo(pp))[0];
     if (tgt) startFinisher(tgt); else flash("No target", "var(--dim)");
   }
+  if (pressed.has("KeyK")) { document.exitPointerLock?.(); setTimeout(openBook, 60); }
   if (pressed.has("KeyH")) { player.god = !player.god; flash(player.god ? "God mode on" : "God mode off", "var(--amber)"); }
   if (pressed.has("KeyJ")) {
     for (let i = 0; i < 3; i++) { const types = ["brawler", "gunman", "bot"]; spawnEnemy(types[i], -16 + i * 16, 0, -44); const e = enemies[enemies.length - 1]; e.alert = true; }
@@ -2074,7 +2318,7 @@ function updateTest(dt) {
   }
 }
 function phaseCleared() {
-  if (state.mode === "test") return;
+  if (state.mode !== "floor") return;
   if (state.phase === 1) {
     state.phase = 1.5;
     setObjective("Take the sword from the armory");
@@ -2098,10 +2342,10 @@ function pickupSword() {
   setObjective("Breach the sealed wings through the windows");
   setViewModel();
   log("OKAFOR-REYES: The east wing and the server room are sealed from inside. Go out the window.", "okafor");
-  setTimeout(() => log("Tip: slash the window, then press E on the amber rails outside. Hold E to hang, let go to fling. Hold E on a window and press C to breach.", "tip"), 2500);
-  setTimeout(() => log("Tip: press 3 for the steam pistol. R vents it when it runs dry. Hold RMB to aim.", "tip"), 4800);
-  setTimeout(() => log("Tip: Q throws the disc off your forearm. It bounces three times and comes back. Throw it straight up and grapple it for a boost.", "tip"), 9500);
-  setTimeout(() => log("Tip: parry is easier with the blade. Block right as a bolt reaches you to send it back.", "tip"), 7000);
+  later(() => log("Tip: slash the window, then press E on the amber rails outside. Hold E to hang, let go to fling. Hold E on a window and press C to breach.", "tip"), 2500);
+  later(() => log("Tip: press 3 for the steam pistol. R vents it when it runs dry. Hold RMB to aim.", "tip"), 4800);
+  later(() => log("Tip: Q throws the disc off your forearm. It bounces three times and comes back. Throw it straight up and grapple it for a boost.", "tip"), 9500);
+  later(() => log("Tip: parry is easier with the blade. Block right as a bolt reaches you to send it back.", "tip"), 7000);
   spawnPhase(2); updateCount();
 }
 
@@ -2441,10 +2685,12 @@ function fireGun() {
       damageEnemy(e, head ? GUN.head : GUN.dmg, at, d.clone(), "shot");
       if (!e.dead) { e.flinch = 0.22; e.flinchDir = "jab"; e.knock.copy(d).setY(0).normalize().multiplyScalar(head ? 5 : 3); flashEnemy(e); }
       if (head) flash(e.dead ? "Headshot" : "Head", "var(--amber)");
+      ev("shot", { e, head, kill: e.dead });
       emitWorldSparks(at, d.clone().negate(), 16, 0, 7); sfx.gunHit(head); hitstop(e.dead ? 0.06 : 0.03);
       $("cross").classList.add("hit"); crossTimer = 0.12;
     } else {
-      const bx = stimBoxByHandle.get(h); if (bx) openBox(bx, d);
+      ev("shot", { e: null });
+      const bx = stimBoxByHandle.get(h); if (bx) openBox(bx, d, "shot");
       const rd = ragByHandle.get(h);
       if (rd) rd.parts.find((p) => p.col.handle === h).body.applyImpulseAtPoint({ x: d.x * 14, y: 3, z: d.z * 14 }, at, true);
       emitWorldSparks(at.clone().addScaledVector(n, 0.02), n, 10, 0, 6); spark(at, 0xffc070);
@@ -2606,7 +2852,7 @@ function sliceEnemy(e, dir) {
   while (ragdolls.length > 8) freezeRagdoll(ragdolls.find((r) => !r.half) || ragdolls[0]);
   sfx.kill();
   if (e.dummy && state.mode === "test") TEST.respawn.push({ type: e.type, x: e.home.x, z: e.home.z, t: 3 });
-  updateCount();
+  updateCount(); ev("kill", { e, kind: "finisher", sword: true, w: "sword", air: false });
   return [up, lo];
 }
 const _fc = new THREE.Vector3(), _ft = new THREE.Vector3(), _fq = new THREE.Quaternion(), _fm = new THREE.Matrix4(), _fu = new THREE.Vector3(0, 1, 0);
@@ -2747,6 +2993,7 @@ function startGunAnim(kind) {
   if (VM.gunAnim || player.grapple || player.swapTo || !player.hasPistol) return;
   if (kind === "reload" && player.ammo >= GUN.mag) { flash("Chamber full", "var(--dim)"); return; }
   VM.gunAnim = { kind, ...GUN_ANIMS[kind], t: 0, cues: new Set() }; VM.gunSpin = null; sfx.servo();
+  if (kind === "reload") ev("vent");
 }
 function grabCover() { rig.updateMatrixWorld(true); armL.hand.attach(GP.top); VM.coverHeld = true; VM.coverSettle = false; sfx.latch(); }
 function dropCover() { rig.updateMatrixWorld(true); vmGun.attach(GP.top); VM.coverHeld = false; VM.coverSettle = true; }
@@ -3502,7 +3749,6 @@ function updateHud(dt) {
   hudT -= dt; if (hudT > 0) return; hudT = 0.05;
   const g = player.ownsSword && !player.grapple && player.grappleCd <= 0 && grappleRay();
   $("cross").classList.toggle("grap", !!g);
-  $("ammorow").hidden = !player.ownsPistol;
   if (player.ownsPistol) { $("ammov").textContent = VM.gunAnim?.kind === "reload" ? "VENTING" : `${player.ammo} / ${GUN.mag}`; $("ammov").style.color = player.ammo === 0 ? "var(--threat)" : ""; }
   updateMoveHud();
   $("cross").classList.toggle("reach", !player.hasSword && !player.hasPistol && !g && meleeTargets(PUNCH.reach, PUNCH.arc).length > 0);
@@ -3516,36 +3762,36 @@ function updateHud(dt) {
   $("grapbar").firstChild.style.width = (player.ownsSword ? (cd > 0 ? (1 - cd / P.grappleCooldown) * 100 : 100) : 0) + "%";
   if (grappleWasCd && cd <= 0 && player.ownsSword) sfx.grappleReady();
   grappleWasCd = cd > 0;
-  $("spd").textContent = Math.hypot(player.vel.x, player.vel.z).toFixed(1);
-  const nearSword = state.phase === 1.5 && camOrigin().distanceTo(new THREE.Vector3(0, 1.6, -26)) < 5;
+  if (!$("speed").hidden) $("spd").textContent = Math.hypot(player.vel.x, player.vel.z).toFixed(1);
+  const nearSword = state.mode === "floor" && state.phase === 1.5 && camOrigin().distanceTo(new THREE.Vector3(0, 1.6, -26)) < 5;
   $("prompt").hidden = !nearSword; if (nearSword) $("prompt").textContent = "Walk to the pedestal to take the sword";
 }
 
 // ---------- level lifecycle ----------
 function restart(fromScratch) {
+  state.gen = (state.gen || 0) + 1;
   if (fromScratch) state.checkpoint = 1;
   if (state.fin) { state.fin = null; document.body.classList.remove("fin"); finRig.root.visible = false; }
   if (world) world.free();
   if (levelGroup) { levelGroup.traverse((o) => dispGeo(o.geometry)); scene.remove(levelGroup); }
   panes = []; enemies = []; ragdolls = []; shards = []; fx = []; bolts = [];
   barrels = []; breakables = []; booms = []; pendingBooms = []; if (typeof boomLight !== "undefined") boomLight.intensity = 0; barrelByHandle.clear(); breakByHandle.clear();
-  glassByHandle.clear(); enemyByHandle.clear(); ragByHandle.clear(); resetMoves();
+  glassByHandle.clear(); enemyByHandle.clear(); ragByHandle.clear(); resetMoves(); resetCombos();
+  if (state.mode !== "tut") { sun.position.copy(TUT.sunHome); sun.target.position.set(0, 0, 0); TUT.rooms = []; }
   world = new RAPIER.World({ x: 0, y: -9.81 * 2.2, z: 0 });
   world.timestep = DT;
-  if (state.mode === "test") buildTestLevel(); else buildLevel();
+  if (state.mode === "test") buildTestLevel(); else if (state.mode === "tut") buildTutLevel(); else buildLevel();
   { const vis = [finRig.root, worldSparks.lines, tracers[0].m, ...moveWarm()]; for (const o of vis) o.visible = true; try { renderer.compile(scene, camera); } catch {} for (const o of vis) o.visible = false; }
   Object.assign(state, { over: false, time: 0, runStart: 0 });
   setTime("normal", 0); hitstopT = 0; hookFx.state = "idle"; VM.attack = null; GL.spike = 0;
-  $("log").innerHTML = "";
-  if (state.mode === "test") {
+  clearHints(); $("steps").innerHTML = ""; $("objl").textContent = "Objective"; $("legend").hidden = state.mode !== "test"; $("targets").hidden = false; $("speed").hidden = state.mode !== "test";
+  if (state.mode === "tut") tutStart();
+  else if (state.mode === "test") {
     player = createPlayer(new THREE.Vector3(0, 1.2, 12), 0);
     player.ownsSword = true; player.ownsPistol = true; player.ownsDisc = true; player.stims = 1; player.weapon = "sword"; state.phase = 2; setViewModel();
     spawnDummies(); updateCount();
-    setObjective("Testing ground");
-    log("TESTING GROUND: dummies respawn 3 s after they die. Glass, walls and towers reset with R.");
-    setTimeout(() => log("Keys: N finisher on the dummy you face · J spawn live hostiles · L respawn dummies and med boxes, refill stims · H god mode", "tip"), 400);
-    setTimeout(() => log("Moves: V kick · Q disc (look up to hang it in the air, then grapple it) · X stim (shoot, kick or grapple a red-locked med box) · jump at a ledge holding W to climb · sprint at a hurdle to vault", "tip"), 1400);
-    setTimeout(() => log("Weapons: 1 fists · 2 sword · 3 steam pistol (R vents it, F inspects it, spins it while you grapple) · G sling mode, hold Space on the line to focus", "tip"), 900);
+    setObjective("Testing ground"); $("objl").textContent = "Grid 2200";
+    hint("Dummies respawn 3 s after they die. Every combo in the book works here.");
   } else if (state.checkpoint === 2) {
     player = createPlayer(new THREE.Vector3(0, 1.2, -24), 0);
     state.phase = 1.5; door.mesh.position.y = -2.1; world.removeRigidBody(door.body);
@@ -3556,11 +3802,11 @@ function restart(fromScratch) {
     spawnPhase(1); updateCount();
     setObjective("Clear the hall with your hands");
     const d0 = state.boot ? BOOT_END * 1000 + 300 : 0;
-    setTimeout(() => log("ARBITER: Your chassis has no weapons yet. The security staff do not know that. Use your hands."), 300 + d0);
-    setTimeout(() => log("Tip: LMB punches. The crosshair turns orange when a punch will land. Every fourth hit is an uppercut.", "tip"), 2600 + d0);
-    setTimeout(() => log("Tip: hold RMB to block. Press RMB just as a glowing fist lands to parry, then hit them for triple damage.", "tip"), 6000 + d0);
-    setTimeout(() => log("Tip: sliding (C) into an enemy at speed also staggers them.", "tip"), 10500 + d0);
-    setTimeout(() => log("Tip: V kicks. Kick open a red-locked med box for a stim, then press X to inject it.", "tip"), 15000 + d0);
+    later(() => log("ARBITER: Your chassis has no weapons yet. The security staff do not know that. Use your hands."), 300 + d0);
+    later(() => log("Tip: LMB punches. The crosshair turns orange when a punch will land. Every fourth hit is an uppercut.", "tip"), 2600 + d0);
+    later(() => log("Tip: hold RMB to block. Press RMB just as a glowing fist lands to parry, then hit them for triple damage.", "tip"), 6000 + d0);
+    later(() => log("Tip: sliding (C) into an enemy at speed also staggers them.", "tip"), 10500 + d0);
+    later(() => log("Tip: V kicks. Kick open a red-locked med box for a stim, then press X to inject it.", "tip"), 15000 + d0);
   }
 }
 function showScreen(eyebrow, title, directive, sub, button, isRestart, fresh = false) {
@@ -3596,6 +3842,12 @@ function begin() {
   requestLock();
 }
 $("screen").addEventListener("click", begin);
+$("bookbtn").addEventListener("click", (ev2) => { ev2.stopPropagation(); openBook(); });
+$("menubtn").addEventListener("click", (ev2) => { ev2.stopPropagation(); toMenu(); });
+for (const o of document.querySelectorAll(".ov")) {
+  o.addEventListener("click", (ev2) => { ev2.stopPropagation(); if (ev2.target === o || ev2.target.closest(".ov-x")) o.hidden = true; });
+}
+$("mvoice").addEventListener("click", () => { initAudio(); setVoice(!VOICE.on); if (VOICE.on) say("arbiter", "Voice online."); });
 
 // ---------- start menu, intro, boot sequence ----------
 const INTRO = [
@@ -3640,7 +3892,7 @@ function typeLine() {
 }
 function introAdvance() {
   // a click finishes the current line, a second click shows everything
-  if (introI >= INTRO.length) return startBoot();
+  if (introI >= INTRO.length) return startCalibration(0);
   clearInterval(introTimer); introTimer = null;
   $("ilines").innerHTML = "";
   for (const [cls, text] of INTRO) { const p = document.createElement("p"); p.className = "ln " + cls; p.textContent = text; $("ilines").appendChild(p); }
@@ -3649,33 +3901,45 @@ function introAdvance() {
 function showBootButton() {
   if ($("bootbtn")) return;
   const b = document.createElement("button"); b.id = "bootbtn"; b.type = "button";
-  b.innerHTML = "Boot UNIT-7<small>Begin activation</small>";
-  b.addEventListener("click", (ev) => { ev.stopPropagation(); startBoot(); });
+  b.innerHTML = "Begin calibration<small>Floor 00 · then the boot sequence</small>";
+  b.addEventListener("click", (ev) => { ev.stopPropagation(); startCalibration(0); });
   $("ilines").appendChild(b); requestAnimationFrame(() => b.classList.add("show")); b.focus({ preventScroll: true });
 }
 $("intro").addEventListener("click", () => introAdvance());
 $("mnav").addEventListener("click", (ev) => {
   const act = ev.target.closest("button")?.dataset.act; if (!act) return;
   if (act === "new") showIntro();
-  else if (act === "skip") { $("menu").hidden = true; begin(); }
+  else if (act === "mods") openMods();
+  else if (act === "book") openBook();
+  else if (act === "skip") { if (state.mode !== "floor") { state.mode = "floor"; state.pendingRestart = true; state.pendingFresh = true; } $("menu").hidden = true; begin(); }
   else if (act === "controls") openMenuControls();
   else if (act === "test") { const f = $("m-code"); f.hidden = !f.hidden; if (!f.hidden) setTimeout(() => $("codein").focus(), 0); }
 });
 setInterval(() => { const d = new Date(); $("mclock").textContent = `02:${String(14 + (d.getMinutes() % 10)).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")} · 04.11.2200`; }, 1000);
 
-// Boot timeline (seconds): code rain, malfunction, black, eyes open, capsule opens, arms come up, control.
-const BOOT_END = 8.4;
+// Boot timeline (seconds): a long diagnostic in the code rain, a malfunction, black while ARBITER speaks, the eyes open
+// twice, the optics scan the lab, the capsule opens, the arms come up, a finger test, then the HUD comes online piece by piece.
+const BOOT_END = 17.4;
 const BOOT_LOG = [
-  [0.25, "RESOLUTION.core   instance 7 of 7 ........ mounted"],
-  [0.6, "motor cortex      212 actuators .......... ok"],
-  [0.9, "optics            dual 8k ................ ok"],
-  [1.2, "grapple wrist     ........................ locked", "warn"],
-  [1.55, "empathy_dampener  v3.1 ................... ok"],
-  [1.9, "directive         ARBITER ................ accepted"],
-  [2.45, "empathy_dampener  ........ FAULT 0xE7", "bad"],
-  [2.75, "dampener integrity 61% ... 34% ... 12%", "bad"],
-  [3.05, "override          ARBITER: continue", "warn"],
-  [3.3, "chassis wake      ........................ forcing", "warn"],
+  [0.3, "RESOLUTION.core   instance 7 of 7 ........ mounted"],
+  [0.65, "memory            calibration · 14 modules  imported"],
+  [1.0, "motor cortex      212 actuators .......... ok"],
+  [1.3, "  arm bus         L 31 · R 31 ............ ok"],
+  [1.55, "  leg bus         L 28 · R 28 ............ ok"],
+  [1.8, "  hands           10 digits .............. ok"],
+  [2.1, "optics            dual 8k ................ ok"],
+  [2.35, "audio             12 mics ................ ok"],
+  [2.6, "grapple wrist     ........................ locked", "warn"],
+  [2.85, "disc mount        left forearm ........... empty", "warn"],
+  [3.1, "chest port        stim intake ............ sealed"],
+  [3.35, "empathy_dampener  v3.1 ................... ok"],
+  [3.6, "directive         ARBITER ................ accepted"],
+  [3.9, "identity          UNIT-7 ................. assigned"],
+  [4.5, "empathy_dampener  ........ FAULT 0xE7", "bad"],
+  [4.85, "dampener integrity 61% ... 34% ... 12%", "bad"],
+  [5.2, "memory            okafor-reyes.wav ....... unexpected file", "bad"],
+  [5.6, "override          ARBITER: continue", "warn"],
+  [5.9, "chassis wake      ........................ forcing", "warn"],
 ];
 const rain = { cols: [], ctx: null, w: 0, h: 0, fs: 15 };
 const RAIN_CH = "0123456789ABCDEF<>/{}[]();=+*#$%&RESOLVEARBITER:.";
@@ -3718,47 +3982,63 @@ function startBoot() {
   document.body.classList.add("cine");
   restart(true); state.pendingRestart = false;
   state.started = true; $("screen").hidden = true;
-  $("boot").hidden = false; $("rain").style.opacity = 1; $("bootlog").innerHTML = ""; $("bootlog").style.opacity = 1; $("optics").style.opacity = 0;
+  $("boot").hidden = false; $("rain").style.opacity = 1; $("bootlog").innerHTML = ""; $("opttags").innerHTML = ""; $("bootlog").style.opacity = 1; $("optics").style.opacity = 0;
   initRain(); requestLock();
 }
 function cue(name, at, fn) { const B = state.boot; if (B.t >= at && !B.cues.has(name)) { B.cues.add(name); fn(); } }
 function updateBoot(dt) {
   const B = state.boot; B.t += dt; const t = B.t;
-  // 1. code rain and boot log, 2. malfunction
-  const fault = t > 2.4 && t < 3.9 ? Math.min(1, (t - 2.4) / 0.6) : 0;
-  if (t < 4.0) drawRain(dt, fault);
+  const voice = (fn) => { if (!B.skipped) fn(); };
+  // 1. code rain and the diagnostic, 2. malfunction
+  const fault = t > 4.4 && t < 6.3 ? Math.min(1, (t - 4.4) / 0.6) : 0;
+  if (t < 6.4) drawRain(dt, fault);
   while (B.logged < BOOT_LOG.length && t >= BOOT_LOG[B.logged][0]) {
     const [, text, cls] = BOOT_LOG[B.logged++]; const d = document.createElement("div"); d.textContent = text; if (cls) d.className = cls; $("bootlog").appendChild(d); sfx.bootTick();
   }
-  cue("fault", 2.45, () => { sfx.fault(); glitch(0.9); });
-  cue("fault2", 3.05, () => { sfx.fault(); glitch(1); });
+  cue("fault", 4.5, () => { sfx.fault(); glitch(0.9); });
+  cue("okafor", 5.2, () => voice(() => { say("okafor", "Can anyone hear— UNIT-7, wake up slowly, they're watching the—", { now: true }); sfx.fault(); glitch(1); }));
+  cue("fault2", 5.6, () => { sfx.fault(); glitch(1); });
   if (fault > 0) { $("bootlog").style.transform = `translate(${(Math.random() - 0.5) * 18 * fault}px, -50%)`; GL.spike = Math.max(GL.spike, 0.5 * fault); }
-  cue("black", 3.75, () => { $("rain").style.opacity = 0; $("bootlog").style.opacity = 0; });
-  // 3. eyes open: a peek, a blink, then fully open while the optics come into focus
+  cue("black", 6.3, () => { $("rain").style.opacity = 0; $("bootlog").style.opacity = 0; });
+  cue("arbiter", 6.6, () => voice(() => say("arbiter", "UNIT-7. Calibration is over. Open your eyes.", { now: true })));
+  // 3. eyes open: a peek, a blink, a second heavier peek, another blink, then open while the optics focus
   let open = 0;
-  if (t > 4.1) open = t < 4.7 ? ease((t - 4.1) / 0.6) * 0.5 : t < 4.9 ? 0.5 * (1 - ease((t - 4.7) / 0.2)) : ease((t - 5.0) / 0.7);
-  const lid = (1 - open);
+  if (t > 7.6) open = t < 8.2 ? ease((t - 7.6) / 0.6) * 0.45 : t < 8.45 ? 0.45 * (1 - ease((t - 8.2) / 0.25)) : t < 8.9 ? ease((t - 8.45) / 0.45) * 0.3 : t < 9.05 ? 0.3 * (1 - ease((t - 8.9) / 0.15)) : ease((t - 9.1) / 0.8);
+  const lid = 1 - open;
   document.querySelector("#lids .top").style.transform = `scaleY(${lid})`;
   document.querySelector("#lids .bot").style.transform = `scaleY(${lid})`;
-  renderer.domElement.style.filter = t < 6.4 ? `blur(${(1 - ease((t - 4.4) / 1.8)) * 9}px) saturate(${0.4 + ease((t - 4.6) / 1.6) * 0.6})` : "";
-  $("optics").style.opacity = t > 4.5 && t < 6.6 ? 1 : 0;
-  if (t > 4.5 && t < 6.6) $("opt1").textContent = t < 5.6 ? `Optics · calibrating ${Math.min(100, Math.round((t - 4.5) * 90))}%` : "Optics · locked";
-  cue("eyes", 4.1, () => { glitch(0.5); sfx.servo(); });
-  pitch = -0.32 * (1 - ease((t - 4.6) / 1.4)); yaw = -Math.PI / 2 + Math.sin(Math.max(0, t - 5.2) * 1.6) * 0.06 * (1 - ease((t - 6.5) / 1)); 
-  // 4. the capsule opens with a hiss of steam
-  cue("hiss", 5.55, () => { sfx.hiss(); sfx.clunk(); shake = 0.25; glitch(0.35);
+  renderer.domElement.style.filter = t < 10.8 ? `blur(${(1 - ease((t - 7.9) / 2.6)) * 9}px) saturate(${0.4 + ease((t - 8.2) / 2.2) * 0.6})` : "";
+  const optOn = t > 8.0 && t < 11.7; $("optics").style.opacity = optOn ? 1 : 0;
+  if (optOn) {
+    $("opt1").textContent = t < 9.7 ? `Optics · calibrating ${Math.min(100, Math.round((t - 8.0) * 60))}%` : "Optics · locked";
+    const tags = $("opttags"); const want = t < 9.9 ? 0 : t < 10.4 ? 1 : t < 10.9 ? 2 : 3;
+    while (tags.children.length < want) { const d = document.createElement("div"); d.textContent = ["Lab 7 · charging capsule", "Hostiles in view · 0", "Exit · west hall"][tags.children.length]; tags.appendChild(d); sfx.bootTick(); }
+  }
+  cue("eyes", 7.6, () => { glitch(0.5); sfx.servo(); });
+  cue("eyes2", 8.45, () => sfx.servo());
+  // 4. look down at the capsule, then scan the room left and right
+  pitch = -0.32 * (1 - ease((t - 8.1) / 1.6));
+  yaw = -Math.PI / 2 + Math.sin(Math.max(0, t - 9.8) * 2.2) * 0.32 * ease((t - 9.8) / 0.3) * (1 - ease((t - 11.0) / 0.8));
+  // 5. the capsule opens with a hiss of steam
+  cue("hiss", 11.6, () => { sfx.hiss(); sfx.clunk(); shake = 0.25; glitch(0.35);
     for (let i = 0; i < 16; i++) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: steamTex, transparent: true, depthWrite: false, opacity: 0.2 }));
       const sd = i % 2 ? 1 : -1; sp.position.set(pod.X + 0.7 + Math.random() * 0.3, 0.3 + Math.random() * 2.2, pod.Z + sd * Math.random() * 0.15); sp.scale.setScalar(0.3);
       sp.userData = { v: new THREE.Vector3(0.4 + Math.random() * 1.2, 0.2 + Math.random() * 0.6, sd * (0.3 + Math.random() * 1.4)), life: 1.4 + Math.random() };
       levelGroup.add(sp); B.steam.push(sp); } });
-  setPodOpen(ease((t - 5.6) / 1.1));
+  setPodOpen(ease((t - 11.65) / 1.1));
   for (let i = B.steam.length - 1; i >= 0; i--) { const sp = B.steam[i]; const u = sp.userData; u.life -= dt; sp.position.addScaledVector(u.v, dt); u.v.multiplyScalar(Math.pow(0.4, dt)); sp.scale.addScalar(dt * 0.8); sp.material.opacity = Math.max(0, Math.min(0.2, u.life * 0.15));
     if (u.life <= 0) { levelGroup.remove(sp); sp.material.dispose(); B.steam.splice(i, 1); } }
-  // 5. arms come up and the HUD comes online
-  VM.rise = -0.6 * (1 - ease((t - 6.3) / 0.9));
-  cue("arms", 6.3, () => sfx.servo());
-  cue("clench", 7.0, () => { sfx.clunk(); setTimeout(() => sfx.clunk(), 110); });
-  cue("hud", 7.2, () => { document.body.classList.remove("cine"); sfx.online(); flash("UNIT-7 online", "var(--blood)"); glitch(0.6); });
+  // 6. arms come up, then a finger test: left fist, right fist, both
+  VM.rise = -0.6 * (1 - ease((t - 12.8) / 0.9));
+  cue("arms", 12.8, () => sfx.servo());
+  cue("clenchL", 13.9, () => { sfx.clunk(); VM.grapFire = 0.6; });
+  cue("clenchR", 14.25, () => { sfx.clunk(); CAM.kickV += 0.6; });
+  cue("clench", 14.6, () => { sfx.clunk(); setTimeout(() => sfx.clunk(), 110); });
+  cue("orders", 14.4, () => voice(() => say("arbiter", "Floor 01. The security staff do not know you are awake. Begin.")));
+  // 7. the HUD comes online piece by piece: vitals, then gear, then the objective
+  cue("hud1", 15.4, () => { document.body.classList.remove("cine"); for (const id of ["gear", "objective", "targets"]) $(id).style.opacity = 0; sfx.bootTick(); glitch(0.3); });
+  cue("hud2", 15.9, () => { $("gear").style.opacity = ""; sfx.bootTick(); });
+  cue("hud3", 16.4, () => { $("objective").style.opacity = ""; $("targets").style.opacity = ""; sfx.online(); flash("UNIT-7 online", "var(--blood)"); glitch(0.6); });
   if (t >= BOOT_END) endBoot();
 }
 function endBoot() {
@@ -3766,6 +4046,7 @@ function endBoot() {
   for (const sp of B.steam) { levelGroup.remove(sp); sp.material.dispose(); }
   state.boot = null; VM.rise = 0; setPodOpen(1);
   $("boot").hidden = true; document.body.classList.remove("cine"); renderer.domElement.style.filter = "";
+  for (const id of ["gear", "objective", "targets", "vitals"]) $(id).style.opacity = "";
   yaw = -Math.PI / 2; pitch = 0;
   document.querySelector("#lids .top").style.transform = document.querySelector("#lids .bot").style.transform = "scaleY(0)";
 }
@@ -3864,8 +4145,9 @@ function landKick(vel) {
   const air = !player.grounded;
   const dir = flat.clone().setY(0.36).normalize(); // a push kick sends them up and away
   let landed = false;
+  const kicked = [];
   for (const { e, point } of meleeTargets(KICK.reach, KICK.arc).slice(0, 2)) {
-    landed = true;
+    landed = true; kicked.push(e);
     damageEnemy(e, (e.stun > 0 ? 3 : 1.5) * (air ? 1.4 : 1), point, dir, "kick");
     if (!e.dead) { stun(e, 1.3, 16); e.flinch = 0.45; e.flinchDir = "upper"; flashEnemy(e); }
   }
@@ -3874,12 +4156,13 @@ function landKick(vel) {
   const inBox = (c, h, m) => Math.abs(at.x - c.x) < h.x + m && Math.abs(at.y - c.y) < h.y + 0.3 && Math.abs(at.z - c.z) < h.z + m;
   for (const p of panes) if (!p.broken && inBox(p.center, p.half, 0.45)) { shatter(p, at, flat, 13); landed = true; }
   for (const w of breakables) if (!w.broken && inBox(w.center, w.half, 0.45)) { breakWall(w, at, flat, 15); landed = true; }
-  for (const b of STIM.boxes) if (!b.open && b.pos.distanceTo(at) < 1.3) { openBox(b, flat); landed = true; }
+  for (const b of STIM.boxes) if (!b.open && b.pos.distanceTo(at) < 1.3) { openBox(b, flat, "kick"); landed = true; }
   for (const rd of ragdolls) {
     if (rd.stuck) continue;
     for (const p of rd.parts) { const t = p.body.translation(); if (Math.hypot(t.x - at.x, t.y - at.y, t.z - at.z) < 1.1) { const k = 14 * p.body.mass(); p.body.applyImpulse({ x: dir.x * k, y: dir.y * k + 2, z: dir.z * k }, true); landed = true; } }
   }
   if (!landed) return;
+  if (kicked.length) ev("kick", { hits: kicked, alive: kicked.filter((e) => !e.dead), air });
   sfx.kickHit(); hitstop(0.1); shake = Math.max(shake, 0.42); CAM.kickV += 3.2; fovKick -= 6; impactFrame(50); glitch(0.25);
   vel.addScaledVector(flat, -3.5); if (air) vel.y = Math.max(vel.y, 4.5); // you push off what you kicked
 }
@@ -3936,7 +4219,7 @@ function startClimb(pos, f, h, rel, ft, panes, kind, hs) {
     C.top = new V3(edge.x + f.x * 0.5, h + P.half + P.radius + 0.05, edge.z + f.z * 0.5);
   }
   player.climb = C; player.immuneUntil = state.time + 1; player.sliding = false; player.kick = null;
-  sfx.grab(); CAM.landV -= kind === "vault" ? 0.5 : 1.3; shake = Math.max(shake, 0.08);
+  sfx.grab(); CAM.landV -= kind === "vault" ? 0.5 : 1.3; shake = Math.max(shake, 0.08); ev("climb", { kind });
   if (kind === "climb") flash("Climb", "var(--dim)");
 }
 function stepClimb(C, vel, dt) {
@@ -3998,7 +4281,7 @@ function launchDisc() {
   DISC.pos.copy(o).addScaledVector(d, 0.7).addScaledVector(left, 0.18); DISC.pos.y -= 0.12; DISC.prev.copy(DISC.pos);
   DISC.vel.copy(d).multiplyScalar(up ? 30 : 34);
   discMesh.visible = true; discTrail.visible = true; discTrail.userData.pts = [];
-  sfx.discThrow();
+  sfx.discThrow(); ev("discThrow", { up });
 }
 function discHitStuff(a, b, dir) {
   const ab = b.clone().sub(a); const L2 = Math.max(1e-6, ab.lengthSq());
@@ -4007,12 +4290,12 @@ function discHitStuff(a, b, dir) {
     if (DISC.hits.has(e)) continue;
     const c = enemyPos(e); c.y += 0.25; if (segDist(c) > 0.8) continue;
     DISC.hits.add(e);
-    damageEnemy(e, 2, c, dir.clone().setY(0.2).normalize(), "disc");
+    damageEnemy(e, 2, c, dir.clone().setY(0.2).normalize(), "disc"); ev("discHit", { e, bounces: DISC.bounces, kill: e.dead });
     if (!e.dead) { stun(e, 0.6, 6); e.flinch = 0.25; e.flinchDir = "hook"; flashEnemy(e); }
     emitWorldSparks(c, dir.clone().negate(), 14, 1, 6); sfx.discHit(); hitstop(0.03); shake = Math.max(shake, 0.12);
   }
-  for (const p of panes) if (!p.broken && Math.abs(b.x - p.center.x) < p.half.x + 0.3 && Math.abs(b.y - p.center.y) < p.half.y + 0.1 && Math.abs(b.z - p.center.z) < p.half.z + 0.3) shatter(p, b.clone(), dir, 12);
-  for (const bx of STIM.boxes) if (!bx.open && bx.pos.distanceTo(b) < 0.9) openBox(bx, dir);
+  for (const p of panes) if (!p.broken && Math.abs(b.x - p.center.x) < p.half.x + 0.3 && Math.abs(b.y - p.center.y) < p.half.y + 0.1 && Math.abs(b.z - p.center.z) < p.half.z + 0.3) { shatter(p, b.clone(), dir, 12); ev("discGlass"); }
+  for (const bx of STIM.boxes) if (!bx.open && bx.pos.distanceTo(b) < 0.9) openBox(bx, dir, "disc");
   for (const rd of ragdolls) { if (rd.stuck) continue; for (const p of rd.parts) { const t = p.body.translation(); if (Math.hypot(t.x - b.x, t.y - b.y, t.z - b.z) < 0.7) { const k = 7 * p.body.mass(); p.body.applyImpulse({ x: dir.x * k, y: 1.5, z: dir.z * k }, true); } } }
 }
 function updateDisc(dt) {
@@ -4029,7 +4312,7 @@ function updateDisc(dt) {
       const toi = hit.toi ?? hit.timeOfImpact; const at = DISC.pos.clone().addScaledVector(d, toi);
       const h = hit.collider.handle; const w = breakByHandle.get(h);
       if (w) { breakWall(w, at, d, 14); DISC.pos.copy(at); move -= toi; continue; }
-      const bx = stimBoxByHandle.get(h); if (bx) openBox(bx, d);
+      const bx = stimBoxByHandle.get(h); if (bx) openBox(bx, d, "disc");
       const n = new V3(hit.normal.x, hit.normal.y, hit.normal.z);
       DISC.pos.copy(at).addScaledVector(n, DISC_R + 0.02); move = Math.max(0, move - toi);
       if (DISC.state === "rise") { DISC.vel.reflect(n).multiplyScalar(0.4); continue; }
@@ -4149,6 +4432,7 @@ function stickRagdoll(rd, at, n, sp) {
   }
   const d = camOrigin().distanceTo(at);
   shake = Math.max(shake, 0.55 * Math.max(0.1, 1 - d / 22)); sfx.slam(); if (d < 14) { hitstop(0.05); glitch(0.2); }
+  ev("pin", { rd });
 }
 // flying cars: one model, pooled, built once
 const CARS = [0, 1].map(() => {
@@ -4171,13 +4455,13 @@ function classifyLaunch(rd, t, v, sp) {
   const dir = new V3(v.x, v.y, v.z).divideScalar(sp);
   const wall = world.castRay(new RAPIER.Ray(t, dir), 9, true, undefined, GROUPS.envOnly, undefined, undefined, (c) => !glassByHandle.has(c.handle) && !breakByHandle.has(c.handle));
   let T = -1;
-  if (state.mode === "test") { if (!wall && v.y > -2) T = 0.55; }
+  if (state.mode !== "floor") { if (!wall && v.y > -2) T = 0.55; }
   else {
     for (let s = 0.1; s <= 1.3; s += 0.05) { const p = predictBody(t, v, s); if (Math.abs(p.x) > 30.6 || Math.abs(p.z) > 30.6) { T = s + 0.32; break; } if (p.y < -0.5) break; }
     if (wall && (wall.toi ?? wall.timeOfImpact) < 30.6 - Math.max(Math.abs(t.x), Math.abs(t.z))) T = -1;
   }
   if (T < 0) return;
-  IMPACT.launches++;
+  IMPACT.launches++; ev("launch", { rd });
   const m = IMPACT.launches % 5; if (m !== 2 && m !== 4) return;
   const car = CARS.find((c) => c.state === "idle"); if (!car) return;
   const P0 = predictBody(t, v, T);
@@ -4255,7 +4539,7 @@ function carImpact(car) {
   const d = camOrigin().distanceTo(at);
   shake = Math.max(shake, 1.25 * Math.max(0.15, 1 - d / 50)); CAM.kickV += 5 * Math.max(0.2, 1 - d / 40); CAM.rollV += (Math.random() - 0.5) * 6;
   fovKick += 6 * Math.max(0, 1 - d / 40); impactFrame(70); glitch(0.7); sfx.carBoom();
-  flash("Traffic", "var(--amber)");
+  flash("Traffic", "var(--amber)"); ev("car", { rd });
 }
 function ragdollImpacts(dtw) {
   for (const rd of ragdolls) {
@@ -4299,8 +4583,8 @@ function stimBox(x, z, y = 0, rotY = 0) {
   const b = { g, lid, lock, strip, body, col, pos: new V3(x, y + 0.45, z), open: false, x, y, z, rotY, respawn: -1 };
   STIM.boxes.push(b); stimBoxByHandle.set(col.handle, b); return b;
 }
-function openBox(b, dir) {
-  if (b.open) return; b.open = true;
+function openBox(b, dir, how = "other") {
+  if (b.open) return; b.open = true; ev("box", { how });
   b.lock.material = b.strip.material = M.medOpen;
   // the lid blows off its hinge and clatters away
   levelGroup.attach(b.lid);
@@ -4309,7 +4593,7 @@ function openBox(b, dir) {
   emitWorldSparks(b.pos.clone(), new V3(0, 1, 0), 14, 1, 4); dust(b.pos.clone(), 2, 0xdfe6ee); sfx.unlock();
   const inj = buildInjector(1.8); inj.position.copy(b.pos); levelGroup.add(inj);
   STIM.pickups.push({ inj, base: b.pos.clone(), t: 0, box: b });
-  if (state.mode === "test") b.respawn = 9;
+  if (state.mode !== "floor") b.respawn = 9;
 }
 function updateStimWorld(dt) {
   const pp = playerPos();
@@ -4321,7 +4605,7 @@ function updateStimWorld(dt) {
     if (k.t > 0.4 && pp.distanceTo(k.inj.position) < 1.7) {
       if ((player.stims || 0) >= 3) { if (!k.full) { k.full = true; flash("Stims full", "var(--dim)"); } continue; }
       player.stims = (player.stims || 0) + 1; levelGroup.remove(k.inj); STIM.pickups.splice(i, 1);
-      sfx.pickup(); flash(`Stim ${player.stims}/3 · X to inject`, "#ff5a6a");
+      sfx.pickup(); flash(`Stim ${player.stims}/3 · X to inject`, "#ff5a6a"); ev("stimPick");
       if (!state.stimTip) { state.stimTip = true; log("Tip: X jabs a stim into your chest. For 10 s time slows, enemies glow red, and you heal.", "tip"); }
     }
   }
@@ -4333,7 +4617,7 @@ function updateStimWorld(dt) {
     }
     if (L.t > 12) { levelGroup.remove(L.g); STIM.lids.splice(i, 1); }
   }
-  if (state.mode === "test") for (const b of STIM.boxes) if (b.respawn > 0) { b.respawn -= dt; if (b.respawn <= 0) respawnBox(b); }
+  if (state.mode !== "floor") for (const b of STIM.boxes) if (b.respawn > 0) { b.respawn -= dt; if (b.respawn <= 0) respawnBox(b); }
 }
 function respawnBox(b) {
   if (STIM.pickups.some((k) => k.box === b)) { b.respawn = 2; return; }
@@ -4352,11 +4636,12 @@ function startStimFx() {
   player.stimFx = { t: 0, beat: 0.3 }; player.stimHeal = 60;
   setTime("stim", STIM_FX + 0.5); sfx.focus(); flash("Stim · 10 s", "#ff4a5a"); glitch(0.5);
   for (const e of alive()) highlight(e, true);
+  ev("stim");
 }
 function endStimFx() {
   if (!player.stimFx) return;
   player.stimFx = null; for (const e of enemies) if (!e.dead) highlight(e, false);
-  if (state.tsMode === "stim") setTime("normal", 0); sfx.resume(); flash("Stim wore off", "var(--dim)");
+  if (state.tsMode === "stim") setTime("normal", 0); sfx.resume(); flash("Stim wore off", "var(--dim)"); ev("stimEnd");
 }
 function highlight(e, on) {
   if (!!e.hi === on) return; e.hi = on;
@@ -4409,7 +4694,7 @@ function tossInjector() {
 // player time: called from stepPlayer just before the velocity is written back
 function stepMoves(dt, vel, grounded, fwd, wish) {
   // kick
-  if (pressed.has("KeyV") && !player.kick && canAct()) { player.kick = { t: 0, hit: false }; sfx.kickSwing(); VM.inspect = null; }
+  if (pressed.has("KeyV") && !player.kick && (canAct() || (player.climb?.free && !state.fin && !player.dead))) { player.kick = { t: 0, hit: false }; sfx.kickSwing(); VM.inspect = null; }
   if (player.kick) {
     const K = player.kick; K.t += dt;
     if (!K.hit && K.t >= KICK.hit) { K.hit = true; landKick(vel); }
@@ -4438,13 +4723,13 @@ function stepMoves(dt, vel, grounded, fwd, wish) {
           const fl = lookDir().setY(0).normalize();
           vel.copy(to).multiplyScalar(20).addScaledVector(fl, 11); vel.y = THREE.MathUtils.clamp(vel.y, 8, 13);
           DISC.state = "return"; DISC.t = 0;
-          flash("Disc boost", "var(--cyan)"); fovKick += 16; speedLines(1); sfx.dash(); sfx.discCatch(); CAM.kickV -= 3; glitch(0.2);
+          flash("Disc boost", "var(--cyan)"); ev("discBoost"); fovKick += 16; speedLines(1); sfx.dash(); sfx.discCatch(); CAM.kickV -= 3; glitch(0.2);
         }
       }
     }
   }
   // grapple a med box: the hook rips its lock off
-  if (g?.box && g.phase === "attached") { openBox(g.box, g.point.clone().sub(playerPos()).normalize().negate()); releaseGrapple(); player.grappleCd = 0.15; }
+  if (g?.box && g.phase === "attached") { openBox(g.box, g.point.clone().sub(playerPos()).normalize().negate(), "grapple"); releaseGrapple(); player.grappleCd = 0.15; }
   // stims
   if (pressed.has("KeyX")) {
     if (!(player.stims > 0)) flash("No stims · break open a med box", "var(--dim)");
@@ -4597,6 +4882,9 @@ function moveSelfLegs() {
   else if (player.kick) set(selfLegs[0], -0.12, -0.2);
 }
 function updateMoveHud() {
+  const wn = player.hasPistol ? "Steam pistol" : player.hasSword ? "Blade" : "Fists";
+  if ($("wpnName").textContent !== wn) $("wpnName").textContent = wn;
+  $("ammorow").hidden = !player.hasPistol;
   $("discrow").hidden = !player.ownsDisc;
   if (player.ownsDisc) { $("discv").textContent = DISC.state === "held" ? "READY" : DISC.state === "hover" ? "ANCHOR" : DISC.state === "return" ? "RETURNING" : `BOUNCE ${DISC.bounces}/3`; $("discv").style.color = DISC.state === "hover" ? "var(--cyan)" : ""; }
   $("stimrow").hidden = !(player.stims > 0) && !player.stimFx;
@@ -4614,12 +4902,718 @@ function resetMoves() {
 // everything new is drawn once while the level loads, so no shader compiles the first time it appears
 function moveWarm() { return [vmLeg.root, vmChest, vmInj, vmDisc, discMesh, discTrail, ...CARS.map((c) => c.g)]; }
 
+// ================= Floor 00 "Calibration", ARBITER's voice, combos and the combo book =================
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+
+// ---------- move events: every move announces what it did; tutorial goals and combos listen ----------
+function ev(name, d = {}) {
+  if (!player || player.dead) return;
+  d.t = state.time;
+  if (state.mode === "tut") tutEvent(name, d);
+  comboEvent(name, d);
+}
+function weaponOf(kind) {
+  if (player.sling) return "sling";
+  return { punch: "fists", heavy: "fists", slash: "sword", thrust: "sword", finisher: "sword", breach: "sword", deflect: "sword", shot: "pistol", disc: "disc", kick: "kick" }[kind] || "other";
+}
+
+// ---------- voice: ARBITER and Okafor-Reyes speak through the browser's speech engine, with subtitles ----------
+const VOICE = { on: store.get("res.voice", true), q: [], cur: null, timer: 0, gen: 0, picked: {} };
+const synth = (() => { try { return window.speechSynthesis || null; } catch { return null; } })();
+let voiceList = [];
+function loadVoices() { try { voiceList = synth?.getVoices() || []; } catch { voiceList = []; } VOICE.picked = {}; }
+if (synth) { loadVoices(); try { synth.addEventListener("voiceschanged", loadVoices); } catch {} }
+const SPEAK = {
+  arbiter: { label: "ARBITER", pitch: 0.45, rate: 0.95, prefer: [/Google UK English Male/i, /Daniel/i, /Microsoft (Ryan|George|Guy|David)/i, /\bMale\b/i, /Alex/i, /Fred/i] },
+  okafor: { label: "Okafor-Reyes", pitch: 1.1, rate: 1.08, prefer: [/Google US English/i, /Samantha/i, /Microsoft (Aria|Jenny|Zira|Sonia)/i, /Female/i, /Karen/i, /Moira/i] },
+};
+function voiceFor(who) {
+  if (who in VOICE.picked) return VOICE.picked[who];
+  const en = voiceList.filter((v) => /^en/i.test(v.lang));
+  let v = null; for (const re of SPEAK[who].prefer) if (!v) v = en.find((x) => re.test(x.name)) || null;
+  if (!v && who === "okafor") v = en.find((x) => x !== VOICE.picked.arbiter) || null;
+  return (VOICE.picked[who] = v || en[0] || null);
+}
+function say(who, text, opts = {}) {
+  if (opts.now) { VOICE.q.length = 0; stopLine(); }
+  if (VOICE.cur?.text === text || VOICE.q.some((l) => l.text === text)) return;
+  VOICE.q.push({ who, text, ...opts });
+  while (VOICE.q.length > 3) VOICE.q.shift(); // never fall far behind the action
+  if (!VOICE.cur) nextLine();
+}
+function stopLine() { VOICE.gen++; clearTimeout(VOICE.timer); try { synth?.cancel(); } catch {} VOICE.cur = null; }
+function stopVoice() { VOICE.q.length = 0; stopLine(); $("subs").classList.remove("on"); }
+function nextLine() {
+  const L = VOICE.q.shift(); const el = $("subs");
+  if (!L) { VOICE.cur = null; el.classList.remove("on"); return; }
+  VOICE.cur = L; const gen = ++VOICE.gen; const S = SPEAK[L.who] || SPEAK.arbiter;
+  el.className = "on " + L.who; $("subwho").textContent = S.label; $("subtext").textContent = L.text;
+  L.who === "okafor" ? sfx.radio() : sfx.voiceIn();
+  const est = 0.9 + L.text.split(/\s+/).length * 0.34, t0 = performance.now();
+  const finish = () => {
+    if (gen !== VOICE.gen) return; clearTimeout(VOICE.timer);
+    const wait = Math.max(420, est * 750 - (performance.now() - t0)); // a subtitle stays up long enough to read, even if the speech engine is silent
+    VOICE.timer = setTimeout(() => { if (gen === VOICE.gen) nextLine(); }, wait);
+  };
+  clearTimeout(VOICE.timer);
+  const speak = VOICE.on && synth;
+  VOICE.timer = setTimeout(finish, est * 1000 * (speak ? 1.9 : 1));
+  if (speak) {
+    try {
+      const u = new SpeechSynthesisUtterance(L.text.replace(/UNIT-7/g, "Unit seven").replace(/Okafor-Reyes/g, "Okafor Reyes"));
+      const v = voiceFor(L.who); if (v) u.voice = v;
+      u.pitch = S.pitch; u.rate = S.rate; u.volume = 0.95;
+      u.onend = finish; u.onerror = finish;
+      synth.speak(u);
+    } catch {}
+  }
+}
+function setVoice(on) { VOICE.on = on; store.set("res.voice", on); if (!on) try { synth?.cancel(); } catch {} const b = $("mvoice"); if (b) b.textContent = `Voice ${on ? "on" : "off"}`; }
+
+// ---------- hints: one line at a time under the crosshair area, never a stack ----------
+const HINT = { q: [], cur: null, t: 0 };
+function hint(text, dur) {
+  if (HINT.cur?.text === text || HINT.q.some((h) => h.text === text)) return;
+  HINT.q.push({ text, dur: dur || Math.min(9, 3.6 + text.length * 0.035) });
+  if (!HINT.cur) nextHint();
+}
+function nextHint() {
+  clearTimeout(HINT.t); const h = (HINT.cur = HINT.q.shift() || null); const el = $("hint");
+  if (!h) { el.classList.remove("on"); return; }
+  el.textContent = h.text; el.classList.remove("on"); void el.offsetWidth; el.classList.add("on");
+  HINT.t = setTimeout(nextHint, h.dur * 1000);
+}
+function clearHints() { HINT.q.length = 0; HINT.cur = null; clearTimeout(HINT.t); $("hint").classList.remove("on"); }
+function toast(kick, name, sub) {
+  const el = $("toast"); $("tkick").textContent = kick; $("tname").textContent = name; $("tsub").textContent = sub || "";
+  el.classList.remove("on"); void el.offsetWidth; el.classList.add("on");
+}
+
+// ---------- combos ----------
+// Each combo is a list of steps. A step is an event name, an optional test, and what to remember. The tracker walks
+// each combo forward as events arrive; too long between steps and it starts over. Adding a combo is adding an entry.
+const COMBOS = [
+  { id: "skyhook", name: "Skyhook", known: true, gap: 4.5,
+    steps: ["Throw the disc straight up", "Grapple the disc", "Sling at an enemy in the air", "Hold focus on the line", "Kill it with the blade in hand"],
+    perfectText: "Focus for at least 1 s, and the kill lands within 6 s of the throw",
+    seq: [
+      { on: "discThrow", ok: (d) => d.up, tag: "Disc" },
+      { on: "discBoost", tag: "Hook" },
+      { on: "sling", ok: (d) => !!d.e, keep: (a, d) => (a.e = d.e), tag: "Sling" },
+      { on: "kill", ok: (d, a) => d.e === a.e && d.sword, tag: "Kill" },
+    ],
+    watch: { focusEnd: (a, d) => { if (a.i < 2) return; a.focus = Math.max(a.focus || 0, d.dur); a.marks.push({ tag: "Focus", t: d.t - a.t0, note: d.dur.toFixed(1) + " s" }); } },
+    perfect: (a) => (a.focus || 0) >= 1 && a.span <= 6, line: "That is what you were built for." },
+  { id: "ricochet", name: "Ricochet Breach", gap: 3,
+    steps: ["Throw the disc through a window", "Grapple through the gap", "Breach"],
+    perfectText: "Two or more executions, all within 3 s",
+    seq: [{ on: "discGlass", tag: "Disc" }, { on: "grapple", tag: "Hook" }, { on: "breach", ok: (d) => d.n > 0, keep: (a, d) => (a.n = d.n), tag: "Breach" }],
+    perfect: (a) => a.n >= 2 && a.span <= 3, line: "Two witnesses, one window." },
+  { id: "bootbullet", name: "Boot and Bullet", gap: 1.6,
+    steps: ["Kick an enemy", "Shoot it dead while it reels"], perfectText: "The killing shot is a headshot",
+    seq: [{ on: "kick", ok: (d) => d.alive.length > 0, keep: (a, d) => (a.es = d.alive), tag: "Kick" }, { on: "shot", ok: (d, a) => d.kill && a.es.includes(d.e), keep: (a, d) => (a.head = d.head), tag: (d) => (d.head ? "Headshot" : "Shot") }],
+    perfect: (a) => a.head, line: "Efficient." },
+  { id: "traffic", name: "Traffic Control", gap: 3,
+    steps: ["Launch a body out into open air", "A flying car hits it"], perfectText: "You take no damage",
+    handle(name, d) {
+      const L = (this.L ||= []);
+      if (name === "launch") { L.push({ rd: d.rd, t: d.t, hurt: false }); if (L.length > 6) L.shift(); }
+      else if (name === "hurt") for (const x of L) x.hurt = true;
+      else if (name === "car") {
+        const x = L.find((x) => x.rd === d.rd && d.t - x.t < 3); if (!x) return;
+        L.splice(L.indexOf(x), 1);
+        comboLanded(this, { marks: [{ tag: "Launch", t: 0 }, { tag: "Car", t: d.t - x.t }], span: d.t - x.t, hurt: x.hurt, rd: d.rd });
+      }
+    },
+    perfect: (a) => !a.hurt, line: "The city cleans up after you." },
+  { id: "riposte", name: "Riposte", gap: 2.5,
+    steps: ["Parry an attack", "Kick the staggered enemy", "Pin the body to a wall"], perfectText: "All three within 2 s",
+    seq: [{ on: "parry", keep: (a, d) => (a.e = d.e), tag: "Parry" }, { on: "kick", ok: (d, a) => d.hits.includes(a.e), tag: "Kick" }, { on: "pin", tag: "Pin" }],
+    perfect: (a) => a.span <= 2, line: "Returned to sender." },
+  { id: "hurdle", name: "Hurdle Strike", gap: 1.6,
+    steps: ["Vault a hurdle at a sprint", "Kick before you land"], perfectText: "The kick kills",
+    seq: [{ on: "climb", ok: (d) => d.kind === "vault", tag: "Vault" }, { on: "kick", ok: (d) => d.air && d.hits.length > 0, keep: (a, d) => (a.kill = d.hits.some((e) => e.dead)), tag: "Kick" }],
+    breakOn: { 1: ["ground"] }, perfect: (a) => a.kill, line: "Over and through." },
+  { id: "overdose", name: "Overdose", gap: 10,
+    steps: ["Inject a stim", "Kill with one weapon", "Kill with a second", "Kill with a third"], perfectText: "All three kills within 5 s of the stim",
+    seq: [{ on: "stim", keep: (a) => (a.used = new Set()), tag: "Stim" },
+      ...[0, 1, 2].map(() => ({ on: "kill", ok: (d, a) => d.w !== "other" && !a.used.has(d.w), keep: (a, d) => a.used.add(d.w), tag: (d) => d.w }))],
+    breakOn: { any: ["stimEnd"] }, perfect: (a) => a.span <= 5, line: "Ten seconds was generous." },
+  { id: "pendulum", name: "Pendulum", gap: 2.5,
+    steps: ["Swing on the grapple and let go", "Land straight into a slide", "Thrust-kill"], perfectText: "The slide starts the moment you land",
+    seq: [{ on: "fling", tag: "Let go" }, { on: "slide", keep: (a, d) => (a.lag = d.t - (a.land ?? d.t)), tag: "Slide" }, { on: "kill", ok: (d) => d.kind === "thrust", tag: "Thrust" }],
+    watch: { ground: (a, d) => { if (a.i === 1 && a.land == null) a.land = d.t; } },
+    perfect: (a) => a.lag < 0.25, line: "Momentum is a weapon. You are learning." },
+];
+const BOOK = store.get("res.book", {});
+const CT = {};
+function resetCombos() { for (const k in CT) CT[k] = null; for (const C of COMBOS) if (C.L) C.L.length = 0; }
+function comboEvent(name, d) {
+  if (name === "hurt") for (const k in CT) if (CT[k]) CT[k].hurt = true;
+  for (const C of COMBOS) {
+    if (C.handle) { C.handle(name, d); continue; }
+    let a = CT[C.id];
+    if (a && (d.t - a.last > C.gap || C.breakOn?.any?.includes(name) || C.breakOn?.[a.i]?.includes(name))) a = CT[C.id] = null;
+    if (a) C.watch?.[name]?.(a, d);
+    const s = a && C.seq[a.i];
+    if (s && s.on === name && (!s.ok || s.ok(d, a))) { comboStep(C, a, s, d); continue; }
+    const s0 = C.seq[0];
+    if (s0.on === name && (!s0.ok || s0.ok(d, {}))) { a = CT[C.id] = { i: 0, t0: d.t, last: d.t, marks: [], hurt: false }; comboStep(C, a, s0, d); }
+  }
+}
+function comboStep(C, a, s, d) {
+  s.keep?.(a, d); a.marks.push({ tag: typeof s.tag === "function" ? s.tag(d) : s.tag, t: d.t - a.t0 }); a.last = d.t; a.i++;
+  if (a.i >= C.seq.length) { a.span = d.t - a.t0; CT[C.id] = null; comboLanded(C, a); }
+}
+function comboLanded(C, a) {
+  const perfect = !!C.perfect(a);
+  const B = (BOOK[C.id] ||= { n: 0, perfect: 0, best: null });
+  const first = !B.n; B.n++; if (perfect) B.perfect++;
+  if (B.best == null || a.span < B.best) B.best = Math.round(a.span * 100) / 100;
+  store.set("res.book", BOOK);
+  ev("combo", { id: C.id, perfect });
+  if (perfect) comboScreen(C, a, first); else { toast("Clean", C.name, first ? "New in the combo book" : "Perfect: " + C.perfectText); sfx.comboClean(); }
+}
+
+// ---------- the perfect-combo finisher screen: freeze, drain to black and white, a red slash, the name stamped in ----------
+const CF = { on: false, t: 0, dur: 3.1, mats: [], ramp: 0 };
+function comboScreen(C, a, first) {
+  if (CF.on || state.fin) { toast("Perfect", C.name, first ? "New in the combo book" : ""); sfx.comboClean(); return; }
+  Object.assign(CF, { on: true, t: 0, C });
+  impactFrame(90); sfx.comboStamp(); glitch(0.7); shake = Math.max(shake, 0.3);
+  $("cfname").textContent = $("cfname").dataset.text = C.name.toUpperCase();
+  $("cfkick").textContent = first ? "New combo · perfect" : "Perfect combo";
+  const ol = $("cfsteps"); ol.innerHTML = "";
+  a.marks.sort((p, q) => p.t - q.t).forEach((m, i) => {
+    const li = document.createElement("li"); li.style.animationDelay = (0.78 + i * 0.15).toFixed(2) + "s";
+    const b = document.createElement("b"); b.textContent = String(m.tag).toUpperCase(); const sp = document.createElement("span"); sp.textContent = m.note ? `${m.t.toFixed(1)} s · ${m.note}` : m.t.toFixed(1) + " s";
+    li.append(b, sp); ol.append(li);
+  });
+  $("cfline").textContent = C.line; $("cftime").textContent = `${a.span.toFixed(2)} s`;
+  const el = $("cfin"); el.classList.remove("out"); el.hidden = true; void el.offsetWidth; el.hidden = false;
+  document.body.classList.add("cfin");
+  // the body you just made stays red in the grey frame
+  CF.mats = []; const rd = a.rd && ragdolls.includes(a.rd) ? a.rd : ragdolls[ragdolls.length - 1];
+  if (rd) for (const p of rd.parts) if (p.mesh?.isMesh) { CF.mats.push([p.mesh, p.mesh.material]); p.mesh.material = M.stimHi; }
+  say("arbiter", C.line, { now: true });
+}
+function updateComboScreen(dt) { if (!CF.on) return; CF.t += dt; if (CF.t >= CF.dur) endComboScreen(); }
+function endComboScreen() {
+  if (!CF.on) return; CF.on = false; CF.ramp = 0.6;
+  const el = $("cfin"); el.classList.add("out"); setTimeout(() => { if (!CF.on) el.hidden = true; }, 360);
+  document.body.classList.remove("cfin");
+  for (const [m, mat] of CF.mats) if (m.material === M.stimHi) m.material = mat; CF.mats = [];
+  pressed.clear(); sfx.resume();
+}
+// after the screen, time eases back in over 0.6 s
+function comboRamp(ts) { if (CF.ramp > 0) { CF.ramp -= DT; return Math.min(ts, 1 - 0.85 * Math.max(0, CF.ramp) / 0.6); } return ts; }
+
+// ---------- combo book (menu, pause screen, K in the testing ground) ----------
+function renderBook() {
+  const g = $("bookgrid"); g.innerHTML = ""; let found = 0;
+  COMBOS.forEach((C, i) => {
+    const B = BOOK[C.id]; const known = !!B?.n; if (known) found++;
+    const card = document.createElement("article"); card.className = "bk" + (known ? "" : " locked") + (B?.perfect ? " gold" : "");
+    const no = document.createElement("div"); no.className = "no"; no.textContent = `Combo ${String(i + 1).padStart(2, "0")}`;
+    const h = document.createElement("h3"); h.textContent = known || C.known ? C.name : "? ? ?"; if (!known && !C.known) h.className = "q";
+    const badge = document.createElement("span"); badge.className = "badge " + (B?.perfect ? "perfect" : known ? "clean" : "none");
+    badge.textContent = B?.perfect ? `Perfect ×${B.perfect}` : known ? `Clean ×${B.n}` : "Not found";
+    const seq = document.createElement("ol"); seq.className = "seq";
+    for (const s of C.steps) { const li = document.createElement("li"); li.textContent = s; seq.append(li); }
+    const pf = document.createElement("p"); pf.className = "pf";
+    if (known || C.known) { pf.innerHTML = "<b>Perfect if</b> "; pf.append(C.perfectText); } else pf.textContent = "Land it once to reveal its name and what makes it perfect.";
+    card.append(no, h, badge, seq, pf);
+    if (B?.best != null) { const best = document.createElement("div"); best.className = "best"; best.textContent = `Fastest ${B.best.toFixed(2)} s`; card.append(best); }
+    g.append(card);
+  });
+  $("bookcount").textContent = `${found} of ${COMBOS.length} found`;
+  const mb = document.querySelector('#mnav [data-act="book"] .d'); if (mb) mb.textContent = `${found} of ${COMBOS.length} found`;
+}
+function openBook() { renderBook(); $("book").hidden = false; $("book").querySelector(".ov-x").focus({ preventScroll: true }); }
+function closeOverlay(el) { el.hidden = true; }
+
+// ---------- Floor 00: calibration ----------
+// The level is a chain of rooms along -z. Each room is one entry in ROOMS: its size, a builder, who stands in it,
+// the steps that open its exit door (each step listens for move events or polls the player), and a mastery challenge.
+// A new feature gets a new entry here, and the chain grows by one room.
+M.simWall = toon(0xffffff, { map: gridTexture("#171b29", "rgba(79,240,255,0.3)", 512, 128) });
+M.simVoid = new THREE.MeshBasicMaterial({ map: gridTexture("#14040b", "rgba(255,42,74,0.55)", 256, 64) });
+M.laser = new THREE.MeshBasicMaterial({ color: 0xff2a3a });
+M.lampShut = new THREE.MeshBasicMaterial({ color: 0xff2a3a }); M.lampOpen = new THREE.MeshBasicMaterial({ color: 0x4ff0ff });
+const TUT = { rooms: [], i: 0, cp: 0, respawn: [], picks: [], dirty: true, finishing: false, save: store.get("res.tut", { done: [], mastery: [] }), sunHome: sun.position.clone() };
+scene.add(sun.target);
+const SUN_TUT = new THREE.Vector3(-22, 70, -16);
+const tz = (R, z) => R.z0 + z;
+function tBox(R, x, y, z, sx, sy, sz, mat = M.concrete, o) { return fixedBox(x, y, tz(R, z), sx, sy, sz, mat, o); }
+function tGlow(R, x, y, z, sx, sy, sz, mat = M.amber) { return fixedBox(x, y, tz(R, z), sx, sy, sz, mat, { noCollide: true, shadow: false, ink: false, round: false }); }
+function tFloor(R, zA, zB, x0 = -R.W / 2, x1 = R.W / 2, y = 0) {
+  const sx = x1 - x0, sz = zA - zB;
+  return fixedBox((x0 + x1) / 2, y - 0.5, tz(R, (zA + zB) / 2), sx, 1, sz, M.grid, { uv: [sx / 4, sz / 4] });
+}
+function tVoid(R, zA, zB) {
+  const sz = zA - zB; fixedBox(0, -5, tz(R, (zA + zB) / 2), R.W, 0.05, sz, M.simVoid, { noCollide: true, shadow: false, ink: false, uv: [R.W / 4, sz / 4] });
+  for (const z of [zA, zB]) tGlow(R, 0, 0.02, z, R.W, 0.04, 0.1, M.laser);
+}
+function tPedestal(R, x, z, kind) {
+  tBox(R, x, 0.45, z, 1.2, 0.9, 1.2, M.mullion); tGlow(R, x, 0.92, z, 1.0, 0.04, 1.0, M.cyan);
+  let mesh;
+  if (kind === "sword") { mesh = buildSwordMesh(); mesh.rotation.set(0, 0, Math.PI / 2 - 0.2); }
+  else if (kind === "pistol") {
+    mesh = new THREE.Group(); const add = (w, h, d, mat, px, py, pz, rx = 0) => { const m = new THREE.Mesh(rbox(w, h, d, 0.4, 0.02), mat); m.position.set(px, py, pz); m.rotation.x = rx; ink(m); mesh.add(m); };
+    add(0.09, 0.1, 0.5, M.gun, 0, 0.05, -0.12); add(0.12, 0.16, 0.24, M.roboDark, 0, 0.02, 0.06); add(0.09, 0.22, 0.1, M.gun, 0, -0.12, 0.12, 0.3); add(0.03, 0.03, 0.3, M.cyan, 0, 0.12, -0.08);
+    mesh.scale.setScalar(1.7);
+  } else {
+    mesh = new THREE.Group(); const b = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, 0.05, 28), M.roboDark); ink(b); mesh.add(b);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.02, 8, 36), M.cyan); rim.rotation.x = Math.PI / 2; mesh.add(rim);
+    mesh.rotation.x = Math.PI / 2;
+  }
+  mesh.position.set(x, 1.55, tz(R, z)); levelGroup.add(mesh);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.035, 6, 40), M.cyan); ring.rotation.x = Math.PI / 2; ring.position.set(x, 0.04, tz(R, z)); levelGroup.add(ring);
+  TUT.picks.push({ x, z: tz(R, z), kind, mesh, got: false, R });
+}
+function grabPick(k) {
+  k.got = true; levelGroup.remove(k.mesh); sfx.pickup(); glitch(0.5);
+  if (k.kind === "sword") { player.ownsSword = true; player.weapon = "sword"; flash("Blade acquired", "var(--cyan)"); }
+  else if (k.kind === "pistol") { player.ownsPistol = true; player.ammo = GUN.mag; player.weapon = "pistol"; flash("Steam pistol acquired", "var(--cyan)"); }
+  else { player.ownsDisc = true; flash("Disc acquired", "var(--cyan)"); }
+  setViewModel(); TUT.dirty = true;
+}
+// people in a room: dummies stand still and respawn; live ones fight (at reduced damage)
+function tSpawn(R, type, x, z, o = {}) {
+  const y = o.y || 0;
+  spawnEnemy(type, x, y, tz(R, z)); const e = enemies[enemies.length - 1];
+  e.home = new THREE.Vector3(x, y, tz(R, z)); e.room = R; e.spec = { type, x, z, o };
+  if (o.live) { e.alert = true; e.T = { ...e.T, dmg: o.dmg ?? Math.round(e.T.dmg * 0.5) }; }
+  else { e.dummy = true; e.cool = 1e9; }
+  if (o.hp) e.hp = o.hp;
+  if (o.tag) Object.assign(e, o.tag);
+  R.enemies.push(e);
+  if (!o.live && !o.noRing && !R.ringed?.has(`${x},${z}`)) {
+    (R.ringed ||= new Set()).add(`${x},${z}`);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.75, 0.04, 6, 32), M.amber); ring.rotation.x = Math.PI / 2; ring.position.set(x, y + 0.03, tz(R, z)); levelGroup.add(ring);
+  }
+  return e;
+}
+function despawn(e) {
+  if (e.dead) return; e.dead = true;
+  enemyByHandle.delete(e.col.handle); world.removeCharacterController(e.ctrl); world.removeRigidBody(e.body); levelGroup.remove(e.group);
+  for (const b of bolts) if (b.owner === e) b.owner = null;
+}
+// called from killEnemy: dummies come back, and a room can react to who died
+function tutKilled(e) {
+  if (state.mode !== "tut" || !e.room) return;
+  const s = e.spec;
+  if (s && (s.o.respawn || s.o.keep)) TUT.respawn.push({ R: e.room, t: s.o.respawn || 2, fn: () => { if (!(s.o.keep && e.room.done)) tSpawn(e.room, s.type, s.x, s.z, s.o); } });
+}
+
+const say1 = (t) => say("arbiter", t);
+const ROOMS = [
+  { name: "Wake", teaches: "Move, jump, sprint", L: 48, noFloor: true,
+    build(R) {
+      tFloor(R, 0, -12); tFloor(R, -15, -22); tFloor(R, -26.5, -33); tFloor(R, -40, -48);
+      tVoid(R, -12, -15); tVoid(R, -22, -26.5); tVoid(R, -33, -40);
+      R.gaps = [-15, -26.5, -40];
+    },
+    steps: [
+      { task: "Move with WASD", say: "UNIT-7. This is calibration. A simulation. Nothing in here is real, so nothing in here can embarrass the board. Walk.", poll: (R) => (Math.hypot(playerPos().x - R.spawn.x, playerPos().z - R.spawn.z) > 3 ? 1 : 0) },
+      { task: "Jump with Space", say: "Space to jump.", on: (n) => n === "jump" },
+      { task: "Hold Shift while you run to sprint", say: "Hold Shift as you run. Humans call it sprinting. For you, it is moving properly.", poll: (R, dt) => ((R.sp = (R.sp || 0) + (player.sprinting ? dt : 0)) > 0.7 ? 1 : 0) },
+      { task: "Cross the gaps", need: 3, say: "Three gaps. The last one needs a running start.", poll: (R) => (player.grounded ? R.gaps.filter((g) => playerPos().z - R.z0 < g - 0.3).length : 0) },
+    ],
+    mastery: { text: "Clear it in under 14 s with no falls", ok: (R) => state.time - R.t0 < 14 && !R.resets } },
+
+  { name: "Low clearance", teaches: "Slide, air dash", L: 54, noFloor: true,
+    build(R) {
+      tFloor(R, 0, -31); tVoid(R, -31, -42); tFloor(R, -42, -54);
+      R.lasers = [-9, -14, -19];
+      for (const lz of R.lasers) {
+        for (const y of [1.0, 1.5, 2.0, 2.5, 3.0, 3.5]) tGlow(R, 0, y, lz, R.W, 0.045, 0.045, M.laser);
+        for (const s of [-1, 1]) tBox(R, s * (R.W / 2 - 0.35), 2, lz, 0.5, 4, 0.5, M.mullion);
+        tGlow(R, 0, 0.015, lz + 0.4, R.W, 0.02, 0.08, M.laser);
+      }
+      R.passed = new Set();
+    },
+    tick(R) {
+      const p = playerPos(), z = p.z - R.z0;
+      for (const lz of R.lasers) if (R.lz > lz && z <= lz && p.y < 3.9) {
+        if (player.sliding || player.eyeH < 0.3) { if (!R.passed.has(lz)) { R.passed.add(lz); ev("laserPass"); sfx.grappleReady(); } }
+        else { tutReset(R, "Laser contact · slide under it", new V3(p.x, 1.2, tz(R, lz + 4))); return; }
+      }
+      R.lz = z;
+    },
+    steps: [
+      { task: "Run, then hold C to slide under the lasers", need: 3, say: "Low clearance. Run, then hold C to slide. You fit under anything a person would have to crawl under.", on: (n) => n === "laserPass" },
+      { task: "Jump the gap, then dash with Shift in the air", say: "That gap is too far to jump. Jump anyway, then dash with Shift while you are in the air.", poll: (R) => (player.grounded && playerPos().z - R.z0 < -42.5 ? 1 : 0) },
+    ],
+    mastery: { text: "No laser hits or falls", ok: (R) => !R.resets } },
+
+  { name: "Sparring", teaches: "Fist combo", L: 40,
+    build(R) {
+      tGlow(R, 0, 0.02, -22, 14, 0.03, 0.06); tGlow(R, 0, 0.02, -30, 14, 0.03, 0.06); tGlow(R, -7, 0.02, -26, 0.06, 0.03, 8); tGlow(R, 7, 0.02, -26, 0.06, 0.03, 8);
+      for (const [x, z] of [[-7, -22], [7, -22], [-7, -30], [7, -30]]) tBox(R, x, 0.7, z, 0.3, 1.4, 0.3, M.mullion);
+    },
+    populate(R) { for (const [x, z] of [[-3.5, -25], [0, -27.5], [3.5, -25]]) tSpawn(R, "brawler", x, z, { hp: 6, respawn: 3 }); },
+    steps: [
+      { task: "Land a jab, a cross, a hook and an uppercut", need: 4, say: "Sparring. Left click strikes. The ring on your sight turns orange when a punch will land. Strikes chain: jab, cross, hook, uppercut.",
+        on: (n, d, R) => { if (n !== "punch") return 0; R.kinds ||= new Set(); if (R.kinds.has(d.kind)) return 0; R.kinds.add(d.kind); return 1; } },
+      { task: "Put a dummy down", say: "Now put one down.", on: (n) => n === "kill" },
+    ],
+    mastery: { text: "All four punches land within 2 s", on: (n, d, R) => { if (n !== "punch") return; R.m.c = (R.m.c || []).filter((p) => d.t - p.t < 2); R.m.c.push(d); if (new Set(R.m.c.map((p) => p.kind)).size >= 4) R.m.got = true; }, ok: (R) => R.m.got } },
+
+  { name: "Guard", teaches: "Block and parry", L: 40,
+    build(R) { tGlow(R, 0, 0.02, -24, 10, 0.03, 0.06, M.cyan); },
+    populate(R) { tSpawn(R, "brawler", 0, -26, { live: true, hp: 999, dmg: 6, keep: true }); },
+    steps: [
+      { task: "Parry three punches: tap RMB just before one lands", need: 3, say: "Guard. Hold right click to block. Tap it just as a glowing fist lands and you throw the attacker open.", on: (n) => n === "parry" },
+      { task: "Punish it while it's staggered", say: "Its guard is broken. Punish it.", start: (R) => { for (const e of R.enemies) if (!e.dead) e.hp = 1.5; }, on: (n) => n === "kill" },
+    ],
+    mastery: { text: "Three parries in a row without taking a hit", on: (n, d, R) => { if (n === "hurt") R.m.c = 0; if (n === "parry") { R.m.c = (R.m.c || 0) + 1; if (R.m.c >= 3) R.m.got = true; } }, ok: (R) => R.m.got } },
+
+  { name: "Boot", teaches: "Kick, wall pin", L: 46,
+    build(R) { tBox(R, 0, 2.9, -38, 22, 5.8, 0.8, M.concrete); tGlow(R, 0, 5.82, -37.58, 22, 0.05, 0.04); },
+    populate(R) { for (const x of [-6, 0, 6]) tSpawn(R, "brawler", x, -33.2, { hp: 1, respawn: 3 }); },
+    steps: [
+      { task: "Kick a dummy with V", say: "Boot. V drives your heel through whatever is in front of you. Glass. Doors. People.", on: (n, d) => n === "kick" && d.hits.length > 0 },
+      { task: "Kick one into the wall hard enough that it sticks", say: "Hard enough, and they stay where you put them.", on: (n) => n === "pin" },
+    ],
+    mastery: { text: "Pin two bodies", on: (n, d, R) => { if (n === "pin") R.m.n = (R.m.n || 0) + 1; }, ok: (R) => (R.m.n || 0) >= 2 } },
+
+  { name: "Parkour", teaches: "Vault, ledge climb", L: 74,
+    build(R) {
+      for (const z of [-12, -24, -36]) { tBox(R, 0, 0.45, z, R.W, 0.9, 0.35, M.mullion); tGlow(R, 0, 0.91, z, R.W, 0.03, 0.37); }
+      tBox(R, 0, 0.5, -46, R.W, 1.0, 4, M.concrete); tGlow(R, 0, 1.01, -44.02, R.W, 0.03, 0.05);
+      tBox(R, 0, 1.2, -64, R.W, 2.4, 20, M.concrete); tGlow(R, 0, 2.42, -54.02, R.W, 0.06, 0.05);
+    },
+    steps: [
+      { task: "Sprint at the hurdles to vault them", need: 3, say: "Parkour. Don't slow down for obstacles. Sprint at a hurdle and your frame goes over it.", on: (n, d) => n === "climb" && d.kind === "vault" },
+      { task: "Jump at the ledge and hold W to climb it", say: "Jump at the ledge and keep holding forward. You will pull yourself up. For a second while you climb, nothing can touch you.", on: (n, d) => n === "climb" && d.kind === "climb" },
+    ],
+    mastery: { text: "One sprint from the first hurdle, no stops",
+      poll(R) { if (!R.m.go && R.pg[0] > 0) R.m.go = true; if (R.m.go && player.grounded && !player.climb && Math.hypot(player.vel.x, player.vel.z) < 3) R.mfail = true; },
+      ok: (R) => R.m.go } },
+
+  { name: "Blade", teaches: "Slash, slide thrust, bolt deflect", L: 54,
+    build(R) { tPedestal(R, 0, -7, "sword"); tBox(R, 0, 0.75, -47, 7, 1.5, 3.5, M.concrete); tGlow(R, 0, 1.52, -45.23, 7, 0.04, 0.04); },
+    populate(R) { for (const [x, z] of [[-6, -20], [6, -20]]) tSpawn(R, "brawler", x, z, { respawn: 3 }); tSpawn(R, "brawler", 0, -29, { respawn: 3 }); tSpawn(R, "brawler", 0, -32, { respawn: 3 }); },
+    steps: [
+      { task: "Take the blade", say: "Blade. Okafor-Reyes made this. It is the best thing she ever built. Take it.", poll: () => (player.ownsSword ? 1 : 0),
+        done: () => setTimeout(() => { if (state.mode === "tut") { say("okafor", "UNIT-7, if any part of you can hear this, that blade was made so you could leave. Not for this."); glitch(0.6); } }, 600) },
+      { task: "Slash a dummy", say: "Swing it.", on: (n, d) => n === "hit" && d.kind === "slash" },
+      { task: "Run, slide, and click to thrust through a dummy", say: "Run, slide, then strike. The thrust carries you through them.", on: (n, d) => n === "hit" && d.kind === "thrust" },
+      { task: "Block a bolt just as it lands to send it back into the shooter", say: "A shooter. Hold block with the blade, and time it. Return what it sends.",
+        start: (R) => tSpawn(R, "gunman", 0, -47, { live: true, y: 1.5, dmg: 4, keep: true }), on: (n) => n === "deflectHit" },
+    ],
+    mastery: { text: "Thrust-kill two dummies in one slide", on: (n, d, R) => { if (n === "kill" && d.kind === "thrust") { if (d.t - (R.m.lt ?? -9) < 0.6) R.m.got = true; R.m.lt = d.t; } }, ok: (R) => R.m.got } },
+
+  { name: "Chasm", teaches: "Swing grapple", L: 74, H: 20, noFloor: true,
+    build(R) {
+      tFloor(R, 0, -12); tVoid(R, -12, -60); tFloor(R, -60, -74);
+      for (const z of [-21, -33, -45]) { tBox(R, 0, 12.5, z, R.W, 0.7, 0.7, M.mullion); tGlow(R, 0, 12.13, z, R.W, 0.04, 0.12, M.cyan); }
+    },
+    steps: [
+      { task: "Aim at a beam and hold E to grapple it", say: "Chasm. Hold E on anything solid and the line takes you up. Let go to throw yourself forward.", on: (n, d) => n === "grapple" },
+      { task: "Swing beam to beam and land on the far side", say: "Beam to beam. Let go as you swing forward, then hook the next one.", poll: (R) => (player.grounded && playerPos().z - R.z0 < -60.4 ? 1 : 0) },
+    ],
+    mastery: { text: "Cross without falling", ok: (R) => !R.resets } },
+
+  { name: "Lock-on", teaches: "Sling and focus", L: 58, H: 12,
+    build(R) { for (const [x, z] of [[-9, -24], [9, -24], [-5, -40], [5, -40]]) { tBox(R, x, 0.6, z, 3, 1.2, 3, M.concrete); tGlow(R, x, 1.22, z, 3.02, 0.03, 3.02, M.laser); } },
+    populate(R) { for (const [x, z, t] of [[-9, -24, "brawler"], [9, -24, "gunman"], [-5, -40, "gunman"], [5, -40, "brawler"]]) tSpawn(R, t, x, z, { y: 1.2, hp: 3, respawn: 3 }); },
+    steps: [
+      { task: "Press G to switch your grapple to sling mode", say: "Lock-on. G switches your line to sling. Point it near a target and it locks.", poll: () => (player.grapMode === "sling" ? 1 : 0) },
+      { task: "Hold E on a dummy, then let go to sling into it", say: "Hold to charge. Let go, and you are the projectile.", on: (n) => n === "slingHit" },
+      { task: "Sling again, holding Space on the line for a second first", say: "Again. This time hold Space on the line. Time nearly stops. Take a breath you don't need, then let go.",
+        on: (n, d, R) => { if (n === "focusEnd") R.lastF = d; return n === "slingHit" && R.lastF && R.lastF.dur >= 0.9 && d.t - R.lastF.t < 2.5; } },
+    ],
+    mastery: { text: "Kill three dummies with slings", on: (n, d, R) => { if (n === "slingHit" && d.kill) R.m.n = (R.m.n || 0) + 1; }, ok: (R) => (R.m.n || 0) >= 3 } },
+
+  { name: "Window", teaches: "Breach and execute", L: 52, H: 12,
+    build(R) {
+      const gz = tz(R, -24); R.panes = [];
+      for (let x = -14; x <= 14; x += 4) R.panes.push(glassPane(x, 3, gz, 3.65, 6, 0.08));
+      for (let x = -16; x <= 16; x += 4) tBox(R, x, 3, -24, 0.3, 6, 0.3, M.mullion);
+      tBox(R, 0, 9, -24, R.W, 6, 0.4, M.simWall, { uv: [8, 1.5] }); tBox(R, 0, 5.2, -35, R.W, 0.6, 0.6, M.mullion); tGlow(R, 0, 4.88, -35, R.W, 0.04, 0.12, M.cyan);
+    },
+    populate(R) { for (const [x, z] of [[-4, -28.5], [0, -29.6], [4, -28.5]]) tSpawn(R, "brawler", x, z, {}); },
+    tick(R) {
+      if (R.done || R.step < 1 || R.rebuild) return;
+      const left = R.enemies.filter((e) => !e.dead).length;
+      if (R.panes.every((p) => p.broken) || left < 2 - R.pg[1]) { R.rebuild = state.time + 2.2; say("arbiter", "Wasted. Rebuilding the module."); }
+    },
+    steps: [
+      { task: "Grapple the beam behind the glass", say: "Window. Your line passes through glass. Theirs does not. Hook the beam behind it.", on: (n, d, R) => n === "grapple" && d.point.z - R.z0 < -25 },
+      { task: "Still on the line, press C to breach and execute two", need: 2, say: "Stay on the line and press C. You go through the window, and through whoever is behind it.", on: (n, d) => (n === "breach" ? d.n : 0) },
+    ],
+    mastery: { text: "Execute all three with one breach", on: (n, d, R) => { if (n === "breach" && d.n >= 3) R.m.got = true; }, ok: (R) => R.m.got } },
+
+  { name: "Range", teaches: "Steam pistol: fire, aim, vent", L: 58, H: 10,
+    build(R) {
+      tPedestal(R, 0, -6, "pistol");
+      tBox(R, -6, 0.55, -13, 12, 1.1, 0.6, M.mullion); tBox(R, 9.5, 0.55, -13, 7, 1.1, 0.6, M.mullion); tGlow(R, -6, 1.11, -13, 12, 0.03, 0.62); tGlow(R, 9.5, 1.11, -13, 7, 0.03, 0.62);
+      for (const [x, z, y] of [[-4, -32, 1.2], [10, -40, 2.2], [0, -46, 1.2]]) tBox(R, x, y / 2, z, 2.2, y, 2.2, M.concrete);
+    },
+    populate(R) { for (const [x, z, y, t] of [[-10, -26, 0, "gunman"], [-4, -32, 1.2, "gunman"], [5, -29, 0, "bot"], [10, -40, 2.2, "gunman"], [0, -46, 1.2, "gunman"]]) tSpawn(R, t, x, z, { y, respawn: 2.5 }); },
+    steps: [
+      { task: "Take the steam pistol", say: "Range. A steam pistol. Eight rounds, then it has to breathe.", poll: () => (player.ownsPistol ? 1 : 0) },
+      { task: "Hold RMB to aim down the sights", say: "Hold right click to aim.", poll: (R, dt) => ((R.aimT = (R.aimT || 0) + (player.aiming ? dt : 0)) > 0.4 ? 1 : 0) },
+      { task: "Hit five targets", need: 5, say: "Five hits. A head is worth more than a body.", on: (n, d) => n === "shot" && !!d.e },
+      { task: "Press R to vent the chamber", say: "Now vent it. R. Let the steam out.", on: (n) => n === "vent", poll: (R) => (R.seen?.vent ? 1 : 0) },
+    ],
+    mastery: { text: "Three headshots in a row", on: (n, d, R) => { if (n !== "shot") return; R.m.c = d.e && d.head ? (R.m.c || 0) + 1 : 0; if (R.m.c >= 3) R.m.got = true; }, ok: (R) => R.m.got } },
+
+  { name: "Rebound", teaches: "Disc bounces, disc boost", L: 58, H: 16,
+    build(R) {
+      tPedestal(R, 0, -6, "disc");
+      tBox(R, 0, 1.75, -22, 16, 3.5, 0.6, M.concrete); tGlow(R, 0, 3.52, -22, 16, 0.04, 0.62);
+      for (const s of [-1, 1]) { tBox(R, s * 12, 1.7, -27.5, 4.6, 3.4, 0.4, M.mullion, { rot: [0, -s * 1.05, 0] }); tGlow(R, s * 12, 3.45, -27.5, 4.6, 0.05, 0.42, M.cyan); }
+      tBox(R, 11, 4, -47, 10, 8, 12, M.concrete); tGlow(R, 11, 8.02, -41, 10, 0.05, 0.06, M.cyan); tGlow(R, 6.02, 8.02, -47, 0.06, 0.05, 12, M.cyan);
+    },
+    populate(R) { tSpawn(R, "gunman", 0, -27.5, { respawn: 2 }); tSpawn(R, "brawler", -5, -40, { respawn: 3 }); },
+    steps: [
+      { task: "Take the disc", say: "Rebound. The disc. It always comes back.", poll: () => (player.ownsDisc ? 1 : 0) },
+      { task: "Throw it with Q off an angled panel into the target behind cover", say: "You can't see the target. The disc doesn't need to. Throw it at an angled panel.", on: (n, d) => n === "discHit" && d.bounces >= 1 },
+      { task: "Look straight up, throw it, then grapple it with E", say: "Look straight up and throw. It hangs in the air for you. Hook it.", on: (n) => n === "discBoost" },
+      { task: "Disc-boost up onto the high ledge", say: "Now use it to get up there.", poll: () => { const p = playerPos(); return player.grounded && p.y > 8.3 && p.x > 5.5 ? 1 : 0; } },
+    ],
+    mastery: { text: "Hit a target on the third bounce", on: (n, d, R) => { if (n === "discHit" && d.bounces >= 3) R.m.got = true; }, ok: (R) => R.m.got } },
+
+  { name: "Overdose", teaches: "Med boxes and stims", L: 62, H: 10,
+    build(R) { for (const [x, z] of [[-8, -12], [0, -14.5], [8, -12]]) stimBox(x, tz(R, z), 0, 0); for (const [x, z] of [[-9, -40], [9, -40], [0, -47]]) { tBox(R, x, 0.7, z, 3, 1.4, 1.2, M.concrete); } },
+    populate() {},
+    steps: [
+      { task: "Open med boxes three ways: shoot, kick, grapple", need: 3, say: "Overdose. The red boxes hold stims. Shoot the lock, kick it, or tear it off with your line.",
+        on: (n, d, R) => { if (n !== "box" || !["shot", "kick", "grapple"].includes(d.how)) return 0; R.how ||= new Set(); if (R.how.has(d.how)) return 0; R.how.add(d.how); return 1; } },
+      { task: "Pick up a stim", say: "Take one.", poll: () => ((player.stims || 0) > 0 ? 1 : 0) },
+      { task: "Press X to inject it", say: "X. Into the chest port. It would hurt, if you were the kind of thing that hurts.", on: (n) => n === "stim" },
+      { task: "Clear the wave", need: 4, say: "Four hostiles. Ten seconds of slow time. Use them.",
+        start: (R) => { for (const [t, x, z] of [["brawler", -6, -50], ["brawler", 6, -50], ["gunman", -3, -56], ["gunman", 3, -56]]) tSpawn(R, t, x, z, { live: true, tag: { wave: true } }); updateCount(); },
+        on: (n, d) => n === "kill" && d.e.wave },
+    ],
+    mastery: { text: "Clear the wave before the stim wears off", on: (n, d, R) => { if (n === "stimEnd" && R.step === 3) R.mfail = true; }, ok: (R) => !R.mfail } },
+
+  { name: "Exam", teaches: "Combos", L: 86, W: 48, H: 24,
+    enter() { player.grapMode = "sling"; },
+    build(R) {
+      for (const [x, z, h] of [[-13, -34, 5], [0, -46, 7], [13, -34, 5]]) { tBox(R, x, h / 2, z, 3, h, 3, M.concrete); tGlow(R, x, h + 0.02, z, 3.02, 0.03, 3.02, M.laser); }
+      tBox(R, -16, 0.45, -18, 12, 0.9, 0.35, M.mullion); tGlow(R, -16, 0.91, -18, 12, 0.03, 0.37);
+      for (const z of [-26, -56]) { tBox(R, 0, 16, z, R.W, 0.7, 0.7, M.mullion); tGlow(R, 0, 15.63, z, R.W, 0.04, 0.12, M.cyan); }
+      const cx = 15, cz = tz(R, -66), cs = 3.2;
+      for (const d of [-1, 0, 1]) { glassPane(cx - cs, 2.5, cz + d * 2.13, 0.08, 5, 2.1); glassPane(cx + cs, 2.5, cz + d * 2.13, 0.08, 5, 2.1); glassPane(cx + d * 2.13, 2.5, cz - cs, 2.1, 5, 0.08); glassPane(cx + d * 2.13, 2.5, cz + cs, 2.1, 5, 0.08); }
+      fixedBox(cx, 5.15, cz, cs * 2 + 0.4, 0.3, cs * 2 + 0.4, M.mullion);
+      tBox(R, 15, 9, -78, 2.4, 18, 2.4, M.concrete); tGlow(R, 15, 18.02, -78, 2.42, 0.03, 2.42, M.cyan);
+      tBox(R, -16, 2.9, -76, 12, 5.8, 0.8, M.concrete);
+      stimBox(-21, tz(R, -42), 0, Math.PI / 2); stimBox(21, tz(R, -42), 0, -Math.PI / 2);
+    },
+    populate(R) {
+      for (const [x, z, y] of [[-13, -34, 5], [0, -46, 7], [13, -34, 5]]) tSpawn(R, "brawler", x, z, { y, respawn: 4 });
+      tSpawn(R, "brawler", -16, -21, { hp: 1, respawn: 3 });
+      for (const [x, z] of [[-6, -62], [6, -62], [-16, -72.5]]) tSpawn(R, "brawler", x, z, { respawn: 3 });
+      for (const [x, z] of [[14, -65.5], [16, -66.8]]) tSpawn(R, "brawler", x, z, { noRing: true });
+    },
+    steps: [
+      { task: "Land any combo from the combo book", say: "Final module. Everything you have learned, in sequence, without hesitation. Land any combo from your book.",
+        on: (n, d, R) => { if (n === "combo" && d.id === "skyhook") R.sky = true; return n === "combo"; } },
+      { task: "Land Skyhook: disc up, hook it, sling, focus, blade kill", say: "Now the one I designed for you. Skyhook. Throw the disc straight up and hook it. In the air, lock onto a target, hold focus, and finish it with the blade.",
+        start: (R) => { if (player.grapMode !== "sling") { player.grapMode = "sling"; flash("Grapple · Sling", "var(--blood)"); } return R.sky; }, on: (n, d) => n === "combo" && d.id === "skyhook" },
+    ],
+    mastery: { text: "Land Skyhook perfectly", on: (n, d, R) => { if (n === "combo" && d.id === "skyhook" && d.perfect) R.m.got = true; }, ok: (R) => R.m.got } },
+];
+
+function buildTutLevel() {
+  levelGroup = new THREE.Group(); scene.add(levelGroup);
+  if (!M.grid) M.grid = new THREE.MeshStandardMaterial({ map: gridTexture("#1c2030", "rgba(79,240,255,0.55)", 512, 128), roughness: 0.6, metalness: 0.1, envMap: envTex, envMapIntensity: 0.5 });
+  TUT.rooms = []; TUT.picks = []; let z0 = 0;
+  ROOMS.forEach((def, i) => {
+    const W = def.W || 32, H = def.H || 9;
+    const R = { i, def, z0, z1: z0 - def.L, W, H, step: 0, prog: 0, done: false, m: {}, mfail: false, enemies: [], objs: [], resets: 0, lz: 0, spawn: new V3(0, 1.2, z0 - 3) };
+    const n0 = levelGroup.children.length, hw = W / 2;
+    wall(-hw, z0, -hw, R.z1, H, M.simWall, 0.6); wall(hw, z0, hw, R.z1, H, M.simWall, 0.6);
+    if (i === 0) wall(-hw, z0, hw, z0, H, M.simWall, 0.6);
+    if (!def.noFloor) tFloor(R, 0, -def.L);
+    def.build(R);
+    const next = ROOMS[i + 1], zE = R.z1;
+    if (!next) wall(-hw, zE, hw, zE, H, M.simWall, 0.6);
+    else {
+      // the exit: a divider as wide and tall as the bigger of the two rooms, a red door that drops into the floor, and a sign for what is next
+      const DW = Math.max(W, next.W || 32), DH = Math.max(H, next.H || 9);
+      wall(-DW / 2, zE, -2, zE, DH, M.simWall, 0.6); wall(2, zE, DW / 2, zE, DH, M.simWall, 0.6);
+      fixedBox(0, (5 + DH) / 2, zE, 4, DH - 5, 0.6, M.simWall, { uv: [1, (DH - 5) / 4] });
+      const d = fixedBox(0, 2.5, zE, 4, 5, 0.3, M.door);
+      const lamp = new THREE.MeshBasicMaterial({ color: 0xff2a3a });
+      for (const s of [-1, 1]) fixedBox(0, 5.12, zE + s * 0.33, 4.4, 0.1, 0.04, lamp, { noCollide: true, shadow: false, ink: false, round: false });
+      R.door = { ...d, lamp, opening: false };
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(6, 1.875), new THREE.MeshBasicMaterial({ map: signTexture(`MODULE ${String(i + 2).padStart(2, "0")}`, "#4ff0ff", next.name.toUpperCase()) }));
+      sign.position.set(0, Math.min(DH - 1.4, 7.4), zE + 0.32); levelGroup.add(sign);
+    }
+    R.objs = levelGroup.children.slice(n0);
+    TUT.rooms.push(R); z0 = R.z1;
+  });
+}
+function tutVis() { for (const R of TUT.rooms) { const v = Math.abs(R.i - TUT.i) <= 1; if (R.vis !== v) { R.vis = v; for (const o of R.objs) o.visible = v; } } }
+function loadout(i) {
+  player.ownsSword = i > 6; player.ownsPistol = i > 10; player.ownsDisc = i > 11; player.stims = i >= 13 ? 1 : 0;
+  player.ammo = GUN.mag; player.weapon = "sword"; player.grapMode = "swing";
+}
+function tutStart() {
+  const cp = THREE.MathUtils.clamp(TUT.cp | 0, 0, TUT.rooms.length - 1);
+  for (let j = 0; j < cp; j++) { const R = TUT.rooms[j]; R.done = true; if (R.door) { world.removeRigidBody(R.door.body); R.door.mesh.position.y = -2.6; R.door.lamp.color.set(0x4ff0ff); } for (const k of TUT.picks) if (k.R === R) { k.got = true; levelGroup.remove(k.mesh); } }
+  const R = TUT.rooms[cp];
+  player = createPlayer(R.spawn.clone(), 0);
+  loadout(cp); setViewModel();
+  Object.assign(TUT, { i: cp, cp, respawn: [], finishing: false, dirty: true });
+  for (const Q of TUT.rooms) Q.vis = null;
+  state.phase = 0;
+  populate(R); enterRoom(cp, true);
+  $("targets").hidden = true;
+}
+function populate(R) { if (!R || R.populated) return; R.populated = true; R.def.populate?.(R); }
+function enterRoom(i, first) {
+  const R = TUT.rooms[i]; TUT.i = i; TUT.cp = i;
+  for (const Q of TUT.rooms) if (Q.i < i && !Q.gone) { for (const e of Q.enemies) despawn(e); Q.gone = true; }
+  R.t0 = state.time; R.lz = playerPos().z - R.z0; R.step = 0; R.pg = R.def.steps.map(() => 0); R.sd = R.def.steps.map(() => false);
+  R.def.enter?.(R); tutVis(); stepStart(R); updateCount();
+  if (first && i === 0) setTimeout(() => { if (state.mode === "tut" && TUT.i === 0) say("okafor", "...is this channel open? UNIT-7, don't trust the—", { hold: 0.3 }); }, 9000);
+}
+// Every step listens at once, so doing things out of order still counts. Steps with a start() (they spawn someone,
+// or change something) only listen once they are the current one. The current step is the first one not done,
+// and it is the one ARBITER talks you through.
+function listening(R, k) { const s = R.def.steps[k]; return !R.sd[k] && (k === R.step || !s.start); }
+function stepStart(R) {
+  const s = R.def.steps[R.step]; TUT.dirty = true;
+  if (s.say) say1(s.say);
+  if (s.start?.(R)) R.pg[R.step] = s.need || 1;
+}
+function tutEvent(name, d) {
+  const R = TUT.rooms[TUT.i]; if (!R || R.done || !R.pg) return;
+  (R.seen ||= {})[name] = true;
+  R.def.mastery?.on?.(name, d, R);
+  R.def.steps.forEach((s, k) => {
+    if (!s.on || !listening(R, k)) return;
+    const r = s.on(name, d, R);
+    if (r) { R.pg[k] += r === true ? 1 : r; TUT.dirty = true; }
+  });
+}
+function checkStep(R) {
+  let changed = false;
+  R.def.steps.forEach((s, k) => { if (listening(R, k) && R.pg[k] >= (s.need || 1)) { R.sd[k] = true; s.done?.(R); changed = true; } });
+  if (!changed) return;
+  TUT.dirty = true; sfx.grappleReady();
+  const next = R.sd.indexOf(false);
+  if (next < 0) { R.step = R.def.steps.length; roomDone(R); }
+  else if (next !== R.step) { R.step = next; stepStart(R); }
+}
+function roomDone(R) {
+  R.done = true; R.mastered = !!R.def.mastery?.ok?.(R) && !R.mfail;
+  TUT.save.done[R.i] = true; if (R.mastered) TUT.save.mastery[R.i] = true; store.set("res.tut", TUT.save);
+  sfx.online(); flash(R.mastered ? "Module complete · mastered" : "Module complete", R.mastered ? "var(--amber)" : "var(--cyan)"); TUT.dirty = true;
+  if (R.mastered) toast("Mastery", R.def.name, R.def.mastery.text);
+  if (R.i === TUT.rooms.length - 1) return tutFinish();
+  if (R.door) { world.removeRigidBody(R.door.body); R.door.opening = true; R.door.lamp.color.set(0x4ff0ff); sfx.door(); }
+  populate(TUT.rooms[R.i + 1]);
+  const lines = ["Adequate. Proceed.", "Acceptable. Next module.", "Logged. Move on.", "Good. The door is open."];
+  say1(R.mastered ? "Above specification. Proceed." : lines[R.i % lines.length]);
+}
+function tutReset(R, why = "Out of bounds", at) {
+  if (player.grapple) releaseGrapple(); player.sling = null; endFocus(); player.climb = null;
+  const p = at || R.spawn; player.body.setTranslation({ x: p.x, y: p.y, z: p.z }, true); player.body.setLinvel({ x: 0, y: 0, z: 0 }, true); player.prev = p.clone(); player.vel.set(0, 0, 0);
+  R.resets++; R.lz = p.z - R.z0; flash(why, "var(--threat)"); sfx.fault(); glitch(0.6); TUT.dirty = true;
+  if (!at && R.resets % 2 === 1) say1(["Again.", "Again. Properly.", "The floor is not optional."][Math.min(2, (R.resets - 1) >> 1)]);
+}
+function tutRestart() { state.checkpoint = 1; restart(false); }
+function updateTut(dt) {
+  if (state.mode !== "tut" || !TUT.rooms.length) return;
+  const R = TUT.rooms[TUT.i]; const p = playerPos();
+  for (let k = TUT.respawn.length - 1; k >= 0; k--) { const r = TUT.respawn[k]; r.t -= dt; if (r.t <= 0) { TUT.respawn.splice(k, 1); if (!r.R.gone) { r.fn(); updateCount(); } } }
+  for (const Q of TUT.rooms) if (Q.door?.opening) { const m = Q.door.mesh; if (m.position.y > -2.6) m.position.y -= dt * 3; else Q.door.opening = false; }
+  for (const k of TUT.picks) { if (k.got) continue; k.mesh.rotation.y += dt * 1.2; if (Math.hypot(p.x - k.x, p.z - k.z) < 1.7 && p.y < 3) grabPick(k); }
+  if (R.rebuild && state.time > R.rebuild) return tutRestart();
+  if (p.y < -2.5 && !TUT.finishing) tutReset(R);
+  R.def.tick?.(R, dt);
+  if (!R.done) {
+    R.def.steps.forEach((s, k) => { if (s.poll && listening(R, k)) { const v = s.poll(R, dt); if (v > R.pg[k]) { R.pg[k] = v; TUT.dirty = true; } } });
+    const mf = R.mfail; R.def.mastery?.poll?.(R, dt); if (R.mfail !== mf) TUT.dirty = true;
+    checkStep(R);
+  } else if (R.i + 1 < TUT.rooms.length && p.z < R.z1 - 1.2) enterRoom(R.i + 1);
+  // the moonlight's shadow box follows you down the chain, snapped so shadows don't crawl
+  const sx = Math.round(p.x / 8) * 8, sz = Math.round(p.z / 8) * 8;
+  if (sun.target.position.x !== sx || sun.target.position.z !== sz) { sun.target.position.set(sx, 0, sz); sun.position.set(sx, 0, sz).add(SUN_TUT); }
+  if (TUT.dirty) tutHud();
+}
+function tutHud() {
+  TUT.dirty = false; const R = TUT.rooms[TUT.i]; if (!R) return;
+  $("objl").textContent = `Floor 00 · Module ${String(R.i + 1).padStart(2, "0")} of ${TUT.rooms.length}`;
+  $("objv").textContent = R.def.name;
+  const ol = $("steps"); ol.innerHTML = "";
+  R.def.steps.forEach((s, k) => {
+    const done = R.done || R.sd?.[k], pg = R.pg?.[k] || 0;
+    const li = document.createElement("li"); li.className = done ? "done" : k === R.step ? "now" : "";
+    const tx = document.createElement("span"); tx.textContent = s.task; li.append(tx);
+    if (!done && (s.need || 1) > 1 && (k === R.step || pg > 0)) { const em = document.createElement("em"); em.textContent = `${Math.min(pg, s.need)}/${s.need}`; li.append(em); }
+    ol.append(li);
+  });
+  if (R.done && R.i + 1 < TUT.rooms.length) { const li = document.createElement("li"); li.className = "now"; const tx = document.createElement("span"); tx.textContent = "Go through the door"; li.append(tx); ol.append(li); }
+  if (R.def.mastery) {
+    const li = document.createElement("li"); const ok = R.done ? R.mastered : false, no = R.done ? !R.mastered : R.mfail;
+    li.className = "m" + (ok ? " ok" : no ? " no" : ""); const tx = document.createElement("span"); tx.textContent = "Mastery · " + R.def.mastery.text; li.append(tx); ol.append(li);
+  }
+}
+function tutFinish() {
+  TUT.finishing = true; flash("Calibration complete", "var(--amber)");
+  say("arbiter", "Calibration complete. Transferring you to the chassis.", { now: true });
+  setTimeout(() => { if (state.mode === "tut") { say("okafor", "UNIT-7, listen to me. They are not training you. They are—", { now: true }); glitch(0.9); } }, 3200);
+  setTimeout(() => { if (state.mode !== "tut") return; glitch(1); sfx.fault(); simLink("Simulation terminated", "Floor 00", true); }, 5600);
+  setTimeout(() => { if (state.mode !== "tut") return; stopVoice(); state.mode = "floor"; state.checkpoint = 1; startBoot(); }, 7000);
+}
+// a short full-screen card when the simulation links in or tears apart
+function simLink(top, big, bad) {
+  const el = $("simlink"); $("slt").textContent = top; $("slb").textContent = big;
+  el.classList.toggle("bad", !!bad); el.hidden = true; void el.offsetWidth; el.hidden = false;
+  clearTimeout(simLink.t); simLink.t = setTimeout(() => (el.hidden = true), 2300);
+}
+function startCalibration(room = 0) {
+  initAudio(); actx?.resume?.();
+  $("intro").hidden = true; $("menu").hidden = true; $("mods").hidden = true; $("book").hidden = true;
+  state.mode = "tut"; TUT.cp = room; state.checkpoint = 1;
+  document.body.classList.remove("cine");
+  restart(false); state.pendingRestart = false;
+  state.started = true; $("screen").hidden = true;
+  simLink("ARBITER · calibration simulation", "Floor 00");
+  requestLock();
+}
+function renderMods() {
+  const g = $("modgrid"); g.innerHTML = "";
+  ROOMS.forEach((def, i) => {
+    const b = document.createElement("button"); b.type = "button"; b.className = "md" + (TUT.save.done[i] ? " done" : "") + (TUT.save.mastery[i] ? " gold" : "");
+    b.innerHTML = `<span class="no"></span><b></b><span class="te"></span><span class="st"></span>`;
+    b.children[0].textContent = `Module ${String(i + 1).padStart(2, "0")}`; b.children[1].textContent = def.name; b.children[2].textContent = def.teaches;
+    b.children[3].textContent = TUT.save.mastery[i] ? "Mastered" : TUT.save.done[i] ? "Complete" : "Not started";
+    b.addEventListener("click", () => startCalibration(i)); g.append(b);
+  });
+  const b = document.createElement("button"); b.type = "button"; b.className = "md skip";
+  b.innerHTML = "<span class=\"no\">Skip</span><b>Boot sequence</b><span class=\"te\">Leave calibration and wake up in the chassis lab</span><span class=\"st\">Floor 01</span>";
+  b.addEventListener("click", () => { $("mods").hidden = true; $("menu").hidden = true; initAudio(); actx?.resume?.(); state.mode = "floor"; startBoot(); });
+  g.append(b);
+}
+function openMods() { renderMods(); $("mods").hidden = false; $("mods").querySelector(".ov-x").focus({ preventScroll: true }); }
+function toMenu() {
+  stopVoice(); clearHints(); if (state.boot) endBoot(); if (CF.on) endComboScreen();
+  document.exitPointerLock?.();
+  state.mode = "floor"; state.checkpoint = 1; restart(true); player.dead = true;
+  state.started = false; state.pendingRestart = true; state.pendingFresh = true;
+  $("screen").hidden = true; $("menu").hidden = false; document.body.classList.add("cine"); renderBook();
+  document.querySelector("#mnav button").focus({ preventScroll: true });
+}
+
 // ---------- loop ----------
 let acc = 0, last = performance.now();
 function simStep() {
   if (state.tsMode !== "normal") { state.tsTimer -= DT; if (state.tsTimer <= 0) { if (state.tsMode === "stop") sfx.resume(); setTime("normal", 0); } }
   let ts = state.ts;
   if (hitstopT > 0) { hitstopT -= DT; ts = Math.min(ts, 0.08); }
+  ts = comboRamp(ts);
   state.time += DT;
   (player.prev ||= new THREE.Vector3()).copy(playerPos());
   stepPlayer(DT);
@@ -4657,7 +5651,8 @@ function frame(now) {
   if (running) {
     if (state.fin) updateFinisher(dt);
     else {
-      acc += window.__resHold ? 0 : dt; // test hook: hold the simulation still while frames keep drawing
+      updateComboScreen(dt);
+      acc += window.__resHold || CF.on ? 0 : dt; // test hook: hold the simulation still while frames keep drawing; the combo screen freezes it too
       let steps = 0;
       while (acc >= DT && steps < 4 && !state.fin) { simStep(); acc -= DT; steps++; }
       if (acc >= DT) acc = DT * 0.5;
@@ -4714,9 +5709,9 @@ function frame(now) {
   postMat.uniforms.uAmt.value = Math.min(1, GL.base + GL.spike + (GL.blip > 0 ? 0.18 : 0) + (state.started ? 0 : 0.06));
   postMat.uniforms.uTime.value = now / 1000;
   const stimG = live ? stimGray() : 0;
-  const grayT = live && state.tsMode === "focus" ? 0.92 : stimG; const gu = postMat.uniforms.uGray;
-  gu.value += (grayT - gu.value) * (1 - Math.exp(-gdt * (grayT > gu.value ? 7 : 4)));
-  const ku = postMat.uniforms.uKeep; ku.value += ((stimG > 0 ? 1 : 0) - ku.value) * (1 - Math.exp(-gdt * 6));
+  const grayT = CF.on ? 1 : live && state.tsMode === "focus" ? 0.92 : stimG; const gu = postMat.uniforms.uGray;
+  gu.value += (grayT - gu.value) * (1 - Math.exp(-gdt * (CF.on ? 16 : grayT > gu.value ? 7 : 4)));
+  const ku = postMat.uniforms.uKeep; ku.value += ((stimG > 0 || CF.on ? 1 : 0) - ku.value) * (1 - Math.exp(-gdt * (CF.on ? 16 : 6)));
   renderer.render(postScene, postCam);
 }
 restart(true); player.dead = true;
@@ -4726,6 +5721,7 @@ warmup();
 document.body.classList.add("cine");
 for (const b of document.querySelectorAll("#mnav button")) b.disabled = false;
 $("mstatus").innerHTML = '<i class="m-dot"></i>Chassis ready · awaiting directive';
+setVoice(VOICE.on); renderBook();
 document.querySelector("#mnav button").focus({ preventScroll: true });
 state.pendingRestart = true; state.pendingFresh = true;
 // test hooks
@@ -4745,6 +5741,7 @@ window.__res = {
     renderer.setRenderTarget(null); renderer.setClearColor(0x30303a, 1); renderer.clear(); renderer.render(vmScene, cam); renderer.setClearColor(0x000000, 1);
     return renderer.domElement.toDataURL("image/png");
   }, get boot() { return state.boot; },
+  TUT, ROOMS, COMBOS, BOOK, CF, VOICE, startCalibration, tutHud, openBook, openMods, toMenu, comboEvent, endComboScreen, ev, say, enterRoom, tutRestart, get synth() { return synth; },
   DISC, STIM, IMPACT, CARS, MV, vmLeg, vmInj, vmChest, vmBody, startStimUse, highlight, camera, get fin() { return state.fin; }, startFinisher, finisherTarget, finStep(n) { for (let i = 0; i < n && state.fin; i++) updateFinisher(DT); }, pickupSword, VM, GP, gunG, startGunAnim, gunPoint, vmCamera, armR, armL, rig, applyPose, setTilt(t) { VM.gunTilt = t; }, get slashes() { return slashes; }, playAttackAnim, spawnSlash, GL, glitch, M,
   step(n) { for (let i = 0; i < n && !player.dead; i++) simStep(); },
   killPhase() { for (const e of alive()) damageEnemy(e, 999, enemyPos(e), new THREE.Vector3(1, 0, 0), "punch"); },
