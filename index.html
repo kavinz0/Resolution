@@ -356,6 +356,27 @@ body:has(#screen:not([hidden])) #subs, body:has(#screen:not([hidden])) #hint, bo
   #screen .card { gap: 10px; }
   #screen .keys { gap: 10px 18px; font-size: 11.5px; }
 }
+/* ---------- settings ---------- */
+.ov-ghost { all: unset; cursor: pointer; margin-left: auto; padding: 9px 14px; font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--dim); }
+.ov-ghost:hover, .ov-ghost:focus-visible { color: var(--amber); }
+.ov-ghost + .ov-x { margin-left: 0; }
+.set-grid { columns: 2 320px; column-gap: 36px; }
+.set-sec { break-inside: avoid; margin-bottom: 18px; }
+.set-sec { display: grid; gap: 2px; }
+.set-sec h3 { margin: 0 0 6px; font: 600 10px var(--mono, monospace); letter-spacing: 0.24em; text-transform: uppercase; color: var(--amber); }
+.set-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 14px; padding: 11px 0; border-bottom: 1px solid rgba(217,226,234,0.1); }
+.set-l { font-size: 14px; color: var(--ink); display: grid; gap: 3px; }
+.set-l small { font-size: 11px; color: var(--dim); line-height: 1.4; }
+.set-c { display: flex; align-items: center; gap: 10px; }
+.set-c output { min-width: 4.2em; text-align: right; font-size: 12px; color: var(--amber); font-variant-numeric: tabular-nums; }
+.set-c input[type=range] { width: 150px; accent-color: var(--amber); cursor: pointer; }
+.set-tog, .set-seg { all: unset; cursor: pointer; min-width: 44px; text-align: center; padding: 7px 12px; border: 1px solid rgba(217,226,234,0.25); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--dim); }
+.set-seg + .set-seg { margin-left: -11px; }
+.set-tog.on, .set-seg.on { color: #0a0b0f; background: var(--amber); border-color: var(--amber); }
+.set-tog:focus-visible, .set-seg:focus-visible { outline: 1px solid var(--amber); outline-offset: 2px; }
+body.nosubs #subs { display: none; }
+#fpsc { position: fixed; top: calc(10px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); z-index: 26; font-size: 11px; letter-spacing: 0.14em; color: var(--dim); pointer-events: none; font-variant-numeric: tabular-nums; }
+@media (max-width: 520px) { .set-grid { columns: 1; } .set-c input[type=range] { width: 110px; } }
 </style>
 
 </head>
@@ -399,12 +420,13 @@ body:has(#screen:not([hidden])) #subs, body:has(#screen:not([hidden])) #hint, bo
     <h1 class="m-word" data-text="RESOLUTION">RESOLUTION</h1>
     <p class="m-line">An AI that finds the cheapest path to any outcome, and carries it out. <em>Tonight it gets a body.</em></p>
     <nav class="m-nav" id="mnav">
-      <button type="button" data-act="new" disabled><span class="n">01</span><span class="l">New directive</span><span class="d">Intro, calibration, then the boot sequence</span></button>
+      <button type="button" data-act="new" disabled><span class="n">01</span><span class="l">New directive</span><span class="d">Intro, then the boot sequence</span></button>
       <button type="button" data-act="mods" disabled><span class="n">02</span><span class="l">Calibration</span><span class="d">Floor 00 tutorial · pick a module</span></button>
       <button type="button" data-act="skip" disabled><span class="n">03</span><span class="l">Skip to Floor 01</span><span class="d">Straight into the floor</span></button>
       <button type="button" data-act="book" disabled><span class="n">04</span><span class="l">Combo book</span><span class="d">0 of 8 found</span></button>
       <button type="button" data-act="controls" disabled><span class="n">05</span><span class="l">Controls</span><span class="d">Keys and moves</span></button>
-      <button type="button" data-act="test" disabled><span class="n">06</span><span class="l">Testing ground</span><span class="d">Access code required</span></button>
+      <button type="button" data-act="settings" disabled><span class="n">06</span><span class="l">Settings</span><span class="d">Voice, audio, mouse, display</span></button>
+      <button type="button" data-act="test" disabled><span class="n">07</span><span class="l">Testing ground</span><span class="d">Access code required</span></button>
     </nav>
     <div id="m-controls" hidden></div>
     <form id="m-code" hidden autocomplete="off">
@@ -461,7 +483,7 @@ body:has(#screen:not([hidden])) #subs, body:has(#screen:not([hidden])) #hint, bo
         <span><kbd>Backspace</kbd>Restart from checkpoint</span>
       </section>
     </div>
-    <div class="cardbtns"><button class="go" id="go" type="button">Loading physics…</button><button class="ghost" id="bookbtn" type="button">Combo book</button><button class="ghost" id="menubtn" type="button">Main menu</button></div>
+    <div class="cardbtns"><button class="go" id="go" type="button">Loading physics…</button><button class="ghost" id="bookbtn" type="button">Combo book</button><button class="ghost" id="setbtn" type="button">Settings</button><button class="ghost" id="menubtn" type="button">Main menu</button></div>
   </div>
 </div>
 
@@ -496,6 +518,15 @@ body:has(#screen:not([hidden])) #subs, body:has(#screen:not([hidden])) #hint, bo
     <div class="book-grid" id="modgrid"></div>
   </div>
 </div>
+
+<div id="settings" class="ov" hidden role="dialog" aria-label="Settings">
+  <div class="ov-card">
+    <div class="ov-head"><div><div class="eyebrow">UNIT-7 · chassis config</div><h2>Settings</h2></div><button type="button" class="ov-ghost" id="setreset">Reset to defaults</button><button type="button" class="ov-x">Close</button></div>
+    <p class="ov-note">Changes apply right away and are saved in this browser.</p>
+    <div class="set-grid" id="setgrid"></div>
+  </div>
+</div>
+<div id="fpsc" hidden></div>
 
 <script type="importmap">
 { "imports": {
@@ -534,17 +565,22 @@ const P = {
 const DT = 1 / 60;
 const TS = { normal: 1, slow: 0.3, stop: 0.02, focus: 0.18 };
 
+// ---------- settings (persisted per browser) ----------
+const SET_DEF = { sens: 1, invert: false, fov: 88, vol: 0.8, voiceVol: 0.9, subs: true, shake: 1, quality: "auto", shadows: true, fps: false };
+const SET = (() => { try { return { ...SET_DEF, ...JSON.parse(localStorage.getItem("res.settings") || "{}") }; } catch { return { ...SET_DEF }; } })();
+function saveSettings() { try { localStorage.setItem("res.settings", JSON.stringify(SET)); } catch {} }
+const qualityCap = () => (SET.quality === "high" ? Math.min(devicePixelRatio, 2) : SET.quality === "low" ? 0.75 : Math.min(devicePixelRatio, 1.25));
 // ---------- renderer ----------
 const host = document.getElementById("game");
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" }); // the scene is antialiased in its own target; the screen pass needs none
-const PR_MAX = Math.min(devicePixelRatio, 1.25), PR_MIN = Math.min(PR_MAX, 0.75);
+let PR_MAX = qualityCap(), PR_MIN = Math.min(PR_MAX, 0.75);
 let prNow = PR_MAX;
 renderer.setPixelRatio(prNow);
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = SET.shadows;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.autoClear = false;
 host.appendChild(renderer.domElement);
@@ -809,11 +845,11 @@ const M = {
 };
 
 // ---------- audio (synthesised, starts on first click) ----------
-let actx = null, noiseBuf = null;
+let actx = null, noiseBuf = null, master = null;
 function initAudio() {
   if (actx) return;
   try {
-    actx = new AudioContext();
+    actx = new AudioContext(); master = actx.createGain(); master.gain.value = SET.vol; master.connect(actx.destination);
     noiseBuf = actx.createBuffer(1, actx.sampleRate, actx.sampleRate);
     const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   } catch { actx = null; }
@@ -825,14 +861,14 @@ function noise(dur, type, freq, gain, q = 1, freqEnd) {
   const g = actx.createGain(); const t = actx.currentTime;
   f.frequency.setValueAtTime(freq, t); if (freqEnd) f.frequency.exponentialRampToValueAtTime(freqEnd, t + dur);
   g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + Math.min(0.02, dur * 0.3)); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  s.connect(f).connect(g).connect(actx.destination); s.start(t, Math.random() * 0.5); s.stop(t + dur);
+  s.connect(f).connect(g).connect(master); s.start(t, Math.random() * 0.5); s.stop(t + dur);
 }
 function tone(type, f0, f1, dur, gain, delay = 0) {
   if (!actx) return;
   const o = actx.createOscillator(); o.type = type; const g = actx.createGain(); const t = actx.currentTime + delay;
   o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
   g.gain.setValueAtTime(gain, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-  o.connect(g).connect(actx.destination); o.start(t); o.stop(t + dur);
+  o.connect(g).connect(master); o.start(t); o.stop(t + dur);
 }
 const sfx = {
   punchSwing() { noise(0.12, "bandpass", 500, 0.35, 1.2, 1400); },
@@ -940,7 +976,7 @@ addEventListener("contextmenu", (e) => e.preventDefault());
 addEventListener("wheel", (e) => { if (locked && Math.abs(e.deltaY) > 4) pressed.add("Swap"); }, { passive: true });
 addEventListener("mousemove", (e) => {
   if (!locked || state.boot) return;
-  yaw -= e.movementX * 0.0022; pitch -= e.movementY * 0.0022;
+  const k = 0.0022 * SET.sens; yaw -= e.movementX * k; pitch -= e.movementY * k * (SET.invert ? -1 : 1);
   pitch = Math.max(-1.55, Math.min(1.55, pitch));
 });
 document.addEventListener("pointerlockchange", () => {
@@ -3686,7 +3722,7 @@ function updateCamera(dt) {
   }
   shake *= Math.pow(0.02, dt);
   const st = state.time * 37;
-  const shX = (Math.sin(st) + Math.sin(st * 1.7 + 1.3) * 0.6) * shake * 0.12, shY = (Math.sin(st * 1.3 + 2.1) + Math.sin(st * 2.3) * 0.6) * shake * 0.12;
+  const shX = (Math.sin(st) + Math.sin(st * 1.7 + 1.3) * 0.6) * shake * 0.12 * SET.shake, shY = (Math.sin(st * 1.3 + 2.1) + Math.sin(st * 2.3) * 0.6) * shake * 0.12 * SET.shake;
   const rightV = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
   camera.position.set(p.x + rightV.x * (bobX + shX) + Math.sin(yaw) * MV.back, p.y + bobY + shY + CAM.landX + MV.eye, p.z + rightV.z * (bobX + shX) + Math.cos(yaw) * MV.back);
   const strafe = player.vel.dot(rightV);
@@ -3702,7 +3738,7 @@ function updateCamera(dt) {
   camera.rotation.set(pitch + CAM.kick * 0.03 + swayP - 0.012 * CAM.sprint + MV.pitch, yaw + swayY, roll + CAM.roll * 0.03 + MV.roll, "YXZ");
   fovKick *= Math.pow(0.05, dt);
   const charge = player.grapple?.mode === "sling" && player.grapple.phase === "attached" ? player.grapple.charge : 0;
-  const fov = 88 + Math.min(16, Math.max(0, hs - 9) * 0.9) + fovKick + 6 * CAM.sprint - 7 * charge - 20 * (player.hasPistol ? VM.aim || 0 : 0);
+  const fov = SET.fov + Math.min(16, Math.max(0, hs - 9) * 0.9) + fovKick + 6 * CAM.sprint - 7 * charge - 20 * (player.hasPistol ? VM.aim || 0 : 0);
   camera.fov += (fov - camera.fov) * (1 - Math.exp(-dt * 5)); camera.updateProjectionMatrix();
   camera.updateMatrixWorld();
   vmCamera.rotation.z = roll * 0.6;
@@ -3892,7 +3928,7 @@ function typeLine() {
 }
 function introAdvance() {
   // a click finishes the current line, a second click shows everything
-  if (introI >= INTRO.length) return startCalibration(0);
+  if (introI >= INTRO.length) return bootFloor();
   clearInterval(introTimer); introTimer = null;
   $("ilines").innerHTML = "";
   for (const [cls, text] of INTRO) { const p = document.createElement("p"); p.className = "ln " + cls; p.textContent = text; $("ilines").appendChild(p); }
@@ -3901,8 +3937,8 @@ function introAdvance() {
 function showBootButton() {
   if ($("bootbtn")) return;
   const b = document.createElement("button"); b.id = "bootbtn"; b.type = "button";
-  b.innerHTML = "Begin calibration<small>Floor 00 · then the boot sequence</small>";
-  b.addEventListener("click", (ev) => { ev.stopPropagation(); startCalibration(0); });
+  b.innerHTML = "Boot UNIT-7<small>Floor 01 · the chassis wakes up</small>";
+  b.addEventListener("click", (ev) => { ev.stopPropagation(); bootFloor(); });
   $("ilines").appendChild(b); requestAnimationFrame(() => b.classList.add("show")); b.focus({ preventScroll: true });
 }
 $("intro").addEventListener("click", () => introAdvance());
@@ -3911,6 +3947,7 @@ $("mnav").addEventListener("click", (ev) => {
   if (act === "new") showIntro();
   else if (act === "mods") openMods();
   else if (act === "book") openBook();
+  else if (act === "settings") openSettings();
   else if (act === "skip") { if (state.mode !== "floor") { state.mode = "floor"; state.pendingRestart = true; state.pendingFresh = true; } $("menu").hidden = true; begin(); }
   else if (act === "controls") openMenuControls();
   else if (act === "test") { const f = $("m-code"); f.hidden = !f.hidden; if (!f.hidden) setTimeout(() => $("codein").focus(), 0); }
@@ -4965,7 +5002,7 @@ function nextLine() {
     try {
       const u = new SpeechSynthesisUtterance(L.text.replace(/UNIT-7/g, "Unit seven").replace(/Okafor-Reyes/g, "Okafor Reyes"));
       const v = voiceFor(L.who); if (v) u.voice = v;
-      u.pitch = S.pitch; u.rate = S.rate; u.volume = 0.95;
+      u.pitch = S.pitch; u.rate = S.rate; u.volume = SET.voiceVol;
       u.onend = finish; u.onerror = finish;
       synth.speak(u);
     } catch {}
@@ -5594,7 +5631,7 @@ function renderMods() {
   });
   const b = document.createElement("button"); b.type = "button"; b.className = "md skip";
   b.innerHTML = "<span class=\"no\">Skip</span><b>Boot sequence</b><span class=\"te\">Leave calibration and wake up in the chassis lab</span><span class=\"st\">Floor 01</span>";
-  b.addEventListener("click", () => { $("mods").hidden = true; $("menu").hidden = true; initAudio(); actx?.resume?.(); state.mode = "floor"; startBoot(); });
+  b.addEventListener("click", () => bootFloor());
   g.append(b);
 }
 function openMods() { renderMods(); $("mods").hidden = false; $("mods").querySelector(".ov-x").focus({ preventScroll: true }); }
@@ -5606,6 +5643,71 @@ function toMenu() {
   $("screen").hidden = true; $("menu").hidden = false; document.body.classList.add("cine"); renderBook();
   document.querySelector("#mnav button").focus({ preventScroll: true });
 }
+
+// ---------- settings menu: built from SET_UI, applied live, saved per browser ----------
+const SET_UI = [
+  ["Audio", [
+    ["voice", "ARBITER voice", "toggle", { note: "Spoken lines use your browser's speech engine" }],
+    ["voiceVol", "Voice volume", "range", { min: 0, max: 1, step: 0.05, fmt: (v) => Math.round(v * 100) + "%" }],
+    ["subs", "Subtitles", "toggle"],
+    ["vol", "Effects volume", "range", { min: 0, max: 1, step: 0.05, fmt: (v) => Math.round(v * 100) + "%" }],
+  ]],
+  ["Controls", [
+    ["sens", "Mouse sensitivity", "range", { min: 0.2, max: 3, step: 0.05, fmt: (v) => v.toFixed(2) + "×" }],
+    ["invert", "Invert look up and down", "toggle"],
+  ]],
+  ["Display", [
+    ["fov", "Field of view", "range", { min: 70, max: 110, step: 1, fmt: (v) => v + "°" }],
+    ["shake", "Screen shake", "range", { min: 0, max: 1, step: 0.05, fmt: (v) => Math.round(v * 100) + "%" }],
+    ["quality", "Resolution", "seg", { opts: [["auto", "Auto"], ["high", "Sharp"], ["low", "Fast"]], note: "Auto keeps 60 fps by lowering resolution when needed" }],
+    ["shadows", "Shadows", "toggle"],
+    ["fps", "Show frame rate", "toggle"],
+  ]],
+];
+function getSet(k) { return k === "voice" ? VOICE.on : SET[k]; }
+function applySet(k, v) {
+  if (k === "voice") { initAudio(); setVoice(v); if (v) say("arbiter", "Voice online.", { now: true }); renderSettings(); return; }
+  SET[k] = v; saveSettings();
+  if (k === "vol" && master) master.gain.value = v;
+  if (k === "subs") document.body.classList.toggle("nosubs", !v);
+  if (k === "fps") $("fpsc").hidden = !v;
+  if (k === "quality") { PR_MAX = qualityCap(); PR_MIN = Math.min(PR_MAX, 0.75); prNow = PR_MAX; renderer.setPixelRatio(prNow); renderer.setSize(innerWidth, innerHeight); const sz = rtSize(); rt.setSize(sz.x, sz.y); postMat.uniforms.uRes.value.copy(sz); PERF.cool = 1.2; }
+  if (k === "shadows") { renderer.shadowMap.enabled = v; scene.traverse((o) => { const ms = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : []; for (const m of ms) m.needsUpdate = true; }); }
+}
+function renderSettings() {
+  const g = $("setgrid"); g.innerHTML = "";
+  for (const [title, rows] of SET_UI) {
+    const sec = document.createElement("section"); sec.className = "set-sec";
+    const h = document.createElement("h3"); h.textContent = title; sec.append(h);
+    for (const [k, label, kind, o = {}] of rows) {
+      const row = document.createElement("div"); row.className = "set-row";
+      const lab = document.createElement("div"); lab.className = "set-l"; lab.textContent = label;
+      if (o.note) { const n = document.createElement("small"); n.textContent = o.note; lab.append(n); }
+      const ctl = document.createElement("div"); ctl.className = "set-c"; const v = getSet(k);
+      if (kind === "toggle") {
+        const b = document.createElement("button"); b.type = "button"; b.className = "set-tog" + (v ? " on" : ""); b.setAttribute("aria-pressed", v ? "true" : "false"); b.textContent = v ? "On" : "Off";
+        b.addEventListener("click", () => { applySet(k, !getSet(k)); renderSettings(); $("setgrid").querySelector(`[data-k="${k}"] button`)?.focus({ preventScroll: true }); });
+        ctl.append(b);
+      } else if (kind === "range") {
+        const r = document.createElement("input"); r.type = "range"; r.min = o.min; r.max = o.max; r.step = o.step; r.value = v; r.setAttribute("aria-label", label);
+        const out = document.createElement("output"); out.textContent = o.fmt(v);
+        r.addEventListener("input", () => { const x = +r.value; out.textContent = o.fmt(x); applySet(k, x); });
+        ctl.append(r, out);
+      } else {
+        for (const [val, name] of o.opts) { const b = document.createElement("button"); b.type = "button"; b.className = "set-seg" + (v === val ? " on" : ""); b.textContent = name;
+          b.addEventListener("click", () => { applySet(k, val); renderSettings(); }); ctl.append(b); }
+      }
+      row.dataset.k = k; row.append(lab, ctl); sec.append(row);
+    }
+    g.append(sec);
+  }
+}
+function openSettings() { renderSettings(); $("settings").hidden = false; $("settings").querySelector(".ov-x").focus({ preventScroll: true }); }
+$("setreset").addEventListener("click", () => { for (const k in SET_DEF) applySet(k, SET_DEF[k]); if (!VOICE.on) setVoice(true); renderSettings(); });
+$("setbtn").addEventListener("click", (ev2) => { ev2.stopPropagation(); openSettings(); });
+document.body.classList.toggle("nosubs", !SET.subs); $("fpsc").hidden = !SET.fps;
+// New directive: the intro, then the boot sequence, then Floor 01 (calibration is its own menu entry)
+function bootFloor() { $("mods").hidden = true; $("menu").hidden = true; $("intro").hidden = true; initAudio(); actx?.resume?.(); stopVoice(); state.mode = "floor"; startBoot(); }
 
 // ---------- loop ----------
 let acc = 0, last = performance.now();
@@ -5679,6 +5781,7 @@ function frame(now) {
     }
     if (!state.fin) updateCamera(dt);
     updateHud(dt);
+    if (SET.fps && (PERF.fpsT = (PERF.fpsT || 0) - dt) <= 0) { PERF.fpsT = 0.4; $("fpsc").textContent = `${Math.round(1000 / Math.max(1, PERF.ft))} fps`; }
   } else if (!state.started) {
     const t = now * 0.00004; camera.position.set(Math.cos(t) * 70, 22, Math.sin(t) * 70); camera.lookAt(0, 2, 0);
   }
@@ -5725,7 +5828,7 @@ setVoice(VOICE.on); renderBook();
 document.querySelector("#mnav button").focus({ preventScroll: true });
 state.pendingRestart = true; state.pendingFresh = true;
 // test hooks
-window.__res = {
+window.__res = { SET, openSettings, applySet, bootFloor,
   get player() { return player; }, get enemies() { return enemies; }, get panes() { return panes; }, get bolts() { return bolts; }, state, keys, mouse, pressed,
   setLook(y, p) { yaw = y; pitch = p; }, teleport(x, y, z) { player.body.setTranslation({ x, y, z }, true); player.body.setLinvel({ x: 0, y: 0, z: 0 }, true); },
   begin() { $("menu").hidden = true; document.body.classList.remove("cine"); if (state.pendingRestart) { restart(state.pendingFresh); state.pendingRestart = false; } state.started = true; $("screen").hidden = true; },
