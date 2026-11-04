@@ -27,6 +27,11 @@ You can also turn on GitHub Pages (Settings → Pages → Deploy from branch →
 | C while grappling | Breach: crash through the window and execute enemies behind it |
 | G | Grapple mode: swing or sling |
 | R | Pistol: vent and reload |
+| V | Kick |
+| Q | Throw the disc. Look up to hang it in the air as a grapple anchor |
+| C with the pistol, in the air or sprinting | Window dive in slow motion |
+| X | Inject a health stim |
+| W into a ledge / sprint into a hurdle | Climb it / vault it |
 | F | Inspect your weapon |
 | Backspace | Restart from the last checkpoint |
 
@@ -37,6 +42,17 @@ You can also turn on GitHub Pages (Settings → Pages → Deploy from branch →
 3. **The windows.** The east wing and server room are sealed from inside. Break out of the armory window, grapple to the amber window-washer rails, hang, then grapple onto a window and press C to breach. The glass bursts inward as shrapnel and executes anyone near the impact.
 
 4. **The finisher.** The killing blow on the last enemy of the floor becomes a third-person finisher (see below).
+
+## Moves and impacts
+
+- **Kick (V).** A front push kick with your own right leg: the knee chambers below the view, the boot snaps out into frame, holds, and re-chambers while the arms counterbalance and the view leans back. It launches enemies, breaks glass and partitions, opens med boxes and shoves bodies. In the air it hits harder and pushes you off the target.
+- **Window dive (pistol only).** With the pistol out, press C in the air or at a sprint to dive forward. Time slows, the view rolls onto its side, you can keep shooting, and any glass you touch bursts. You land in a shoulder roll.
+- **Disc (Q).** Picked up at the armory with the sword and pistol. It flies off the left forearm with a backhand flick, bounces three times off walls and floors, cuts through enemies and glass, and comes home to your arm. Thrown upward it slows and hangs in the air for 3 s; grapple it to be reeled in and slung past it.
+- **Flying cars.** Of every five bodies launched out of the building, the 2nd and 4th are hit by a flying car: a white flash, a fireball that cools to red, rising black smoke, sparks, burning debris, camera shake by distance, and the wreck tumbling away.
+- **Wall slams.** A body thrown into a wall hard enough cracks it with a spiderweb crater and stays pinned there, limbs hanging, with plaster chips falling.
+- **Ledge climb and vault.** Jump at a ledge holding W (for example after missing a breach and landing under the window line) and you grab it, pull up and roll over, smashing any glass in the way. You are immune to damage for 1 s. Sprinting at a low hurdle vaults it one-handed.
+- **Stims (X).** Red-locked med boxes open when you shoot, kick or grapple them and release a stim (hold up to 3). Using one: you look down, jab the long microchip injector into the port on your chest, hold while it drains, and flick it away. For 10 s the world drains to grey and slows, enemies glow red, you move at normal speed, and you heal 60.
+- All of these are in the testing ground: a climbing deck, hurdles, a slam wall behind the dummies and respawning med boxes. L also refills stims.
 
 ## Start and boot sequence
 
