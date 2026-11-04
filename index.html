@@ -401,7 +401,7 @@ body.nosubs #subs { display: none; }
 <div class="hud" id="flash" hidden></div>
 <div class="hud" id="prompt" hidden></div>
 <div class="hud" id="objective"><span class="lbl" id="objl">Objective</span><b id="objv">—</b><ol id="steps"></ol>
-  <div id="legend" hidden><span><kbd>N</kbd>finisher</span><span><kbd>J</kbd>live hostiles</span><span><kbd>L</kbd>reset dummies, boxes, stims</span><span><kbd>H</kbd>god mode</span><span><kbd>K</kbd>combo book</span><span><kbd>B</kbd>boss pen</span><span><kbd>P</kbd>skip boss phase</span><span><kbd>O</kbd>clear pen</span></div>
+  <div id="legend" hidden><span><kbd>N</kbd>finisher</span><span><kbd>J</kbd>live hostiles</span><span><kbd>L</kbd>reset dummies, boxes, stims</span><span><kbd>H</kbd>god mode</span><span><kbd>K</kbd>combo book</span><span><kbd>M</kbd>call a car</span><span><kbd>I</kbd>idle animation</span><span><kbd>F</kbd>pick up a body</span><span><kbd>B</kbd>boss pen</span><span><kbd>P</kbd>skip boss phase</span><span><kbd>O</kbd>clear pen</span></div>
 </div>
 <div class="hud" id="targets">Hostiles<b id="tcount">0</b></div>
 <div class="hud" id="vitals">
@@ -1858,6 +1858,7 @@ function groundCheck() {
   return false;
 }
 function stepPlayer(dt) {
+  carryInput();
   if (player.dead) return;
   const v = player.body.linvel(); const vel = new THREE.Vector3(v.x, v.y, v.z);
   const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
@@ -2050,7 +2051,7 @@ function stepPlayer(dt) {
   if (player.sliding) slideSweep(vel);
 
   updateTest(dt); updateTut(dt);
-  if (pressed.has("KeyF")) startInspect();
+  if (pressed.has("KeyF")) { if (!carryPick()) startInspect(); }
 
   stepMoves(dt, vel, grounded, fwd, wish);
   player.body.setLinvel(vel, true);
@@ -2380,6 +2381,8 @@ function updateTest(dt) {
     if (tgt) startFinisher(tgt); else flash("No target", "var(--dim)");
   }
   bossPenKeys();
+  if (pressed.has("KeyM")) carxForce();
+  if (pressed.has("KeyI")) { idleCancel(); IDLE.cur = null; idleStart(); }
   if (pressed.has("KeyK")) { document.exitPointerLock?.(); setTimeout(openBook, 60); }
   if (pressed.has("KeyH")) { player.god = !player.god; flash(player.god ? "God mode on" : "God mode off", "var(--amber)"); }
   if (pressed.has("KeyJ")) {
@@ -3325,7 +3328,7 @@ function updateRig(dt) {
   if (VM.debugR) Object.assign(R, VM.debugR); if (VM.debugL) Object.assign(L, VM.debugL);
   const kR = 1 - Math.exp(-dt * (snapR ? 60 : 13)), kL = 1 - Math.exp(-dt * (snapL ? 60 : 13));
   lerpPose(cur.R, R, kR); lerpPose(cur.L, L, kL);
-  applyPose(armR, cur.R); applyPose(armL, cur.L);
+  applyPose(armR, cur.R); applyPose(armL, cur.L); idlePost();
   if (pistol) setFingers(armR, 1, HAND_PGRIP, true, [VM.gunIdx, VM.gunOthers, VM.gunOthers, VM.gunOthers]);
   if (arsOn()) { arsFingersR(); arsenalPost(dt); }
   if (VM.fingerWave >= 0) setFingers(armL, 0.5, HAND_FIST, false, [0, 1, 2, 3].map((i) => 0.1 + 0.9 * Math.max(0, Math.sin(VM.fingerWave * Math.PI * 4 - i * 0.8))));
@@ -4541,9 +4544,9 @@ function classifyLaunch(rd, t, v, sp) {
     for (let s = 0.1; s <= 1.3; s += 0.05) { const p = predictBody(t, v, s); if (lvOutside(p)) { T = s + 0.32; break; } if (p.y < -0.5) break; }
     if (wall && (wall.toi ?? wall.timeOfImpact) < Math.min(t.x - BND.x0, BND.x1 - t.x, t.z - BND.z0, BND.z1 - t.z)) T = -1;
   }
-  if (T < 0) return;
+  if (T < 0) { if (carxOffer(rd, t, v, -1)) { IMPACT.launches++; ev("launch", { rd }); } return; }
   IMPACT.launches++; ev("launch", { rd });
-  const m = IMPACT.launches % 5; if (m !== 2 && m !== 4) return;
+  if (carxOffer(rd, t, v, T) || true) return;
   const car = CARS.find((c) => c.state === "idle"); if (!car) return;
   const P0 = predictBody(t, v, T);
   const hv = new V3(v.x, 0, v.z).normalize(); const across = new V3(-hv.z, 0, hv.x).multiplyScalar(Math.random() < 0.5 ? -1 : 1);
@@ -4707,7 +4710,7 @@ function respawnBox(b) {
   const nb = stimBox(b.x, b.z, b.y, b.rotY); STIM.boxes.splice(i, 0, STIM.boxes.pop()); return nb;
 }
 // stim use (X): look down, jab the chip into the port on your chest, hold while it drains, flick it away
-const STIM_DUR = 1.75, STIM_STAB = 0.52, STIM_TOSS = 1.18, STIM_FX = 10;
+const STIM_DUR = 2.55, STIM_STAB = 1.3, STIM_TOSS = 1.96, STIM_FX = 10;
 function startStimUse() {
   player.stims--; player.stimUse = { t: 0, cues: new Set() }; VM.inspect = null; cancelGunAnim(); VM.gunSpin = null; player.kick = null;
   vmInj.visible = true; vmInj.userData.inj.userData.vial.scale.z = 1; vmInj.userData.inj.userData.vial.material.color.set(0xff3a5c);
@@ -4739,7 +4742,7 @@ function stepStim(dt) {
     U.t += dt;
     const cue = (n, at, fn) => { if (U.t >= at && !U.cues.has(n)) { U.cues.add(n); fn(); } };
     cue("stab", STIM_STAB, () => { sfx.stimStab(); shake = Math.max(shake, 0.32); CAM.kickV -= 2.5; impactFrame(40); startStimFx(); });
-    cue("beat", 0.85, () => sfx.heart());
+    cue("beat", 1.63, () => sfx.heart());
     cue("toss", STIM_TOSS, () => tossInjector());
     const vial = vmInj.userData.inj.userData.vial;
     if (U.t > STIM_STAB) { const q = clamp01((U.t - STIM_STAB) / 0.42); vial.scale.z = Math.max(0.02, 1 - q); vial.material.color.setHSL(0.98, 1 - q * 0.8, 0.55 - q * 0.35); }
@@ -4830,7 +4833,7 @@ function stepMoves(dt, vel, grounded, fwd, wish) {
 function stepWorldMoves(dtw) {
   updateDisc(DT);
   ragdollImpacts(dtw);
-  updateCars(dtw);
+  updateCars(dtw); carxStep(dtw); carryStep(dtw);
   updateDebris(dtw);
   updateStimWorld(DT);
 }
@@ -4842,12 +4845,16 @@ const ST_PRESENT = { p: [-0.456, -0.208, 0.078], r: [-0.282, -0.669, 0.163], el:
 const ST_LIFT = { p: [-0.513, -0.364, -0.044], r: [0.471, -0.509, -0.216], el: 1.001, w: [-0.799, -0.284, 1.945], curl: 1 };
 const ST_STAB = { p: [-0.443, -0.44, 0.042], r: [0.226, -0.764, 0.287], el: 0.826, w: [-0.383, 0.474, 1.229], curl: 1 };
 const ST_LOW = { p: [-0.4, -0.42, 0.06], r: [-0.45, -0.5, 0.1], el: 1.2, w: [-0.3, 0.2, 1.2], curl: 1 };
+const ST_FLICK = { p: [-0.44, -0.24, 0.06], r: [-0.12, -0.62, 0.16], el: 1.25, w: [-0.95, 0.247, 1.469], curl: 0.6 };
+const ST_OPEN = { p: [-0.45, -0.215, 0.07], r: [-0.26, -0.66, 0.16], el: 1.32, w: [-0.5, 0.247, 1.469], curl: 0.15 };
+const ST_CATCH = { p: [-0.456, -0.225, 0.078], r: [-0.3, -0.669, 0.163], el: 1.36, w: [-0.45, 0.247, 1.469], curl: 1 };
 const STIM_L = [
-  [0, REST_L], [0.14, ST_LOW], [0.3, ST_PRESENT], [0.44, ST_LIFT], [0.505, ST_STAB], [0.56, ST_STAB], [0.95, ST_STAB],
-  [1.06, ST_PRESENT],
-  [1.14, { p: [-0.38, -0.25, -0.12], r: [0.5, 0.3, -0.2], el: 0.6, w: [0.2, -0.6, 0.6], curl: 1 }],
-  [1.19, { p: [-0.4, -0.24, -0.15], r: [0.45, 0.7, -0.3], el: 0.3, w: [0.5, -0.9, -0.3], curl: 0.15 }],
-  [1.4, { p: [-0.32, -0.36, -0.08], r: [0.1, 0.15, 0], el: 0.5, w: [0, 0, 0], curl: 0.5 }],
+  [0, REST_L], [0.14, ST_LOW], [0.3, ST_PRESENT], [0.38, { ...ST_PRESENT, w: [-0.2, 0.247, 1.469] }], [0.44, ST_FLICK], [0.55, ST_OPEN], [0.9, ST_OPEN], [1.0, ST_CATCH], [1.08, ST_PRESENT],
+  [1.22, ST_LIFT], [1.285, ST_STAB], [1.34, ST_STAB], [1.73, ST_STAB],
+  [1.84, ST_PRESENT],
+  [1.92, { p: [-0.38, -0.25, -0.12], r: [0.5, 0.3, -0.2], el: 0.6, w: [0.2, -0.6, 0.6], curl: 1 }],
+  [1.97, { p: [-0.4, -0.24, -0.15], r: [0.45, 0.7, -0.3], el: 0.3, w: [0.5, -0.9, -0.3], curl: 0.15 }],
+  [2.18, { p: [-0.32, -0.36, -0.08], r: [0.1, 0.15, 0], el: 0.5, w: [0, 0, 0], curl: 0.5 }],
   [STIM_DUR, REST_L],
 ];
 const _flat = (P0) => [...P0.p, ...P0.r, P0.el, ...P0.w, P0.curl];
@@ -4873,6 +4880,7 @@ function climbArm(P0, s, k, ang) {
 }
 function movePoses(R, L, dt) {
   const sword = player.hasSword, pistol = player.hasPistol; let sl = false, sr = false;
+  idleUpdate(dt); idlePose(R, L); carryPose(L);
   const al = (state.alpha || 0) * DT;
   if (player.kick) KICK_ARMS(R, L, ckey(KICK_W, player.kick.t + al)[0], sword, pistol);
   const C = player.climb;
@@ -4901,8 +4909,8 @@ function movePoses(R, L, dt) {
     const tgt = ckeyPose(STIM_LK, Math.min(STIM_DUR, U.t + al)); const w = 1;
     Object.assign(L, tgt);
     // hand tremble while the stim floods in
-    if (U.t > STIM_STAB && U.t < 0.95) { const tr = Math.sin(state.time * 70) * 0.004 * (1 - (U.t - STIM_STAB) / 0.45); L.p[0] += tr; L.p[1] += tr * 0.6; }
-    sl = (U.t > 0.44 && U.t < 0.56) || (U.t > 1.1 && U.t < 1.25);
+    if (U.t > STIM_STAB && U.t < 1.73) { const tr = Math.sin(state.time * 70) * 0.004 * (1 - (U.t - STIM_STAB) / 0.45); L.p[0] += tr; L.p[1] += tr * 0.6; }
+    sl = (U.t > 0.4 && U.t < 0.47) || (U.t > 1.22 && U.t < 1.34) || (U.t > 1.88 && U.t < 2.03);
     const away = Math.sin(Math.PI * clamp01((U.t - 0.1) / 1.4)) * w; R.p[0] += 0.05 * away; R.p[1] -= 0.07 * away; R.r[0] -= 0.15 * away;
   }
   return { sl, sr };
@@ -4917,10 +4925,11 @@ function updateMoveCam(dt) {
     if (C.kind === "vault") { const q = Math.sin(Math.PI * k); rollT += C.side * 0.1 * q; pitchT -= 0.08 * q; eyeT -= 0.1 * q; }
     else { pitchT += ckey([[0, 0], [0.12, 0.06], [0.4, -0.14], [0.68, -0.3], [0.9, -0.08], [1, 0]], k)[0]; rollT += Math.sin(k * Math.PI * 2) * 0.05 * C.side; }
   }
+  if (IDLE.cur) { const [ip, ir] = idleCam(); pitchT += ip; rollT += ir; }
   if (player.stimUse) {
     const t = player.stimUse.t + al;
-    pitchT += ckey([[0, 0], [0.12, -0.2], [0.3, -0.62], [0.5, -0.62], [0.56, -0.67], [1.05, -0.63], [1.2, -0.5], [1.55, 0], [STIM_DUR, 0]], t)[0];
-    rollT += ckey([[0, 0], [0.3, 0.04], [1.1, 0.04], [1.3, -0.05], [1.6, 0]], t)[0];
+    pitchT += ckey([[0, 0], [0.12, -0.2], [0.3, -0.36], [0.44, -0.3], [0.66, -0.08], [0.86, -0.2], [1.0, -0.38], [1.12, -0.5], [1.28, -0.62], [1.34, -0.67], [1.83, -0.63], [1.98, -0.5], [2.33, 0], [STIM_DUR, 0]], t)[0];
+    rollT += ckey([[0, 0], [0.3, 0.04], [0.66, -0.03], [1.0, 0.04], [1.88, 0.04], [2.08, -0.05], [2.38, 0]], t)[0];
   }
   const k = 1 - Math.exp(-dt * (fast ? 22 : 16));
   MV.pitch += (pitchT - MV.pitch) * k; MV.roll += (rollT - MV.roll) * k; MV.eye += (eyeT - MV.eye) * k; MV.back += (backT - MV.back) * k;
@@ -4940,7 +4949,7 @@ function updateMoveVisuals(dt) {
   vmChest.visible = !!player.stimUse;
   vmDisc.visible = !!player.ownsDisc && DISC.state === "held" && !(player.discThrow?.out);
   // injector: held across the fist, needle out of the pinky side
-  if (vmInj.visible) { vmInj.position.set(-0.028, -0.037, -0.095); vmInj.rotation.set(0, Math.PI / 2, 0); }
+  stimInjPose();
   // world disc: interpolated between physics steps, spinning hard while it flies
   if (discMesh.visible) {
     discMesh.position.lerpVectors(DISC.prev, DISC.pos, state.alpha ?? 1);
@@ -4973,6 +4982,7 @@ function updateMoveHud() {
   $("stimbar").hidden = !player.stimFx; if (player.stimFx) $("stimbar").firstChild.style.transform = `scaleX(${Math.max(0, 1 - player.stimFx.t / STIM_FX)})`;
 }
 function resetMoves() {
+  try { carxReset(); } catch {} CARRY.rd = null; IDLE.cur = null; IDLE.still = 0; if (IDLE.props) { IDLE.props.phone.visible = IDLE.props.banana.visible = false; }
   DISC.state = "held"; discMesh.visible = false; discTrail.visible = false;
   for (const c of CARS) { c.state = "idle"; c.g.visible = false; c.rd = null; }
   IMPACT.decals = []; IMPACT.debris = []; IMPACT.fx = [];
@@ -5077,9 +5087,9 @@ function toast(kick, name, sub) {
 // Each combo is a list of steps. A step is an event name, an optional test, and what to remember. The tracker walks
 // each combo forward as events arrive; too long between steps and it starts over. Adding a combo is adding an entry.
 const COMBOS = [
-  { id: "skyhook", name: "Skyhook", known: true, gap: 4.5,
+  { id: "skyhook", name: "Skyhook", known: true, gap: 7,
     steps: ["Throw the disc straight up", "Grapple the disc", "Sling at an enemy in the air", "Hold focus on the line", "Kill it with the blade in hand"],
-    perfectText: "Focus for at least 1 s, and the kill lands within 6 s of the throw",
+    perfectText: "Focus for at least half a second, and the kill lands within 9 s of the throw",
     seq: [
       { on: "discThrow", ok: (d) => d.up, tag: "Disc" },
       { on: "discBoost", tag: "Hook" },
@@ -5087,47 +5097,47 @@ const COMBOS = [
       { on: "kill", ok: (d, a) => d.e === a.e && d.sword, tag: "Kill" },
     ],
     watch: { focusEnd: (a, d) => { if (a.i < 2) return; a.focus = Math.max(a.focus || 0, d.dur); a.marks.push({ tag: "Focus", t: d.t - a.t0, note: d.dur.toFixed(1) + " s" }); } },
-    perfect: (a) => (a.focus || 0) >= 1 && a.span <= 6, line: "That is what you were built for." },
-  { id: "ricochet", name: "Ricochet Breach", gap: 3,
+    perfect: (a) => (a.focus || 0) >= 0.5 && a.span <= 9, line: "That is what you were built for." },
+  { id: "ricochet", name: "Ricochet Breach", gap: 5,
     steps: ["Throw the disc through a window", "Grapple through the gap", "Breach"],
-    perfectText: "Two or more executions, all within 3 s",
+    perfectText: "Two or more executions, all within 5 s",
     seq: [{ on: "discGlass", tag: "Disc" }, { on: "grapple", tag: "Hook" }, { on: "breach", ok: (d) => d.n > 0, keep: (a, d) => (a.n = d.n), tag: "Breach" }],
-    perfect: (a) => a.n >= 2 && a.span <= 3, line: "Two witnesses, one window." },
-  { id: "bootbullet", name: "Boot and Bullet", gap: 1.6,
-    steps: ["Kick an enemy", "Shoot it dead while it reels"], perfectText: "The killing shot is a headshot",
+    perfect: (a) => a.n >= 2 && a.span <= 5, line: "Two witnesses, one window." },
+  { id: "bootbullet", name: "Boot and Bullet", gap: 2.8,
+    steps: ["Kick an enemy", "Shoot it dead while it reels"], perfectText: "A headshot, or the kill within a second of the kick",
     seq: [{ on: "kick", ok: (d) => d.alive.length > 0, keep: (a, d) => (a.es = d.alive), tag: "Kick" }, { on: "shot", ok: (d, a) => d.kill && a.es.includes(d.e), keep: (a, d) => (a.head = d.head), tag: (d) => (d.head ? "Headshot" : "Shot") }],
-    perfect: (a) => a.head, line: "Efficient." },
-  { id: "traffic", name: "Traffic Control", gap: 3,
+    perfect: (a) => a.head || a.span <= 1, line: "Efficient." },
+  { id: "traffic", name: "Traffic Control", gap: 5,
     steps: ["Launch a body out into open air", "A flying car hits it"], perfectText: "You take no damage",
     handle(name, d) {
       const L = (this.L ||= []);
       if (name === "launch") { L.push({ rd: d.rd, t: d.t, hurt: false }); if (L.length > 6) L.shift(); }
       else if (name === "hurt") for (const x of L) x.hurt = true;
       else if (name === "car") {
-        const x = L.find((x) => x.rd === d.rd && d.t - x.t < 3); if (!x) return;
+        const x = L.find((x) => x.rd === d.rd && d.t - x.t < 5); if (!x) return;
         L.splice(L.indexOf(x), 1);
         comboLanded(this, { marks: [{ tag: "Launch", t: 0 }, { tag: "Car", t: d.t - x.t }], span: d.t - x.t, hurt: x.hurt, rd: d.rd });
       }
     },
     perfect: (a) => !a.hurt, line: "The city cleans up after you." },
-  { id: "riposte", name: "Riposte", gap: 2.5,
-    steps: ["Parry an attack", "Kick the staggered enemy", "Pin the body to a wall"], perfectText: "All three within 2 s",
+  { id: "riposte", name: "Riposte", gap: 4,
+    steps: ["Parry an attack", "Kick the staggered enemy", "Pin the body to a wall"], perfectText: "All three within 3.5 s",
     seq: [{ on: "parry", keep: (a, d) => (a.e = d.e), tag: "Parry" }, { on: "kick", ok: (d, a) => d.hits.includes(a.e), tag: "Kick" }, { on: "pin", tag: "Pin" }],
-    perfect: (a) => a.span <= 2, line: "Returned to sender." },
-  { id: "hurdle", name: "Hurdle Strike", gap: 1.6,
-    steps: ["Vault a hurdle at a sprint", "Kick before you land"], perfectText: "The kick kills",
-    seq: [{ on: "climb", ok: (d) => d.kind === "vault", tag: "Vault" }, { on: "kick", ok: (d) => d.air && d.hits.length > 0, keep: (a, d) => (a.kill = d.hits.some((e) => e.dead)), tag: "Kick" }],
-    breakOn: { 1: ["ground"] }, perfect: (a) => a.kill, line: "Over and through." },
-  { id: "overdose", name: "Overdose", gap: 10,
-    steps: ["Inject a stim", "Kill with one weapon", "Kill with a second", "Kill with a third"], perfectText: "All three kills within 5 s of the stim",
+    perfect: (a) => a.span <= 3.5, line: "Returned to sender." },
+  { id: "hurdle", name: "Hurdle Strike", gap: 2.4,
+    steps: ["Vault a hurdle at a sprint", "Kick before you land, or right as you do"], perfectText: "The kick kills",
+    seq: [{ on: "climb", ok: (d) => d.kind === "vault", tag: "Vault" }, { on: "kick", ok: (d, a) => (d.air || (a.land != null && d.t - a.land < 0.3)) && d.hits.length > 0, keep: (a, d) => (a.kill = d.hits.some((e) => e.dead)), tag: "Kick" }],
+    watch: { ground: (a, d) => { if (a.i === 1 && a.land == null) a.land = d.t; } }, perfect: (a) => a.kill, line: "Over and through." },
+  { id: "overdose", name: "Overdose", gap: 12,
+    steps: ["Inject a stim", "Kill with one weapon", "Kill with a second", "Kill with a third"], perfectText: "All three kills within 8 s of the stim",
     seq: [{ on: "stim", keep: (a) => (a.used = new Set()), tag: "Stim" },
       ...[0, 1, 2].map(() => ({ on: "kill", ok: (d, a) => d.w !== "other" && !a.used.has(d.w), keep: (a, d) => a.used.add(d.w), tag: (d) => d.w }))],
-    breakOn: { any: ["stimEnd"] }, perfect: (a) => a.span <= 5, line: "Ten seconds was generous." },
-  { id: "pendulum", name: "Pendulum", gap: 2.5,
-    steps: ["Swing on the grapple and let go", "Land straight into a slide", "Thrust-kill"], perfectText: "The slide starts the moment you land",
+    perfect: (a) => a.span <= 8, line: "Ten seconds was generous." },
+  { id: "pendulum", name: "Pendulum", gap: 4,
+    steps: ["Swing on the grapple and let go", "Land straight into a slide", "Thrust-kill"], perfectText: "The slide starts within half a second of landing",
     seq: [{ on: "fling", tag: "Let go" }, { on: "slide", keep: (a, d) => (a.lag = d.t - (a.land ?? d.t)), tag: "Slide" }, { on: "kill", ok: (d) => d.kind === "thrust", tag: "Thrust" }],
     watch: { ground: (a, d) => { if (a.i === 1 && a.land == null) a.land = d.t; } },
-    perfect: (a) => a.lag < 0.25, line: "Momentum is a weapon. You are learning." },
+    perfect: (a) => a.lag < 0.5, line: "Momentum is a weapon. You are learning." },
 ];
 const BOOK = store.get("res.book", {});
 const CT = {};
@@ -5156,24 +5166,26 @@ function comboLanded(C, a) {
   if (B.best == null || a.span < B.best) B.best = Math.round(a.span * 100) / 100;
   store.set("res.book", BOOK);
   ev("combo", { id: C.id, perfect });
-  if (perfect) comboScreen(C, a, first); else { toast("Clean", C.name, first ? "New in the combo book" : "Perfect: " + C.perfectText); sfx.comboClean(); }
+  comboScreen(C, a, first, perfect);
 }
 
 // ---------- the perfect-combo finisher screen: freeze, drain to black and white, a red slash, the name stamped in ----------
 const CF = { on: false, t: 0, dur: 3.1, mats: [], ramp: 0 };
-function comboScreen(C, a, first) {
-  if (CF.on || state.fin) { toast("Perfect", C.name, first ? "New in the combo book" : ""); sfx.comboClean(); return; }
+function comboScreen(C, a, first, perfect = true) {
+  if (CARX.cur && !CARX.cur.done) { CARX.pend = [C, a, first, perfect]; return; }
+  if (CF.on || state.fin) { toast(perfect ? "Perfect" : "Combo", C.name, first ? "New in the combo book" : perfect ? "" : "Perfect: " + C.perfectText); sfx.comboClean(); return; }
   Object.assign(CF, { on: true, t: 0, C });
   impactFrame(90); sfx.comboStamp(); glitch(0.7); shake = Math.max(shake, 0.3);
   $("cfname").textContent = $("cfname").dataset.text = C.name.toUpperCase();
-  $("cfkick").textContent = first ? "New combo · perfect" : "Perfect combo";
+  $("cfkick").textContent = (first ? "New combo · " : "") + (perfect ? "Perfect" : "Clean") + (first ? "" : " combo");
+  $("cfin").classList.toggle("clean", !perfect); $("cfline").dataset.tip = perfect ? "" : "Perfect: " + C.perfectText;
   const ol = $("cfsteps"); ol.innerHTML = "";
   a.marks.sort((p, q) => p.t - q.t).forEach((m, i) => {
     const li = document.createElement("li"); li.style.animationDelay = (0.78 + i * 0.15).toFixed(2) + "s";
     const b = document.createElement("b"); b.textContent = String(m.tag).toUpperCase(); const sp = document.createElement("span"); sp.textContent = m.note ? `${m.t.toFixed(1)} s · ${m.note}` : m.t.toFixed(1) + " s";
     li.append(b, sp); ol.append(li);
   });
-  $("cfline").textContent = C.line; $("cftime").textContent = `${a.span.toFixed(2)} s`;
+  $("cfline").textContent = perfect ? C.line : `${C.line}  ·  Perfect: ${C.perfectText}`; $("cftime").textContent = `${a.span.toFixed(2)} s`;
   const el = $("cfin"); el.classList.remove("out"); el.hidden = true; void el.offsetWidth; el.hidden = false;
   document.body.classList.add("cfin");
   // the body you just made stays red in the grey frame
@@ -10816,13 +10828,384 @@ function bossPenKeys() {
   if (pressed.has("KeyO")) { bossPenClear(); flash("Boss pen cleared", "var(--amber)"); }
 }
 
+// ================= traffic: a flying car as a real physics body, a couple of times a match =================
+// A launched body near the outside of the building can get hit by a car: out in open air, or through the glass when
+// the body is still inside by a window. The car is a kinematic Rapier body (it shoves every body and shard it
+// touches), it breaks every pane it passes through, and a swoop camera follows it in and out in slow motion.
+const CARX = { left: 2, cd: 0, cur: null, cam: { w: 0, pos: new THREE.Vector3(), q: new THREE.Quaternion(), at: new THREE.Vector3(), fov: 60 } };
+const _cxa = new THREE.Vector3(), _cxb = new THREE.Vector3(), _cxm = new THREE.Matrix4(), _cxq = new THREE.Quaternion();
+function carxReset() {
+  const S = CARX.cur; if (S) carxEnd(S, true);
+  CARX.left = state.mode === "test" ? 99 : 2; CARX.cd = state.mode === "test" ? 0 : 20; CARX.cam.w = 0; CARX.pend = null;
+}
+// a pane on the outside of the building: the side away from the floor is out in the open
+function paneNormal(P) { return P.half.x < P.half.z ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1); }
+function paneOut(P, from) {
+  const n = paneNormal(P);
+  if (state.mode === "floor" && globalThis.BND) { if (lvOutside(P.center.clone().addScaledVector(n, 2))) return n; if (lvOutside(P.center.clone().addScaledVector(n, -2))) return n.negate(); return null; }
+  return from && n.dot(P.center.clone().sub(from)) < 0 ? n.negate() : n; // the testing ground: away from the body
+}
+// called on every launch; t,v are the torso's position and speed, T the time it leaves the building (or -1)
+function carxOffer(rd, t, v, T) {
+  if (CARX.cur || CARX.left <= 0 || CARX.cd > 0 || state.fin || !player || player.dead) return false;
+  const car = CARS.find((c) => c.state === "idle"); if (!car) return false;
+  const p = new THREE.Vector3(t.x, t.y, t.z);
+  if (T > 0) { if (Math.random() > (state.mode === "test" ? 0.8 : 0.55)) return false; return carxStart(rd, car, { kind: "air", T }); }
+  // inside, near a window: find the nearest whole outside pane with clear air between it and the body
+  let best = null, bd = 9;
+  for (const P of panes) {
+    if (P.broken) continue; const d = P.center.distanceTo(p); if (d > bd || Math.abs(P.center.y - p.y) > 5) continue;
+    const out = paneOut(P, p); if (!out) continue;
+    const to = p.clone().sub(P.center); const L = to.length(); to.divideScalar(L);
+    const hit = world.castRay(new RAPIER.Ray(P.center.clone().addScaledVector(to, 0.3), to), L - 0.6, true, undefined, GROUPS.envOnly, player.col, undefined, (c) => !glassByHandle.has(c.handle));
+    if (hit) continue; bd = d; best = { P, out };
+  }
+  if (!best || Math.random() > (state.mode === "test" ? 0.8 : 0.5)) return false;
+  return carxStart(rd, car, { kind: "glass", ...best });
+}
+// force one on the nearest body (testing ground key)
+function carxForce() {
+  const pp = playerPos(); const rd = ragdolls.filter((r) => !r.carHit && r.torso).sort((a, b) => rdPos(a).distanceTo(pp) - rdPos(b).distanceTo(pp))[0];
+  if (!rd) { flash("No body to hit · knock one down first", "var(--dim)"); return; }
+  const car = CARS.find((c) => c.state === "idle"); if (!car) return;
+  CARX.cd = 0; CARX.cur && carxEnd(CARX.cur, true);
+  const t = rd.torso.translation(); const p = new THREE.Vector3(t.x, t.y, t.z);
+  let best = null, bd = 30; for (const P of panes) { if (P.broken) continue; const d = P.center.distanceTo(p); if (d < bd) { const out = paneOut(P, p); if (out) { bd = d; best = { P, out }; } } }
+  carxStart(rd, car, best && bd < 16 ? { kind: "glass", ...best } : { kind: "air", T: 0.9 });
+}
+function carxStart(rd, car, o) {
+  const t = rd.torso.translation(); const p = new THREE.Vector3(t.x, t.y, t.z);
+  const S = { rd, car, kind: o.kind, t: 0, s: 0, hit: false, done: false, cam: 0, path: null };
+  const speed = 40; S.speed = speed;
+  if (o.kind === "air") {
+    const v = rd.torso.linvel(); const P0 = predictBody(t, v, o.T);
+    const hv = new THREE.Vector3(v.x, 0, v.z).normalize(); if (!isFinite(hv.x)) hv.set(0, 0, 1);
+    const across = new THREE.Vector3(-hv.z, 0, hv.x).multiplyScalar(Math.random() < 0.5 ? -1 : 1);
+    const dir = across.clone().add(new THREE.Vector3(0, -0.05, 0)).addScaledVector(hv, -0.2).normalize();
+    S.dir = dir; S.hitAt = P0; S.lead = o.T; S.start = P0.clone().addScaledVector(dir, -speed * o.T); S.camAnchor = P0.clone().addScaledVector(hv, -7).add(new THREE.Vector3(0, 1.6, 0)).addScaledVector(dir, 4);
+  } else {
+    // in through one pane, through the body, and out through another a little further along the facade
+    const P = o.P, out = o.out; const along = new THREE.Vector3(-out.z, 0, out.x); const sgn = along.dot(p.clone().sub(P.center)) >= 0 ? 1 : -1;
+    let exitP = null, ed = 1e9; for (const Q of panes) { if (Q === P || Q.broken || Math.abs(Q.center.y - P.center.y) > 1) continue; const o2 = paneOut(Q, p); if (!o2 || o2.dot(out) < 0.9) continue; const da = along.dot(Q.center.clone().sub(P.center)) * sgn; if (da < 4 || da > 16) continue; const d = Math.abs(da - 9); if (d < ed) { ed = d; exitP = Q; } }
+    const inA = P.center.clone(), outB = exitP ? exitP.center.clone() : P.center.clone().addScaledVector(along, sgn * 9);
+    const hy = Math.max(p.y, P.center.y - P.half.y + 1.0);
+    S.pts = [inA.clone().addScaledVector(out, 46).addScaledVector(along, -sgn * 26).setY(hy + 7), inA.clone().addScaledVector(out, 10).addScaledVector(along, -sgn * 4).setY(hy + 1.5), inA.clone().setY(hy), p.clone(), outB.clone().setY(hy + 0.3), outB.clone().addScaledVector(out, 10).addScaledVector(along, sgn * 4).setY(hy + 2), outB.clone().addScaledVector(out, 48).addScaledVector(along, sgn * 28).setY(hy + 10)];
+    S.curve = new THREE.CatmullRomCurve3(S.pts, false, "centripetal", 0.5); S.len = S.curve.getLength();
+    S.hitU = S.curve.getUtoTmapping(0, 0) || 0; // filled below
+    // where along the curve the body is
+    let bu = 0.5, bdist = 1e9; for (let i = 0; i <= 200; i++) { const q = S.curve.getPointAt(i / 200); const d = q.distanceTo(p); if (d < bdist) { bdist = d; bu = i / 200; } }
+    S.hitU = bu; S.inU = 2 / 6; S.outU = 4 / 6; S.out = out; S.along = along.multiplyScalar(sgn);
+    S.camAnchor = p.clone().addScaledVector(out, -6.5).addScaledVector(S.along, 1.5).setY(hy + 1.4);
+    S.u = 0;
+  }
+  // the car's body: a box that moves itself and pushes everything it meets
+  S.body = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(0, -200, 0));
+  world.createCollider(RAPIER.ColliderDesc.cuboid(0.9, 0.42, 2.05).setCollisionGroups(GROUPS.env), S.body);
+  Object.assign(car, { state: "strike", t: 0, rd, horn: false }); car.g.visible = true; car.beam.visible = true;
+  for (const m2 of car.body) m2.material = m2.userData.mat0 ||= m2.material;
+  CARX.cur = S; CARX.left--; CARX.cd = state.mode === "test" ? 6 : 40;
+  carxPlace(S, 0);
+  return true;
+}
+function carxPlace(S, dtw) {
+  const car = S.car; const prev = car.pos.clone();
+  if (S.kind === "air") {
+    // ride a line that ends on the body, wherever it really is, then keep going
+    if (!S.hit && ragdolls.includes(S.rd)) { const t = S.rd.torso.translation(); S.hitAt.set(t.x, t.y, t.z); const left = Math.max(0, S.lead - S.t); car.pos.copy(S.hitAt).addScaledVector(S.dir, -S.speed * left - 1.4); }
+    else car.pos.addScaledVector(S.dir, S.speed * dtw);
+    car.dir.copy(S.dir);
+  } else {
+    if (!S.hit && ragdolls.includes(S.rd)) { const t = S.rd.torso.translation(); const P = new THREE.Vector3(t.x, t.y, t.z); S.pts[3].lerp(P, 0.5); S.curve.updateArcLengths(); S.len = S.curve.getLength(); }
+    S.u = Math.min(1, S.u + (S.speed * dtw) / S.len);
+    S.curve.getPointAt(S.u, car.pos); S.curve.getTangentAt(Math.min(0.999, S.u), car.dir).normalize();
+  }
+  car.g.position.copy(car.pos); _cxa.copy(car.pos).add(car.dir); car.g.lookAt(_cxa);
+  // a little bank into the turns
+  if (S.kind === "glass") { const bank = THREE.MathUtils.clamp(car.dir.dot(S.along) * -0.6, -0.6, 0.6); car.g.rotateZ(bank); }
+  S.body.setNextKinematicTranslation({ x: car.pos.x, y: car.pos.y, z: car.pos.z }); S.body.setNextKinematicRotation(car.g.quaternion);
+  S.vel = dtw > 0 ? car.pos.clone().sub(prev).divideScalar(dtw) : car.dir.clone().multiplyScalar(S.speed);
+}
+// slow motion while the car is close to the body
+function carxTs(ts) { const S = CARX.cur; if (!S) return ts; return Math.min(ts, S.slow ?? 1); }
+function carxStep(dtw) {
+  if (CARX.cd > 0) CARX.cd -= dtw;
+  // a combo landed by the car waits for the camera to follow it out
+  if (CARX.pend && !CARX.cur) { CARX.pendT -= dtw; if (CARX.pendT <= 0) { const q = CARX.pend; CARX.pend = null; comboScreen(...q); } }
+  const S = CARX.cur; if (!S || dtw <= 0) return;
+  S.t += dtw; carxPlace(S, dtw); const car = S.car;
+  // glass: every pane the car's box goes through
+  for (const P of panes) if (!P.broken && Math.abs(car.pos.x - P.center.x) < P.half.x + 1.1 && Math.abs(car.pos.y - P.center.y) < P.half.y + 0.6 && Math.abs(car.pos.z - P.center.z) < P.half.z + 1.1) {
+    shatter(P, car.pos.clone(), car.dir.clone(), 22); shake = Math.max(shake, 0.35); noise(0.5, "highpass", 2800, 0.8, 0.8);
+    emitWorldSparks(car.pos.clone(), car.dir.clone().negate(), 20, 2, 7);
+  }
+  // the hit
+  const tp = ragdolls.includes(S.rd) ? rdPos(S.rd) : null;
+  if (!S.hit && tp && tp.distanceTo(car.pos) < 2.4) {
+    S.hit = true; S.hitT = S.t; const at = tp.clone();
+    for (const p of S.rd.parts) { p.mesh.material = M.charred; p.body.setLinvel({ x: S.vel.x * 0.75 + (Math.random() - 0.5) * 5, y: 6 + Math.random() * 4, z: S.vel.z * 0.75 + (Math.random() - 0.5) * 5 }, true); p.body.setAngvel({ x: (Math.random() - 0.5) * 22, y: (Math.random() - 0.5) * 22, z: (Math.random() - 0.5) * 22 }, true); }
+    S.rd.carHit = true;
+    boomSprite(at, "flash", 0.2, 10); for (let i = 0; i < 10; i++) boomSprite(at.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.6, (Math.random() - 0.5), (Math.random() - 0.5) * 1.6)), "fire", 0.5 + Math.random() * 0.4, 3 + Math.random() * 3, car.dir.clone().multiplyScalar(6 + Math.random() * 6));
+    emitWorldSparks(at, car.dir, 70, 0, 14); emitWorldSparks(at, new THREE.Vector3(0, 1, 0), 40, 2, 8); worldSmoke(at, 5, 0.6, 0x2a262e, 0.6, 0.5);
+    for (let i = 0; i < 6; i++) { const m = new THREE.Mesh(UNIT_RBOX, Math.random() < 0.5 ? M.charred : M.carBody); m.scale.set(0.15 + Math.random() * 0.3, 0.06 + Math.random() * 0.12, 0.15 + Math.random() * 0.4); addDebris(m, at.clone(), car.dir.clone().multiplyScalar(6 + Math.random() * 10).add(new THREE.Vector3((Math.random() - 0.5) * 8, Math.random() * 6, (Math.random() - 0.5) * 8)), 5, true); }
+    const d = camOrigin().distanceTo(at); shake = Math.max(shake, 1.1 * Math.max(0.2, 1 - d / 40)); impactFrame(70); glitch(0.6); sfx.carBoom(); hitstop(0.05);
+    flash("Traffic", "var(--amber)"); ev("car", { rd: S.rd });
+  }
+  if (!S.horn && (S.kind === "air" ? S.lead - S.t < 0.45 : S.u > S.inU - 0.12)) { S.horn = true; sfx.carPass(); }
+  // the player: clipped by a car is a bad day
+  if (!S.hurt && !player.dead) { const pp = playerPos(); if (pp.distanceTo(car.pos) < 2.2) { S.hurt = true; damagePlayer(35, { T: { dmg: 35, label: "traffic" } }); const k = car.dir.clone().multiplyScalar(16); player.body.setLinvel({ x: k.x, y: 6, z: k.z }, true); } }
+  // slow motion around the hit, the swoop camera on from entry to exit
+  const near = S.kind === "air" ? (S.t > S.lead - 0.35 && S.t < S.lead + 0.6) : (S.u > S.inU - 0.06 && S.u < S.outU + 0.05);
+  S.slow = near ? 0.28 : 1;
+  S.cam = S.kind === "air" ? (S.t > S.lead - 0.9 && S.t < S.lead + 1.1 ? 1 : 0) : (S.u > S.inU - 0.16 && S.u < S.outU + 0.16 ? 1 : 0);
+  const gone = S.kind === "air" ? S.t > S.lead + 2.2 : S.u >= 1;
+  if (gone) carxEnd(S);
+}
+function carxEnd(S, now) {
+  if (S.done) return; S.done = true; CARX.cur = null;
+  CARX.pendT = now ? 0 : 0.45;
+  try { world.removeRigidBody(S.body); } catch {}
+  S.car.state = "idle"; S.car.g.visible = false; S.car.rd = null;
+  if (now) CARX.cam.w = 0;
+}
+// the swoop camera: from inside the room (or beside the body), turning to follow the car in and out
+function carxCamera(dt) {
+  const C = CARX.cam, S = CARX.cur;
+  const want = S && S.cam && !state.fin && !player.dead && SET.carCam !== false ? 1 : 0;
+  C.w += (want - C.w) * (1 - Math.exp(-dt * (want ? 9 : 5)));
+  if (C.w < 0.002) { C.w = 0; return; }
+  if (S) {
+    const car = S.car;
+    // the anchor drifts with the car a little: a swoop, not a tripod
+    const anchor = S.camAnchor.clone().lerp(car.pos, 0.18); anchor.y = Math.max(anchor.y, S.camAnchor.y - 0.5);
+    C.at.lerp(S.hit && ragdolls.includes(S.rd) ? car.pos.clone().lerp(rdPos(S.rd), 0.35) : car.pos, C.at.lengthSq() ? 1 - Math.exp(-dt * 10) : 1);
+    shot2(anchor, C.at, { noClip: (c) => c.parent?.()?.handle === S.body.handle });
+    C.pos.copy(_fc); C.q.copy(_fq); C.fov = 58 - 10 * (S.slow < 1 ? 1 : 0);
+  }
+  const w = smooth(C.w);
+  camera.position.lerp(C.pos, w); camera.quaternion.slerp(C.q, w); camera.fov += (C.fov - camera.fov) * w;
+  camera.updateProjectionMatrix(); camera.updateMatrixWorld();
+}
+function carxCamOn() { return CARX.cam.w > 0.5; }
+
+// ================= bodies you can carry, idle animations, and the stim pen-spin =================
+// ---------- carry: F on a body picks it up by whatever part you looked at; the joints keep it in one piece ----------
+const CARRY = { rd: null, part: null, t: 0 };
+function carryPick() {
+  if (CARRY.rd) { carryDrop(new THREE.Vector3()); return true; }
+  if (state.fin || player.grapple || player.stimUse) return false;
+  const o = camOrigin(), d = lookDir(); let best = null, bs = 0;
+  for (const rd of ragdolls) for (const p of rd.parts) {
+    const t = p.body.translation(); const v = _cxb.set(t.x - o.x, t.y - o.y, t.z - o.z); const L = v.length(); if (L > 3.2 || L < 0.2) continue;
+    const c = v.dot(d) / L; if (c < 0.72) continue; const s = c - L * 0.08 + (p === rdPart(rd, "torso") ? 0.04 : 0); if (s > bs) { bs = s; best = { rd, p }; }
+  }
+  if (!best) return false;
+  CARRY.rd = best.rd; CARRY.part = best.p; CARRY.t = 0; best.rd.fin = true; best.rd.carried = true; idleCancel();
+  sfx.grab?.(); noise(0.12, "lowpass", 500, 0.4, 1, 160); hint("Carrying · LMB throws, F drops it", 2.5);
+  ev("carry", { rd: best.rd });
+  return true;
+}
+function carryDrop(v, thrown) {
+  const rd = CARRY.rd; if (!rd) return; CARRY.rd = null; CARRY.part = null; rd.fin = false; rd.carried = false;
+  if (!ragdolls.includes(rd)) return;
+  for (const p of rd.parts) { p.body.setLinvel({ x: v.x, y: v.y, z: v.z }, true); p.body.setAngvel({ x: (Math.random() - 0.5) * 4, y: (Math.random() - 0.5) * 4, z: (Math.random() - 0.5) * 4 }, true); }
+  if (thrown) { rd.born = state.time - 0.05; rd.launchSeen = false; rd.thrown = true; ev("throwBody", { rd }); }
+}
+// before anything else reads the inputs: a click while carrying is a throw
+function carryInput() {
+  if (!CARRY.rd) return;
+  if (!ragdolls.includes(CARRY.rd) || player.dead || state.fin) { carryDrop(new THREE.Vector3()); return; }
+  if (pressed.has("Attack")) {
+    pressed.delete("Attack"); mouse.left = false;
+    const d = lookDir(); const v = d.multiplyScalar(17).add(new THREE.Vector3(0, 3.2, 0)).add(player.vel.clone().multiplyScalar(0.9));
+    carryDrop(v, true); sfx.whiff?.(); CAM.kickV += 2; VM.throwT = 0.3;
+  }
+  if (pressed.has("KeyE") || pressed.has("Block")) carryDrop(player.vel.clone());
+}
+function carryStep(dt) {
+  const rd = CARRY.rd; if (!rd || dt <= 0) return; CARRY.t += dt;
+  if (!ragdolls.includes(rd)) { CARRY.rd = null; return; }
+  const o = camOrigin(), d = lookDir(); const f = new THREE.Vector3(d.x, Math.max(-0.5, Math.min(0.5, d.y)), d.z).normalize();
+  const hold = o.addScaledVector(f, 1.55).add(new THREE.Vector3(0, -0.35, 0));
+  const pt = CARRY.part.body.translation(); const err = hold.clone().sub(_cxa.set(pt.x, pt.y, pt.z));
+  if (err.length() > 4.5) { carryDrop(player.vel.clone()); return; }
+  const v = err.multiplyScalar(13); if (v.length() > 22) v.setLength(22); v.add(player.vel);
+  for (const p of rd.parts) {
+    const lv = p.body.linvel(); const k = p === CARRY.part ? 1 : 0.22;
+    p.body.setLinvel({ x: lv.x + (v.x - lv.x) * k, y: lv.y + (v.y - lv.y) * k, z: lv.z + (v.z - lv.z) * k }, true);
+    if (p === CARRY.part) { const av = p.body.angvel(); p.body.setAngvel({ x: av.x * 0.85, y: av.y * 0.85, z: av.z * 0.85 }, true); }
+  }
+}
+// the left hand out in front, gripping
+function carryPose(L) {
+  VM.throwT = Math.max(0, (VM.throwT || 0) - 1 / 60);
+  if (CARRY.rd) { Object.assign(L, { p: [-0.2, -0.28, -0.2], r: [0.3, -0.12, 0], el: 0.25, w: [-0.25, 0, 0.5], curl: 1 }); return true; }
+  if (VM.throwT > 0) { const q = VM.throwT / 0.3; Object.assign(L, { p: [-0.18, -0.25, -0.26 * q], r: [0.45 * q, -0.1, 0], el: 0.1, w: [-0.1, 0, 0.4], curl: 0.2 }); return true; }
+  return false;
+}
+
+// ---------- idle animations: after a while standing still, UNIT-7 checks its phone, or tries to eat a banana ----------
+const IDLE = { still: 0, cur: null, n: 0, props: null };
+function idleProps() {
+  if (IDLE.props) return IDLE.props;
+  // the phone: a slab with a feed that scrolls
+  const phone = new THREE.Group();
+  const slab = new THREE.Mesh(rbox(0.074, 0.15, 0.009, 0.3, 0.004), M.roboDark); phone.add(slab);
+  const cv = document.createElement("canvas"); cv.width = 128; cv.height = 512; const cx = cv.getContext("2d");
+  cx.fillStyle = "#0b0f18"; cx.fillRect(0, 0, 128, 512);
+  const cols = ["#ff3d5a", "#4ff0ff", "#ffb547", "#9a7bff", "#48ff9a", "#ff8a3d"];
+  for (let i = 0, y = 4; y < 512; i++) { const h = 44 + ((i * 37) % 40); cx.fillStyle = "#151c2a"; cx.fillRect(6, y, 116, h); cx.fillStyle = cols[i % cols.length]; cx.fillRect(10, y + 4, 108, h - 22); cx.fillStyle = "#8a95a8"; cx.fillRect(10, y + h - 14, 60 + ((i * 13) % 40), 4); cx.fillRect(10, y + h - 7, 30 + ((i * 7) % 50), 3); y += h + 6; }
+  const tex = new THREE.CanvasTexture(cv); tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(1, 0.35); tex.colorSpace = THREE.SRGBColorSpace;
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.066, 0.136), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false })); screen.position.z = 0.0051; phone.add(screen);
+  const heart = new THREE.Mesh(new THREE.CircleGeometry(0.012, 16), new THREE.MeshBasicMaterial({ color: 0xff3d5a, transparent: true, opacity: 0, toneMapped: false, depthWrite: false })); heart.position.set(0, 0, 0.006); phone.add(heart);
+  phone.userData = { tex, heart }; phone.visible = false; armL.hand.add(phone);
+  // the banana: a curved yellow body, a stem, cream fruit at the top and three strips of peel that fold down
+  const banana = new THREE.Group(); const yellow = new THREE.MeshStandardMaterial({ color: 0xf2cf3a, roughness: 0.55 }), cream = new THREE.MeshStandardMaterial({ color: 0xf4ecc8, roughness: 0.7 }), brown = new THREE.MeshStandardMaterial({ color: 0x4a3418, roughness: 0.8 });
+  const curve = new THREE.QuadraticBezierCurve3(new THREE.Vector3(0, -0.09, 0), new THREE.Vector3(0.022, -0.03, 0), new THREE.Vector3(0, 0.02, 0));
+  const body = new THREE.Mesh(new THREE.TubeGeometry(curve, 16, 0.017, 10, false), yellow); banana.add(body);
+  const tipB = new THREE.Mesh(new THREE.SphereGeometry(0.017, 10, 8), yellow); tipB.position.set(0, -0.09, 0); tipB.scale.y = 0.6; banana.add(tipB);
+  const stub = new THREE.Mesh(new THREE.CylinderGeometry(0.004, 0.005, 0.014, 6), brown); stub.position.set(0, -0.102, 0); banana.add(stub);
+  const fruit = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.0145, 0.07, 10), cream); fruit.position.y = 0.055; banana.add(fruit);
+  const fruitTop = new THREE.Mesh(new THREE.SphereGeometry(0.011, 10, 8), cream); fruitTop.position.y = 0.09; banana.add(fruitTop);
+  const peels = [0, 1, 2].map((i) => { const a = (i / 3) * Math.PI * 2; const piv = new THREE.Group(); piv.position.set(Math.cos(a) * 0.0145, 0.02, Math.sin(a) * 0.0145); piv.rotation.y = -a; banana.add(piv);
+    const s = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.078, 0.018), yellow); s.position.y = 0.039; piv.add(s); const end = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.01, 0.008), brown); end.position.y = 0.079; piv.add(end); return piv; });
+  banana.userData = { peels, fruit, fruitTop }; banana.visible = false; armL.hand.add(banana);
+  IDLE.props = { phone, banana };
+  return IDLE.props;
+}
+const IDLE_ANIMS = {
+  phone: { dur: 9.2, L: [[0, REST_L], [0.35, { p: [-0.3, -0.42, 0.02], r: [-0.3, -0.3, 0], el: 1.2, w: [-0.3, 0, 0.6], curl: 0.9 }],
+    [0.8, { p: [-0.26, -0.33, 0.02], r: [-0.1, -0.5, 0.1], el: 1.4, w: [-0.6, 0.2, 1.4], curl: 0.85 }], [4.4, { p: [-0.25, -0.32, 0.02], r: [-0.08, -0.47, 0.12], el: 1.42, w: [-0.62, 0.22, 1.42], curl: 0.85 }],
+    [8.1, { p: [-0.26, -0.33, 0.02], r: [-0.1, -0.5, 0.1], el: 1.4, w: [-0.6, 0.2, 1.4], curl: 0.85 }],
+    [8.6, { p: [-0.3, -0.42, 0.02], r: [-0.3, -0.3, 0], el: 1.2, w: [-0.3, 0, 0.6], curl: 0.9 }], [9.2, REST_L]],
+    cam: [[0, 0, 0], [0.8, -0.3, 0.02], [2.5, -0.32, 0.03], [4.2, -0.3, -0.02], [5.0, -0.12, 0.05], [5.6, -0.3, 0.02], [7.9, -0.31, 0.03], [8.6, -0.05, 0], [9.2, 0, 0]] },
+  banana: { dur: 8.6, L: [[0, REST_L], [0.35, { p: [-0.3, -0.42, 0.02], r: [-0.3, -0.3, 0], el: 1.2, w: [-0.3, 0, 0.6], curl: 0.9 }],
+    [0.8, { p: [-0.26, -0.33, 0.02], r: [-0.1, -0.5, 0.1], el: 1.4, w: [-0.6, 0.2, 1.4], curl: 0.95 }], [2.9, { p: [-0.255, -0.325, 0.02], r: [-0.08, -0.48, 0.12], el: 1.42, w: [-0.6, 0.25, 1.4], curl: 0.95 }],
+    [3.45, { p: [-0.25, -0.32, 0.02], r: [-0.04, -0.49, 0.1], el: 1.55, w: [-0.6, 0.2, 1.4], curl: 0.95 }], [3.78, { p: [-0.22, -0.31, 0.02], r: [0.06, -0.42, 0.1], el: 1.8, w: [-0.6, 0.2, 1.4], curl: 0.95 }],
+    [3.98, { p: [-0.24, -0.31, 0.02], r: [0.02, -0.48, 0.1], el: 1.7, w: [-0.6, 0.2, 1.4], curl: 0.95 }], [4.2, { p: [-0.22, -0.31, 0.02], r: [0.06, -0.42, 0.1], el: 1.8, w: [-0.6, 0.2, 1.4], curl: 0.95 }],
+    [4.55, { p: [-0.25, -0.32, 0.02], r: [-0.04, -0.49, 0.1], el: 1.55, w: [-0.6, 0.2, 1.4], curl: 0.95 }], [5.5, { p: [-0.26, -0.33, 0.02], r: [-0.1, -0.5, 0.1], el: 1.4, w: [-0.6, 0.45, 1.4], curl: 0.95 }],
+    [6.3, { p: [-0.26, -0.33, 0.02], r: [-0.1, -0.5, 0.1], el: 1.4, w: [-0.6, -0.1, 1.4], curl: 0.95 }], [6.75, { p: [-0.34, -0.24, 0.0], r: [0.1, -0.9, -0.2], el: 0.9, w: [-0.4, -0.4, 1.0], curl: 0.95 }],
+    [6.9, { p: [-0.38, -0.22, -0.02], r: [0.15, -1.15, -0.3], el: 0.5, w: [-0.2, -0.7, 0.6], curl: 0.1 }], [7.6, { p: [-0.32, -0.4, 0.02], r: [-0.2, -0.4, 0], el: 0.9, w: [-0.3, 0, 0.6], curl: 0.5 }], [8.6, REST_L]],
+    cam: [[0, 0, 0], [0.8, -0.2, 0], [2.8, -0.22, 0.02], [3.6, -0.08, 0], [3.8, 0.05, 0], [4.3, 0.02, 0.03], [4.7, -0.15, 0.13], [5.6, -0.2, 0.16], [6.3, -0.18, 0.05], [6.9, -0.05, -0.08], [7.6, 0, 0], [8.6, 0, 0]] },
+};
+for (const A of Object.values(IDLE_ANIMS)) { A.LK = A.L.map(([t, P0]) => [t, ..._flat(P0)]); }
+function idleStart(kind) {
+  const P = idleProps(); kind ||= IDLE.n++ % 2 ? "banana" : "phone";
+  IDLE.cur = { kind, t: 0, A: IDLE_ANIMS[kind], cues: new Set(), out: 0 };
+  ev("idle", { kind });
+}
+function idleCancel() { if (IDLE.cur && !IDLE.cur.out) IDLE.cur.out = 0.001; IDLE.still = 0; }
+// per frame: count stillness, start, cancel
+function idleUpdate(dt) {
+  if (!player || player.dead || !state.started || state.fin) { IDLE.still = 0; if (IDLE.cur) idleEnd(); return; }
+  const moving = player.vel.lengthSq() > 0.25 || !player.grounded || keys.size > 0 || mouse.left || mouse.right || player.grapple || player.stimUse || VM.attack || VM.inspect || CARRY.rd || player.kick || player.climb || VM.gunAnim;
+  const threat = state.time - (player.lastHurt ?? -99) < 8 || alive().some((e) => e.alert && !e.dummy && enemyPos(e).distanceTo(playerPos()) < 30);
+  if ((moving || threat) && IDLE.fixT == null) { IDLE.still = 0; if (IDLE.cur) idleCancel(); }
+  else IDLE.still += dt;
+  if (!IDLE.cur && IDLE.still > 14) { IDLE.still = -6; idleStart(); }
+  const C = IDLE.cur; if (!C) return;
+  if (C.out) { C.out += dt; if (C.out > 0.35) idleEnd(); return; }
+  if (IDLE.fixT != null) { C.t = IDLE.fixT; return; }
+  C.t += dt; if (C.t >= C.A.dur) idleEnd();
+}
+function idleEnd() { const P = IDLE.props; if (P) { P.phone.visible = false; P.banana.visible = false; } IDLE.cur = null; }
+// the arms: left hand from the keys, right arm lowered out of view with the weapon
+function idlePose(R, L) {
+  const C = IDLE.cur; if (!C) return false;
+  const w = C.out ? 1 - smooth(C.out / 0.35) : smooth(Math.min(1, C.t / 0.4)) * smooth(Math.min(1, (C.A.dur - C.t) / 0.5));
+  const tgt = ckeyPose(C.A.LK, Math.min(C.A.dur, C.t)); lerpPose(L, tgt, C.out ? w : 1);
+  R.p[1] -= 0.62 * w; R.p[0] += 0.12 * w; R.p[2] += 0.1 * w; R.r[0] -= 0.9 * w;
+  const P = idleProps(), t = C.t;
+  if (C.kind === "phone") {
+    P.phone.visible = t > 0.3 && t < 8.7 && !C.out; 
+    // swipes: every so often the thumb flicks and the feed jumps; one like
+    const sw = [1.3, 2.2, 2.9, 3.6, 4.4, 5.9, 6.6, 7.3]; let off = 0; for (const s of sw) off += smooth((t - s) / 0.35) * 0.09; off += Math.max(0, t - 1) * 0.004;
+    P.phone.userData.tex.offset.y = -off;
+    for (const s of sw) if (t > s && !C.cues.has(s)) { C.cues.add(s); tone("sine", 2400, 2200, 0.03, 0.015); }
+    const lk = t > 5.0 && t < 5.7 ? Math.sin(((t - 5.0) / 0.7) * Math.PI) : 0; P.phone.userData.heart.material.opacity = lk; P.phone.userData.heart.scale.setScalar(0.5 + lk);
+    if (t > 5.0 && !C.cues.has("like")) { C.cues.add("like"); tone("sine", 1500, 2600, 0.12, 0.03); }
+    if (t > 0.3 && !C.cues.has("out")) { C.cues.add("out"); sfx.servo?.(); }
+    VM.idleThumb = sw.reduce((a, s) => a + Math.max(0, Math.sin(((t - s) / 0.35) * Math.PI)) * (t > s && t < s + 0.35 ? 1 : 0), 0);
+  } else {
+    P.banana.visible = t > 0.3 && !C.cues.has("toss") && !C.out; 
+    const pk = [1.0, 1.55, 2.15]; P.banana.userData.peels.forEach((pv, i) => { pv.rotation.z = -2.7 * smooth((t - pk[i]) / 0.3); });
+    for (const s of pk) if (t > s && !C.cues.has(s)) { C.cues.add(s); noise(0.08, "bandpass", 1800, 0.25, 3, 600); }
+    // the bonks on the faceplate
+    for (const [s, k] of [[3.78, 1], [4.2, 0.6]]) if (t > s && !C.cues.has(s)) { C.cues.add(s); sfx.clunk?.(); noise(0.1, "lowpass", 900, 0.5 * k, 1, 300); CAM.kickV -= 3 * k; shake = Math.max(shake, 0.15 * k); P.banana.userData.fruitTop.scale.set(1.4, 0.4 + 0.3 * (1 - k), 1.4); }
+    if (t > 4.6 && !C.cues.has("hm")) { C.cues.add("hm"); tone("sine", 220, 160, 0.4, 0.04); tone("sine", 330, 250, 0.35, 0.03, 0.3); }
+    if (t > 6.85 && !C.cues.has("toss")) { C.cues.add("toss"); idleTossBanana(); }
+    VM.idleThumb = 0; IDLE.bonk = smooth((t - 3.3) / 0.4) * (1 - smooth((t - 4.4) / 0.5));
+  }
+  return true;
+}
+// props are placed in camera space after the arm pose: they sit at the hand, but always face the camera, so the screen and the fruit read
+const _im = new THREE.Matrix4(), _im2 = new THREE.Matrix4(), _iq = new THREE.Quaternion(), _iq2 = new THREE.Quaternion(), _iv = new THREE.Vector3(), _iv0 = new THREE.Vector3(), _ivs = new THREE.Vector3(0.82, 0.82, 0.82), _iup = new THREE.Vector3(0, 1, 0), _ie = new THREE.Euler();
+function idleMount(obj, off, ex, ey, ez) {
+  vmCamera.updateMatrixWorld(true); const hand = obj.parent;
+  _im.copy(vmCamera.matrixWorld).invert().multiply(hand.matrixWorld);
+  _iv.setFromMatrixPosition(_im).add(off);
+  _im2.lookAt(_iv0.set(0, 0, 0), _iv, _iup); _iq.setFromRotationMatrix(_im2).multiply(_iq2.setFromEuler(_ie.set(ex, ey, ez, "YXZ")));
+  _im2.compose(_iv, _iq, _ivs); _im.invert().multiply(_im2); _im.decompose(obj.position, obj.quaternion, obj.scale);
+}
+const IDLE_MOUNT = { phone: [0.035, 0.035, -0.02, -0.35, 0, 0.12], banana: [0.03, 0.05, -0.01, 0, 0, 0.2] };
+function idlePost() {
+  const C = IDLE.cur; if (!C) return;
+  if (C.kind === "phone" && armL.thumb) { armL.thumb.rotation.x = -0.4 - 0.5 * (VM.idleThumb || 0); }
+  if (IDLE.dbg) return;
+  const P = IDLE.props, m = IDLE.mnt || IDLE_MOUNT[C.kind];
+  if (C.kind === "phone") idleMount(P.phone, _iv.set(m[0], m[1], m[2]).clone(), m[3], m[4], m[5]);
+  else { const b = IDLE.bonk || 0; idleMount(P.banana, _iv.set(m[0], m[1], m[2]).clone(), m[3] + 1.1 * b, m[4], m[5] * (1 - b)); }
+}
+function idleCam() {
+  const C = IDLE.cur; if (!C) return [0, 0];
+  const w = C.out ? 1 - smooth(C.out / 0.35) : 1; const v = ckey(C.A.cam, C.t); return [v[0] * w, v[1] * w];
+}
+function idleTossBanana() {
+  const P = IDLE.props; vmCamera.updateMatrixWorld(true); const at = vmToWorld(P.banana.getWorldPosition(new THREE.Vector3()));
+  const b = P.banana.clone(true); b.scale.setScalar(1.6); b.visible = true;
+  const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw)), fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+  addDebris(b, at, right.multiplyScalar(-3.6).addScaledVector(fwd, -0.6).add(new THREE.Vector3(0, 3.4, 0)), 12); sfx.whiff?.();
+  P.banana.visible = false; P.banana.userData.fruitTop.scale.set(1, 1, 1);
+}
+
+// ---------- the stim: the grapple hand flicks it up, it spins end over end like a pen, the hand catches it ----------
+const STIM_AIR = { up: 0.44, catch: 1.0 };
+const _sia = new THREE.Vector3(), _siq = new THREE.Quaternion(), _sim = new THREE.Matrix4(), _sis = new THREE.Vector3();
+function stimInjPose() {
+  const U = player.stimUse; if (!vmInj.visible) return;
+  const std = () => { vmInj.position.set(-0.028, -0.037, -0.095); vmInj.rotation.set(0, Math.PI / 2, 0); };
+  if (!U || U.t < STIM_AIR.up || U.t >= STIM_AIR.catch) {
+    if (vmInj.parent !== armL.hand) armL.hand.add(vmInj);
+    if (U && U.t >= STIM_AIR.catch && !U.caught) { U.caught = true; sfx.clunk?.(); tone("sine", 1800, 1400, 0.05, 0.03); }
+    std(); return;
+  }
+  // in the air: released in the hand's frame, carried in the rig's frame so the hand can let go of it
+  vmCamera.updateMatrixWorld(true);
+  if (!U.air) {
+    std(); armL.hand.updateWorldMatrix(true, false); vmInj.updateMatrixWorld(true); rig.attach(vmInj);
+    U.air = { p: vmInj.position.clone(), q: vmInj.quaternion.clone() }; sfx.whiff?.(); tone("sine", 900, 1500, 0.08, 0.02);
+  }
+  const u = (U.t - STIM_AIR.up) / (STIM_AIR.catch - STIM_AIR.up);
+  const h = 0.16 * 4 * u * (1 - u);
+  vmInj.position.copy(U.air.p).add(_sia.set(0.01 * Math.sin(u * Math.PI), h, 0));
+  // two full turns about its short axis, so it lands back the way it left
+  _siq.setFromAxisAngle(_sis.set(1, 0, 0), smooth(u) * Math.PI * 4); vmInj.quaternion.copy(U.air.q).multiply(_siq);
+  // the last stretch eases onto where the hand really is
+  if (u > 0.82) {
+    const k = smooth((u - 0.82) / 0.18); armL.hand.updateWorldMatrix(true, false);
+    const tmp = new THREE.Object3D(); tmp.position.set(-0.028, -0.037, -0.095); tmp.rotation.set(0, Math.PI / 2, 0); armL.hand.add(tmp); tmp.updateMatrixWorld(true);
+    _sim.copy(rig.matrixWorld).invert().multiply(tmp.matrixWorld); armL.hand.remove(tmp);
+    const pp = new THREE.Vector3(), qq = new THREE.Quaternion(), ss = new THREE.Vector3(); _sim.decompose(pp, qq, ss);
+    vmInj.position.lerp(pp, k); vmInj.quaternion.slerp(qq, k);
+  }
+}
+
 // ---------- loop ----------
 let acc = 0, last = performance.now();
 function simStep() {
   if (state.tsMode !== "normal") { state.tsTimer -= DT; if (state.tsTimer <= 0) { if (state.tsMode === "stop") sfx.resume(); setTime("normal", 0); } }
   let ts = state.ts;
   if (hitstopT > 0) { hitstopT -= DT; ts = Math.min(ts, 0.08); }
-  ts = comboRamp(ts);
+  ts = comboRamp(ts); ts = carxTs(ts);
   state.time += DT;
   (player.prev ||= new THREE.Vector3()).copy(playerPos());
   stepPlayer(DT);
@@ -10887,7 +11270,7 @@ function frame(now) {
       }
       if (f.t <= 0) { levelGroup.remove(f.obj); dispGeo(f.obj.geometry); if (f.life) f.obj.material.dispose(); fx.splice(i, 1); }
     }
-    if (!state.fin) updateCamera(dt);
+    if (!state.fin) { updateCamera(dt); carxCamera(dt); }
     updateHud(dt);
     if (SET.fps && (PERF.fpsT = (PERF.fpsT || 0) - dt) <= 0) { PERF.fpsT = 0.4; $("fpsc").textContent = `${Math.round(1000 / Math.max(1, PERF.ft))} fps`; }
   } else if (!state.started) {
@@ -10907,7 +11290,7 @@ function frame(now) {
   renderer.clear();
   renderer.render(scene, camera);
   const live = running || booting;
-  rig.visible = selfBody.visible = !!live && !state.fin;
+  rig.visible = selfBody.visible = !!live && !state.fin && !carxCamOn();
   if (live && !state.fin) { renderer.clearDepth(); renderer.render(vmScene, vmCamera); }
   renderer.setRenderTarget(null);
   // glitch level: low health and time powers hold it up, events spike it, and now and then the feed blips on its own
@@ -10936,7 +11319,7 @@ setVoice(VOICE.on); renderBook();
 document.querySelector("#mnav button").focus({ preventScroll: true });
 state.pendingRestart = true; state.pendingFresh = true;
 // test hooks
-window.__res = { BOSSES, BOSS_KINDS, bossPenSpawn, bossPenSkip, bossPenClear, scene, renderer, LV, FLOORS, damageEnemy, killEnemy, buildFloor, lvCleared, get CITYR() { return CITYR; }, get finRig() { return finRig; }, applyFinPose, pose2, P2, FIN_POSES, rigIK, rigHandAim, rigPalm, FIN2, get U7M() { return globalThis.U7M_; },
+window.__res = { comboLanded, COMBOS, CARX, CARRY, IDLE, carxForce, carxOffer, carryPick, carryDrop, pressed, get panes() { return panes; }, idleStart, get ragdolls2() { return ragdolls; }, BOSSES, BOSS_KINDS, bossPenSpawn, bossPenSkip, bossPenClear, scene, renderer, LV, FLOORS, damageEnemy, killEnemy, buildFloor, lvCleared, get CITYR() { return CITYR; }, get finRig() { return finRig; }, applyFinPose, pose2, P2, FIN_POSES, rigIK, rigHandAim, rigPalm, FIN2, get U7M() { return globalThis.U7M_; },
   view(pos, at, fov = 40) { const cam = new THREE.PerspectiveCamera(fov, innerWidth / innerHeight, 0.05, 400); cam.position.set(...pos); cam.lookAt(new THREE.Vector3(...at)); scene.updateMatrixWorld(true); renderer.setRenderTarget(null); renderer.render(scene, cam); return renderer.domElement.toDataURL("image/png"); },
   FX2, FPROPS, DOORWAYS, ARS, WDEF, arsCancel, solveArmIK, armL, armR, cur, rig, get vmCam() { return vmCamera; }, SET, openSettings, applySet, bootFloor,
   get player() { return player; }, get enemies() { return enemies; }, get panes() { return panes; }, get bolts() { return bolts; }, state, keys, mouse, pressed,
