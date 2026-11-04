@@ -551,6 +551,7 @@ body.nosubs #subs { display: none; }
 import * as THREE from "three";
 import RAPIER from "rapier";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { Reflector } from "three/addons/objects/Reflector.js";
 
 await RAPIER.init();
 
@@ -991,13 +992,13 @@ const pressed = new Set(); // edge-triggered actions, consumed by the sim
 let yaw = 0, pitch = 0, locked = false;
 addEventListener("keydown", (e) => {
   if (CF.on) { if (!e.repeat && CF.t > 0.4) endComboScreen(); if (["Space", "ControlLeft", "ControlRight"].includes(e.code)) e.preventDefault(); return; }
-  if (e.code === "Escape") for (const o of document.querySelectorAll(".ov:not([hidden])")) o.hidden = true;
+  if (e.code === "Escape") { if (TGM.open) TGM.open = false; for (const o of document.querySelectorAll(".ov:not([hidden])")) o.hidden = true; }
   if (!e.repeat) pressed.add(e.code);
   keys.add(e.code);
   if (e.code === "Backspace" && state.started && !state.boot && !e.repeat) restart(false);
   if (state.boot && (e.code === "Space" || e.code === "Enter") && !e.repeat) { state.boot.skipped = true; stopVoice(); state.boot.t = Math.max(state.boot.t, BOOT_END - 0.6); }
   if (!$("intro").hidden && (e.code === "Enter" || e.code === "Space") && !e.repeat) introAdvance();
-  if (["Space", "ControlLeft", "ControlRight"].includes(e.code)) e.preventDefault();
+  if (["Space", "ControlLeft", "ControlRight"].includes(e.code) || (e.code === "Tab" && state.mode === "test" && state.started)) e.preventDefault();
 });
 addEventListener("keyup", (e) => keys.delete(e.code));
 addEventListener("blur", () => { keys.clear(); mouse.left = mouse.right = false; });
@@ -1724,6 +1725,7 @@ function killEnemy(e, hitPoint, dir, force) {
   world.removeRigidBody(e.body);
   levelGroup.remove(e.group);
   if (e.T.die) e.T.die(e, hitPoint, dir, force); else spawnRagdoll(e, hitPoint, dir, force);
+  if ((state.fin || MF.cur || e.finishing) && e.rd && ragdolls.includes(e.rd)) try { goreKill(e.rd, hitPoint, dir); } catch (err) { console.warn(err); }
   sfx.kill();
   if (e.dummy && state.mode === "test") TEST.respawn.push({ type: e.type, x: e.home.x, z: e.home.z, y: e.home.y, t: 3 });
   for (const b of bolts) if (b.owner === e) b.owner = null;
@@ -1770,7 +1772,7 @@ function spawnRagdoll(e, hitPoint, dir, force) {
   best.body.applyImpulseAtPoint({ x: dir.x * force, y: dir.y * force + force * 0.25, z: dir.z * force }, hitPoint, true);
   parts.torso.body.applyImpulse({ x: dir.x * force * 0.6, y: force * 0.15, z: dir.z * force * 0.6 }, true);
   ragdolls.push(rd); e.rd = rd;
-  while (ragdolls.length > 7) freezeRagdoll(ragdolls.find((r) => r !== rd && !r.fin && !(state.fin && r === state.fin.rd)) || ragdolls[0]);
+  while (ragdolls.length > 7) freezeRagdoll(ragdolls.find((r) => r !== rd && !r.fin && !r.mfHeld && !(state.fin && r === state.fin.rd)) || ragdolls[0]);
 }
 // keep the body where it lies but drop its physics, so corpses cost nothing
 function freezeRagdoll(rd) {
@@ -2406,7 +2408,7 @@ function updateTest(dt) {
     const pp = playerPos(); const tgt = finisherTarget() || alive().filter((x) => !x.T.boss).sort((a, b) => enemyPos(a).distanceTo(pp) - enemyPos(b).distanceTo(pp))[0];
     if (tgt) startFinisher(tgt); else flash("No target", "var(--dim)");
   }
-  bossPenKeys(); p5TestKeys();
+  bossPenKeys(); p5TestKeys(); tgmStep();
   if (pressed.has("KeyM")) carxForce();
   if (pressed.has("KeyI")) { idleCancel(); IDLE.cur = null; idleStart(); }
   if (pressed.has("KeyK")) { document.exitPointerLock?.(); setTimeout(openBook, 60); }
@@ -2952,6 +2954,7 @@ function sliceEnemy(e, dir, kind = "finisher") {
   sfx.kill();
   if (e.dummy && state.mode === "test") TEST.respawn.push({ type: e.type, x: e.home.x, z: e.home.z, y: e.home.y, t: 3 });
   updateCount(); if (kind !== "finisher") { tutKilled(e); if (alive().length === 0 && !state.fin) phaseCleared(); } ev("kill", { e, kind, sword: kind === "finisher", w: kind === "finisher" ? "sword" : weaponOf(kind), air: !player.grounded });
+  if (state.fin) { goreHalf(up); goreHalf(lo); }
   return [up, lo];
 }
 const _fc = new THREE.Vector3(), _ft = new THREE.Vector3(), _fq = new THREE.Quaternion(), _fm = new THREE.Matrix4(), _fu = new THREE.Vector3(0, 1, 0);
@@ -3882,12 +3885,12 @@ function restart(fromScratch) {
   glassByHandle.clear(); enemyByHandle.clear(); ragByHandle.clear(); resetMoves(); resetCombos(); resetArsenal();
   if (state.mode !== "tut") { sun.position.copy(TUT.sunHome); sun.target.position.set(0, 0, 0); TUT.rooms = []; }
   world = new RAPIER.World({ x: 0, y: -9.81 * 2.2, z: 0 });
-  world.timestep = DT; propsReset();
+  world.timestep = DT; propsReset(); goreReset(); mirReset(); tgmReset();
   if (state.mode === "test") buildTestLevel(); else if (state.mode === "tut") buildTutLevel(); else if (state.mode === "floor" && (state.floor || 1) > 1) buildFloor(state.floor); else buildLevel();
   { try { finProps(); finDisc.visible = true; } catch {} const vis = [finRig.root, worldSparks.lines, tracers[0].m, ...moveWarm()]; for (const o of vis) o.visible = true; try { renderer.compile(scene, camera); } catch {} for (const o of vis) o.visible = false; if (finDisc) finDisc.visible = false; }
   Object.assign(state, { over: false, time: 0, runStart: 0 });
   setTime("normal", 0); hitstopT = 0; hookFx.state = "idle"; VM.attack = null; GL.spike = 0;
-  clearHints(); $("steps").innerHTML = ""; $("objl").textContent = "Objective"; $("legend").hidden = state.mode !== "test"; $("targets").hidden = false; $("speed").hidden = state.mode !== "test";
+  clearHints(); $("steps").innerHTML = ""; $("objl").textContent = "Objective"; $("legend").hidden = true; if ($("tghint")) $("tghint").hidden = state.mode !== "test"; $("targets").hidden = false; $("speed").hidden = state.mode !== "test";
   if (state.mode === "tut") tutStart();
   else if (state.mode === "test") {
     player = createPlayer(new THREE.Vector3(0, 1.2, 12), 0);
@@ -3932,7 +3935,7 @@ function warmup() {
   add(new THREE.Mesh(RING_GEO, new THREE.MeshBasicMaterial({ transparent: true, side: THREE.DoubleSide, depthTest: false })));
   add(new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex, depthTest: false, transparent: true })));
   scene.add(g);
-  add(new THREE.Mesh(DECAL_GEO, M.crack)); add(new THREE.Mesh(UNIT_BOX, M.stimHi)); add(new THREE.Mesh(UNIT_BOX, M.charred)); add(new THREE.Mesh(UNIT_BOX, M.medBox)); add(buildInjector(1));
+  add(new THREE.Mesh(DECAL_GEO, M.crack)); add(new THREE.Mesh(UNIT_BOX, M.stimHi)); add(new THREE.Mesh(UNIT_BOX, M.charred)); add(new THREE.Mesh(UNIT_BOX, M.medBox)); add(buildInjector(1)); try { r6Warm(add); } catch {}
   const vis = [gunG, muzzleFlash, steamPuffs[0].s, tracers[0].m, worldSparks.lines, ...moveWarm(), ...arsWarm()]; for (const o of vis) o.visible = true;
   try { renderer.compile(scene, camera); renderer.compile(vmScene, vmCamera); } catch {}
   for (const o of vis) o.visible = false; setViewModel();
@@ -4455,7 +4458,7 @@ function discAnchorHit(o, d) {
   return { point: DISC.pos.clone(), toi: tca, disc: true };
 }
 
-// ---------- launched bodies: 2 of every 5 thrown outside are hit by a flying car; bodies thrown into walls crack them and stick ----------
+// ---------- launched bodies: one you throw out of a window is hit by a flying car; bodies thrown into walls crack them and stick ----------
 const IMPACT = { launches: 0, decals: [], debris: [], fx: [] };
 const crackTex = (() => {
   const c = document.createElement("canvas"); c.width = c.height = 256; const g = c.getContext("2d");
@@ -4571,9 +4574,10 @@ function classifyLaunch(rd, t, v, sp) {
     for (let s = 0.1; s <= 1.3; s += 0.05) { const p = predictBody(t, v, s); if (lvOutside(p)) { T = s + 0.32; break; } if (p.y < -0.5) break; }
     if (wall && (wall.toi ?? wall.timeOfImpact) < Math.min(t.x - BND.x0, BND.x1 - t.x, t.z - BND.z0, BND.z1 - t.z)) T = -1;
   }
-  if (T < 0) { if (carxOffer(rd, t, v, -1)) { IMPACT.launches++; ev("launch", { rd }); } return; }
+  if (state.mode === "test") { if (rd.thrown) R6W.push({ rd, until: state.time + 1.4 }); if (T > 0) { IMPACT.launches++; ev("launch", { rd }); } return; }
+  if (T < 0) return;
   IMPACT.launches++; ev("launch", { rd });
-  if (carxOffer(rd, t, v, T) || true) return;
+  if (carxThrown(rd, t, v, T) || true) return;
   const car = CARS.find((c) => c.state === "idle"); if (!car) return;
   const P0 = predictBody(t, v, T);
   const hv = new V3(v.x, 0, v.z).normalize(); const across = new V3(-hv.z, 0, hv.x).multiplyScalar(Math.random() < 0.5 ? -1 : 1);
@@ -4650,7 +4654,7 @@ function carImpact(car) {
   const d = camOrigin().distanceTo(at);
   shake = Math.max(shake, 1.25 * Math.max(0.15, 1 - d / 50)); CAM.kickV += 5 * Math.max(0.2, 1 - d / 40); CAM.rollV += (Math.random() - 0.5) * 6;
   fovKick += 6 * Math.max(0, 1 - d / 40); impactFrame(70); glitch(0.7); sfx.carBoom();
-  flash("Traffic", "var(--amber)"); ev("car", { rd });
+  ev("car", { rd });
 }
 function ragdollImpacts(dtw) {
   for (const rd of ragdolls) {
@@ -4739,7 +4743,7 @@ function respawnBox(b) {
 // stim use (X): look down, jab the chip into the port on your chest, hold while it drains, flick it away
 const STIM_DUR = 2.55, STIM_STAB = 1.3, STIM_TOSS = 1.96, STIM_FX = 10;
 function startStimUse() {
-  player.stims--; player.stimUse = { t: 0, cues: new Set() }; VM.inspect = null; cancelGunAnim(); VM.gunSpin = null; player.kick = null;
+  player.stims--; player.stimUse = { t: 0, cues: new Set(), fast: stimMoving() }; VM.inspect = null; cancelGunAnim(); VM.gunSpin = null; player.kick = null;
   vmInj.visible = true; vmInj.userData.inj.userData.vial.scale.z = 1; vmInj.userData.inj.userData.vial.material.color.set(0xff3a5c);
   sfx.stimOut();
 }
@@ -4766,7 +4770,7 @@ function stimGray() { const F = player?.stimFx; if (!F) return 0; return 0.8 * (
 function stepStim(dt) {
   const U = player.stimUse;
   if (U) {
-    U.t += dt;
+    U.t += dt * (U.fast ? STIM_FAST : 1); if (U.fast && U.t > 0.3 && U.t < 1.08) U.t = 1.08;
     const cue = (n, at, fn) => { if (U.t >= at && !U.cues.has(n)) { U.cues.add(n); fn(); } };
     cue("stab", STIM_STAB, () => { sfx.stimStab(); shake = Math.max(shake, 0.32); CAM.kickV -= 2.5; impactFrame(40); startStimFx(); });
     cue("beat", 1.63, () => sfx.heart());
@@ -4956,7 +4960,7 @@ function updateMoveCam(dt) {
   { const mc = mfCam(); if (mc) { pitchT += mc[0]; rollT += mc[1]; eyeT += mc[2]; backT += mc[3]; fast = true; } }
   if (player.stimUse) {
     const t = player.stimUse.t + al;
-    pitchT += ckey([[0, 0], [0.12, -0.2], [0.3, -0.36], [0.44, -0.3], [0.66, -0.08], [0.86, -0.2], [1.0, -0.38], [1.12, -0.5], [1.28, -0.62], [1.34, -0.67], [1.83, -0.63], [1.98, -0.5], [2.33, 0], [STIM_DUR, 0]], t)[0];
+    pitchT += (player.stimUse.fast ? 0.3 : 1) * ckey([[0, 0], [0.12, -0.2], [0.3, -0.36], [0.44, -0.3], [0.66, -0.08], [0.86, -0.2], [1.0, -0.38], [1.12, -0.5], [1.28, -0.62], [1.34, -0.67], [1.83, -0.63], [1.98, -0.5], [2.33, 0], [STIM_DUR, 0]], t)[0];
     rollT += ckey([[0, 0], [0.3, 0.04], [0.66, -0.03], [1.0, 0.04], [1.88, 0.04], [2.08, -0.05], [2.38, 0]], t)[0];
   }
   const k = 1 - Math.exp(-dt * (fast ? 22 : 16));
@@ -5135,19 +5139,6 @@ const COMBOS = [
     steps: ["Kick an enemy", "Shoot it dead while it reels"], perfectText: "A headshot, or the kill within a second of the kick",
     seq: [{ on: "kick", ok: (d) => d.alive.length > 0, keep: (a, d) => (a.es = d.alive), tag: "Kick" }, { on: "shot", ok: (d, a) => d.kill && a.es.includes(d.e), keep: (a, d) => (a.head = d.head), tag: (d) => (d.head ? "Headshot" : "Shot") }],
     perfect: (a) => a.head || a.span <= 1, line: "Efficient." },
-  { id: "traffic", name: "Traffic Control", gap: 5,
-    steps: ["Launch a body out into open air", "A flying car hits it"], perfectText: "You take no damage",
-    handle(name, d) {
-      const L = (this.L ||= []);
-      if (name === "launch") { L.push({ rd: d.rd, t: d.t, hurt: false }); if (L.length > 6) L.shift(); }
-      else if (name === "hurt") for (const x of L) x.hurt = true;
-      else if (name === "car") {
-        const x = L.find((x) => x.rd === d.rd && d.t - x.t < 5); if (!x) return;
-        L.splice(L.indexOf(x), 1);
-        comboLanded(this, { marks: [{ tag: "Launch", t: 0 }, { tag: "Car", t: d.t - x.t }], span: d.t - x.t, hurt: x.hurt, rd: d.rd });
-      }
-    },
-    perfect: (a) => !a.hurt, line: "The city cleans up after you." },
   { id: "riposte", name: "Riposte", gap: 4,
     steps: ["Parry an attack", "Kick the staggered enemy", "Pin the body to a wall"], perfectText: "All three within 3.5 s",
     seq: [{ on: "parry", keep: (a, d) => (a.e = d.e), tag: "Parry" }, { on: "kick", ok: (d, a) => d.hits.includes(a.e), tag: "Kick" }, { on: "pin", tag: "Pin" }],
@@ -7397,6 +7388,7 @@ const _ikP = new THREE.Vector3(), _ikQ = new THREE.Quaternion();
 function arsenalPose(dt, R, L) {
   const D = WDEF[player.weapon]; if (!D) return null;
   const out = D.update(dt, R, L) || {};
+  oneHandPose(dt, R, out);
   ARS.post = out;
   return out;
 }
@@ -7404,7 +7396,7 @@ function arsenalPost(dt) {
   if (ARS.debug !== undefined) { rig.updateMatrixWorld(true); arsG.updateWorldMatrix(true, false); const P = new THREE.Vector3(); arsG.getWorldPosition(P); rig.worldToLocal(P); const q = new THREE.Quaternion(); arsG.getWorldQuaternion(q); rig.getWorldQuaternion(_rq2); q.premultiply(_rq2.invert()); const e = new THREE.Euler().setFromQuaternion(q, "YXZ"); ARS.gref = { p: P.toArray().map((v) => +v.toFixed(3)), e: [e.x, e.y, e.z].map((v) => +v.toFixed(3)) }; }
   const O = ARS.post; ARS.post = null;
   if (!O || !arsOn()) { ARS.ikW = Math.max(0, ARS.ikW - dt * 6); if (VM.dock && ARS.ikW < 0.3) VM.dock.visible = true; return; }
-  const want = O.ik ?? 0; ARS.ikW += (want - ARS.ikW) * (1 - Math.exp(-dt * 14));
+  const want = O.ik ?? 0; ARS.ikW += (want - ARS.ikW) * (1 - Math.exp(-dt * (ONEH.w > 0.02 || oneHandWant() ? 7 : 14)));
   if (VM.dock) VM.dock.visible = !(ARS.ikW > 0.3 && !player.grapple);
   if (ARS.ikW < 0.01 || !O.target) return;
   rig.updateMatrixWorld(true);
@@ -8422,7 +8414,7 @@ function updateFin2(dt) {
     for (const rd of ragdolls) for (const p of rd.parts) { const tr = p.body.translation(), r = p.body.rotation(); (p.pp ||= new THREE.Vector3()).set(tr.x, tr.y, tr.z); (p.pq ||= new THREE.Quaternion()).set(r.x, r.y, r.z, r.w); }
     player.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
     if (ts > 0) { world.timestep = DT * ts; world.step(); }
-    const dw = DT * ts; updateCars(dw); updateDebris(dw); updateBooms(dw); try { arsWorldStep(dw); } catch {}
+    const dw = DT * ts; updateCars(dw); updateDebris(dw); goreStep(dw); updateBooms(dw); try { arsWorldStep(dw); } catch {}
   }
   state.alpha = F.acc / DT;
   const J = finRig;
@@ -10974,7 +10966,7 @@ function carxStep(dtw) {
     emitWorldSparks(at, car.dir, 70, 0, 14); emitWorldSparks(at, new THREE.Vector3(0, 1, 0), 40, 2, 8); worldSmoke(at, 5, 0.6, 0x2a262e, 0.6, 0.5);
     for (let i = 0; i < 6; i++) { const m = new THREE.Mesh(UNIT_RBOX, Math.random() < 0.5 ? M.charred : M.carBody); m.scale.set(0.15 + Math.random() * 0.3, 0.06 + Math.random() * 0.12, 0.15 + Math.random() * 0.4); addDebris(m, at.clone(), car.dir.clone().multiplyScalar(6 + Math.random() * 10).add(new THREE.Vector3((Math.random() - 0.5) * 8, Math.random() * 6, (Math.random() - 0.5) * 8)), 5, true); }
     const d = camOrigin().distanceTo(at); shake = Math.max(shake, 1.1 * Math.max(0.2, 1 - d / 40)); impactFrame(70); glitch(0.6); sfx.carBoom(); hitstop(0.05);
-    flash("Traffic", "var(--amber)"); ev("car", { rd: S.rd });
+    ev("car", { rd: S.rd });
   }
   if (!S.horn && (S.kind === "air" ? S.lead - S.t < 0.45 : S.u > S.inU - 0.12)) { S.horn = true; sfx.carPass(); }
   // the player: clipped by a car is a bad day
@@ -11115,7 +11107,7 @@ const IDLE_ANIMS = {
 };
 for (const A of Object.values(IDLE_ANIMS)) { A.LK = A.L.map(([t, P0]) => [t, ..._flat(P0)]); }
 function idleStart(kind) {
-  const P = idleProps(); kind ||= IDLE.n++ % 2 ? "banana" : "phone";
+  const P = idleProps(); r6IdleBuild(); r6IdleReset(); kind ||= IDLE.n++ % 2 ? "banana" : "phone";
   IDLE.cur = { kind, t: 0, A: IDLE_ANIMS[kind], cues: new Set(), out: 0 };
   ev("idle", { kind });
 }
@@ -11133,34 +11125,14 @@ function idleUpdate(dt) {
   if (IDLE.fixT != null) { C.t = IDLE.fixT; return; }
   C.t += dt; if (C.t >= C.A.dur) idleEnd();
 }
-function idleEnd() { const P = IDLE.props; if (P) { P.phone.visible = false; P.banana.visible = false; } IDLE.cur = null; }
+function idleEnd() { try { r6IdleReset(); } catch {} const P = IDLE.props; if (P) { P.phone.visible = false; P.banana.visible = false; } IDLE.cur = null; }
 // the arms: left hand from the keys, right arm lowered out of view with the weapon
 function idlePose(R, L) {
   const C = IDLE.cur; if (!C) return false;
   const w = C.out ? 1 - smooth(C.out / 0.35) : smooth(Math.min(1, C.t / 0.4)) * smooth(Math.min(1, (C.A.dur - C.t) / 0.5));
   const tgt = ckeyPose(C.A.LK, Math.min(C.A.dur, C.t)); lerpPose(L, tgt, C.out ? w : 1);
   R.p[1] -= 0.62 * w; R.p[0] += 0.12 * w; R.p[2] += 0.1 * w; R.r[0] -= 0.9 * w;
-  const P = idleProps(), t = C.t;
-  if (C.kind === "phone") {
-    P.phone.visible = t > 0.3 && t < 8.7 && !C.out; 
-    // swipes: every so often the thumb flicks and the feed jumps; one like
-    const sw = [1.3, 2.2, 2.9, 3.6, 4.4, 5.9, 6.6, 7.3]; let off = 0; for (const s of sw) off += smooth((t - s) / 0.35) * 0.09; off += Math.max(0, t - 1) * 0.004;
-    P.phone.userData.tex.offset.y = -off;
-    for (const s of sw) if (t > s && !C.cues.has(s)) { C.cues.add(s); tone("sine", 2400, 2200, 0.03, 0.015); }
-    const lk = t > 5.0 && t < 5.7 ? Math.sin(((t - 5.0) / 0.7) * Math.PI) : 0; P.phone.userData.heart.material.opacity = lk; P.phone.userData.heart.scale.setScalar(0.5 + lk);
-    if (t > 5.0 && !C.cues.has("like")) { C.cues.add("like"); tone("sine", 1500, 2600, 0.12, 0.03); }
-    if (t > 0.3 && !C.cues.has("out")) { C.cues.add("out"); sfx.servo?.(); }
-    VM.idleThumb = sw.reduce((a, s) => a + Math.max(0, Math.sin(((t - s) / 0.35) * Math.PI)) * (t > s && t < s + 0.35 ? 1 : 0), 0);
-  } else {
-    P.banana.visible = t > 0.3 && !C.cues.has("toss") && !C.out; 
-    const pk = [1.0, 1.55, 2.15]; P.banana.userData.peels.forEach((pv, i) => { pv.rotation.z = -2.7 * smooth((t - pk[i]) / 0.3); });
-    for (const s of pk) if (t > s && !C.cues.has(s)) { C.cues.add(s); noise(0.08, "bandpass", 1800, 0.25, 3, 600); }
-    // the bonks on the faceplate
-    for (const [s, k] of [[3.78, 1], [4.2, 0.6]]) if (t > s && !C.cues.has(s)) { C.cues.add(s); sfx.clunk?.(); noise(0.1, "lowpass", 900, 0.5 * k, 1, 300); CAM.kickV -= 3 * k; shake = Math.max(shake, 0.15 * k); P.banana.userData.fruitTop.scale.set(1.4, 0.4 + 0.3 * (1 - k), 1.4); }
-    if (t > 4.6 && !C.cues.has("hm")) { C.cues.add("hm"); tone("sine", 220, 160, 0.4, 0.04); tone("sine", 330, 250, 0.35, 0.03, 0.3); }
-    if (t > 6.85 && !C.cues.has("toss")) { C.cues.add("toss"); idleTossBanana(); }
-    VM.idleThumb = 0; IDLE.bonk = smooth((t - 3.3) / 0.4) * (1 - smooth((t - 4.4) / 0.5));
-  }
+  r6IdleBuild(); r6IdleProps(C, C.t);
   return true;
 }
 // props are placed in camera space after the arm pose: they sit at the hand, but always face the camera, so the screen and the fruit read
@@ -11175,11 +11147,12 @@ function idleMount(obj, off, ex, ey, ez) {
 const IDLE_MOUNT = { phone: [0.035, 0.035, -0.02, -0.35, 0, 0.12], banana: [0.03, 0.05, -0.01, 0, 0, 0.2] };
 function idlePost() {
   const C = IDLE.cur; if (!C) return;
-  if (C.kind === "phone" && armL.thumb) { armL.thumb.rotation.x = -0.4 - 0.5 * (VM.idleThumb || 0); }
-  if (IDLE.dbg) return;
-  const P = IDLE.props, m = IDLE.mnt || IDLE_MOUNT[C.kind];
-  if (C.kind === "phone") idleMount(P.phone, _iv.set(m[0], m[1], m[2]).clone(), m[3], m[4], m[5]);
-  else { const b = IDLE.bonk || 0; idleMount(P.banana, _iv.set(m[0], m[1], m[2]).clone(), m[3] + 1.1 * b, m[4], m[5] * (1 - b)); }
+  r6IdleBuild(); if (IDLE.dbg) return;
+  const w = C.out ? 1 - smooth(C.out / 0.35) : smooth(Math.min(1, C.t / 0.45)) * smooth(Math.min(1, (C.A.dur - C.t) / 0.5));
+  const f = IDLE.face || R6_FACE[C.kind], b = C.kind === "banana" ? IDLE.bonk || 0 : 0;
+  armL.hand.rotation.x = 0; armL.hand.rotation.z = 0;
+  r6HandFace(C.kind, f[0] + 1.1 * b, f[1], f[2] * (1 - b), w);
+  r6Fingers(C.kind, w, VM.idleThumb || 0);
 }
 function idleCam() {
   const C = IDLE.cur; if (!C) return [0, 0];
@@ -11187,10 +11160,10 @@ function idleCam() {
 }
 function idleTossBanana() {
   const P = IDLE.props; vmCamera.updateMatrixWorld(true); const at = vmToWorld(P.banana.getWorldPosition(new THREE.Vector3()));
-  const b = P.banana.clone(true); b.scale.setScalar(1.6); b.visible = true;
+  const b = P.banana.clone(true); b.traverse((o) => { if (o.isMesh && o.geometry.userData.rest) o.geometry = o.geometry.clone(); }); b.scale.setScalar(1.6); b.visible = true;
   const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw)), fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
   addDebris(b, at, right.multiplyScalar(-3.6).addScaledVector(fwd, -0.6).add(new THREE.Vector3(0, 3.4, 0)), 12); sfx.whiff?.();
-  P.banana.visible = false; P.banana.userData.fruitTop.scale.set(1, 1, 1);
+  P.banana.visible = false;
 }
 
 // ---------- the stim: the grapple hand flicks it up, it spins end over end like a pen, the hand catches it ----------
@@ -11376,7 +11349,7 @@ function mfStart(kind, e) {
   const dir = new THREE.Vector3(ep.x - pp.x, 0, ep.z - pp.z); if (dir.lengthSq() < 1e-4) dir.set(-Math.sin(yaw), 0, -Math.cos(yaw)); dir.normalize();
   const S = { kind, e, A, t: 0, cues: new Set(), dir, side: new THREE.Vector3(-dir.z, 0, dir.x), foot: new THREE.Vector3(pp.x, e.floorY, pp.z), cy: ep.y - e.floorY,
     e0: new THREE.Vector3(e.group.position.x, e.floorY, e.group.position.z), look: ep.clone(), shake: 0, slow: 1, slowT: 0, fov: 0 };
-  MF.cur = S; e.mf = true; e.posed = true; e.alert = true; e.stun = 0; e.group.rotation.order = "YXZ";
+  MF.cur = S; S.py = e.floorY + P.half + P.radius + 0.02; r6NoCollide(true); R6.pcgT = 0; e.mf = true; e.posed = true; e.alert = true; e.stun = 0; e.group.rotation.order = "YXZ";
   for (const k in e.meshes || {}) e.meshes[k].rotation.set(0, 0, 0);
   VM.attack = null; VM.inspect = null; MF.melee = null; MF.hold = 0; cancelGunAnim(); arsCancel(); VM.gunSpin = null; if (IDLE.cur) idleEnd();
   if (player.grapple) releaseGrapple(); endFocus?.();
@@ -11404,24 +11377,26 @@ function mfTs(ts) { const S = MF.cur; return S && S.slowT > 0 ? Math.min(ts, S.s
 // sim rate: the scene's clock, the enemy's mark, the lock on the player
 function mfStep(dt) {
   meleeStep(dt); slingStep(dt);
+  if (!MF.cur && R6.pcgT > 0) { R6.pcgT -= dt; if (R6.pcgT <= 0) r6NoCollide(false); }
   const S = MF.cur; if (!S || dt <= 0) return;
   S.t += dt; if (S.slowT > 0) S.slowT -= dt / Math.max(0.05, S.slow);
   player.immuneUntil = state.time + 0.6;
-  S.A.step(S, S.t, dt);
+  S.A.step(S, S.t, dt); r6Step(S, dt);
   S.shake = Math.max(0, S.shake - dt * 2);
   if (S.t >= S.A.dur) mfEnd(S);
 }
 function mfEnd(S) {
   if (MF.cur !== S) return; MF.cur = null; ARS.fovPull = 0;
   const e = S.e; if (!e.dead) { e.mf = false; e.posed = false; e.group.rotation.order = "XYZ"; e.group.rotation.x = e.group.rotation.z = 0; }
-  S.A.end?.(S);
+  r6End(S); S.A.end?.(S);
 }
 // stepPlayer: while a scene runs the player stands where the scene puts them and nothing else moves
+const r6Vy = (S) => { const y = player.body.translation().y; return THREE.MathUtils.clamp(((S.py ?? y) - y) * 10, -12, 3); };
 function mfLock(dt) {
   if (!MF.cur) { mfGrabCheck(); if (!MF.cur) return false; }
   const S = MF.cur; const v = player.body.linvel();
-  if (S.move) { const p = playerPos(); const k = S.moveK ?? 12; player.body.setLinvel({ x: (S.move.x - p.x) * k, y: Math.min(v.y, 2), z: (S.move.z - p.z) * k }, true); }
-  else player.body.setLinvel({ x: v.x * 0.4, y: Math.min(v.y, 2), z: v.z * 0.4 }, true);
+  if (S.move) { const p = playerPos(); const k = S.moveK ?? 12; player.body.setLinvel({ x: (S.move.x - p.x) * k, y: r6Vy(S), z: (S.move.z - p.z) * k }, true); }
+  else player.body.setLinvel({ x: v.x * 0.4, y: r6Vy(S), z: v.z * 0.4 }, true);
   pressed.delete("Attack"); mouse.left = false;
   return true;
 }
@@ -11477,6 +11452,7 @@ function scopeUpdate(dt) {
 }
 function scopeTs(ts) { return SCOPE.on ? Math.min(ts, 0.35) : ts; }
 function r4Reset() {
+  R6.pcgT = 0; r6NoCollide(false);
   if (MF.cur) { const S = MF.cur; MF.cur = null; S.A.end?.(S, true); }
   MF.melee = null; MF.hold = 0; MF.flash = 0; MF.grab = state.mode === "test" ? 99 : 1;
   SLING.n = SLING.max; SLING.t = 0; SCOPE.left = SCOPE.max; SCOPE.on = false; SCOPE.k = 0; SCOPE.cd = 0; for (const e of SCOPE.hi) if (!e.dead) highlight(e, false); SCOPE.hi.clear();
@@ -12432,7 +12408,7 @@ function p5Place() {
           const back = world.castRay(new RAPIER.Ray({ x: q.x + q.nx * 0.06, y: q.y, z: q.z + q.nz * 0.06 }, { x: -q.nx, y: 0, z: -q.nz }), 0.12, true, undefined, GROUPS.envOnly, player.col); if (!back) continue;
           if (Math.random() < 0.5) continue;
         }
-        propPainting(q.x, q.y, q.z, q.nx, q.nz, { wall: q.wall }); paintings++; continue;
+        if (q.wallHook && MIR.n < 3 && Math.random() < 0.22) propMirror(q.x, q.y - 0.25, q.z, q.nx, q.nz); else propPainting(q.x, q.y, q.z, q.nx, q.nz, { wall: q.wall }); paintings++; continue;
       }
       let yaw = q.yaw;
       if (q.face) { // turn it to face into the room: the side with a free metre in front
@@ -12496,10 +12472,10 @@ function p5Floor1() {
   const art = (x, y, z, nx, nz, a, sz) => propPainting(x, y, z, nx, nz, { art: a, size: sz });
   // the hall side of the lab, the armory, the east wing and the server room, and the lift core
   art(-24, 2.0, 11.8, 0, -1, 0, 2); art(-17, 2.0, 11.8, 0, -1, 4, 1); art(-20, 2.0, 12.2, 0, 1, 6, 0);
-  art(-11.8, 2.0, 26.5, 1, 0, 1, 0); art(-11.8, 2.0, 14.5, 1, 0, 3, 2);
+  art(-11.8, 2.0, 26.5, 1, 0, 1, 0); propMirror(-11.8, 1.7, 14.5, 1, 0, { w: 1.0, h: 1.5 });
   art(-6.2, 2.1, -25, -1, 0, 2, 1); art(6.2, 2.1, -25, 1, 0, 5, 1); art(5.8, 2.1, -24, -1, 0, 6, 0);
   art(11.8, 2.1, -19, -1, 0, 0, 3); art(12.2, 2.1, -20, 1, 0, 4, 1);
-  art(21, 2.1, -7.8, 0, 1, 1, 2); art(20, 2.1, 7.8, 0, -1, 2, 1); art(11.8, 2.1, 24, -1, 0, 3, 0);
+  art(21, 2.1, -7.8, 0, 1, 1, 2); art(20, 2.1, 7.8, 0, -1, 2, 1); propMirror(11.8, 1.75, 24, -1, 0);
   art(-1.6, 2.3, 0.98, 0, -1, 5, 1); art(1.6, 2.3, 0.98, 0, -1, 4, 1);
   // a break room against the east wing wall
   lvBench(10.6, -13, 0, 1.0, 2.6, 0.95);
@@ -12516,7 +12492,7 @@ function p5TestOffice() {
   lvWall(-58, 59.4, -33, 59.4, 0, 4.5, LV_FLOORMAT.panel());
   lvDry(-46, 41, -46, 48, 0, 2.8);
   for (const [x, a, sz] of [[-55, 1, 0], [-51.4, 2, 1], [-47.8, 3, 2], [-40.5, 4, 3]]) propPainting(x, 1.95, 59.25, 0, -1, { art: a, size: sz });
-  propPainting(-57.4, 1.8, 50, 1, 0, { art: 0, size: 2 });
+  propMirror(-57.4, 1.55, 50, 1, 0, { w: 1.2, h: 2.0 });
   lvDesk(-54, 52, 0, 0, { lamp: true }); lvDesk(-50.5, 52, 0, 0); lvDesk(-54, 48.6, 0, Math.PI); lvDesk(-50.5, 48.6, 0, Math.PI, { lamp: true });
   lvBench(-40.5, 57.9, 0, 3, 0.8, 0.95);
   propCooler(-38.2, 0, 58.3, Math.PI); propVending(-43.4, 0, 58.5, Math.PI);
@@ -12697,11 +12673,1017 @@ for (const [k, dress, step] of [["gatekeeper", r5Hask, r5HaskStep], ["corona", r
   S.step = function (e, dt) { const r = st0 ? st0.call(this, e, dt) : undefined; try { step(e, dt); } catch (err) { console.warn("boss step", k, err); } return r; };
 }
 
+// ================= Round 6 · gore: torn synthetic skin, the metal skeleton under it, wires everywhere =================
+// Every finisher (and every mini finisher) tears the fake flesh: the part's skin gets ragged holes with a raw pink,
+// burnt rim, and a chrome endoskeleton sits inside each part so the holes show metal. Wires spill out of the tears:
+// real strands (verlet chains) that hang off the part they came out of, swing with it, spark at the ends, and lie on
+// the floor. Hard knocks during a finisher tear more. All the wires are one mesh (one draw call).
+const GORE = { tex: [], mats: new Map(), endo: {}, w: [], mesh: null, track: [], hits: 0 };
+const GORE_W = 56, GORE_N = 8;
+const _r6g = new THREE.Vector3(), _r6g2 = new THREE.Vector3(), _r6g3 = new THREE.Vector3(), _r6gq = new THREE.Quaternion();
+function goreTex(i) {
+  if (GORE.tex[i]) return GORE.tex[i];
+  const S = 128; let seed = 31 + i * 977; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const blobs = []; const n = 4 + i * 3;
+  for (let k = 0; k < n; k++) { const r = 7 + rnd() * (10 + i * 7); const f = []; for (let j = 0; j < 16; j++) f.push(0.62 + rnd() * 0.5); blobs.push([rnd() * S, rnd() * S, r, f]); }
+  const jag = (ctx, x, y, r, f, grow) => { ctx.beginPath(); for (let j = 0; j <= 16; j++) { const a = (j / 16) * Math.PI * 2, rr = (r + grow) * f[j % 16]; ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } ctx.closePath(); ctx.fill(); };
+  // draw each tear three times across the wrap so the holes tile
+  const each = (fn) => { for (const b of blobs) for (const ox of [-S, 0, S]) for (const oy of [-S, 0, S]) fn(b[0] + ox, b[1] + oy, b[2], b[3]); };
+  const c = document.createElement("canvas"); c.width = c.height = S; const cx = c.getContext("2d");
+  cx.fillStyle = "#fff"; cx.fillRect(0, 0, S, S);
+  each((x, y, r, f) => { cx.fillStyle = "#f0b4a8"; jag(cx, x, y, r, f, 10); });
+  each((x, y, r, f) => { cx.fillStyle = "#c2454a"; jag(cx, x, y, r, f, 5); });
+  each((x, y, r, f) => { cx.fillStyle = "#3a0c10"; jag(cx, x, y, r, f, 2); });
+  cx.strokeStyle = "rgba(120,24,30,.75)"; cx.lineWidth = 1.4;
+  for (let k = 0; k < 14 + i * 6; k++) { const x = rnd() * S, y = rnd() * S; cx.beginPath(); cx.moveTo(x, y); for (let j = 0; j < 3; j++) cx.lineTo(x + (rnd() - 0.5) * 34, y + (rnd() - 0.5) * 34); cx.stroke(); }
+  const a = document.createElement("canvas"); a.width = a.height = S; const ax = a.getContext("2d");
+  ax.fillStyle = "#fff"; ax.fillRect(0, 0, S, S); ax.fillStyle = "#000"; each((x, y, r, f) => jag(ax, x, y, r, f, 0));
+  const mk = (cv) => { const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; };
+  const map = mk(c); map.colorSpace = THREE.SRGBColorSpace;
+  return (GORE.tex[i] = { map, alpha: mk(a) });
+}
+function goreMat(m, lvl) {
+  const key = m.uuid + ":" + lvl; let g = GORE.mats.get(key); if (g) return g;
+  g = m.clone(); const T = goreTex(Math.min(2, lvl)); g.map = T.map; g.alphaMap = T.alpha; g.alphaTest = 0.5; g.side = THREE.DoubleSide; g.transparent = false;
+  if (g.color) g.color.copy(m.color);
+  GORE.mats.set(key, g); return g;
+}
+const GORE_CHROME = new THREE.MeshStandardMaterial({ color: 0x9aa2b0, roughness: 0.28, metalness: 1, envMap: envTex, envMapIntensity: 1.2 });
+const GORE_DARK = new THREE.MeshStandardMaterial({ color: 0x23242c, roughness: 0.5, metalness: 0.8, envMap: envTex, envMapIntensity: 0.8 });
+const GORE_GLOW = new THREE.MeshBasicMaterial({ color: 0xff2a3a, toneMapped: false });
+// the skeleton inside each part, in the part's own space (merged: one chrome mesh, one dark mesh, glow bits)
+function goreEndo(name) {
+  if (GORE.endo[name]) return GORE.endo[name];
+  const C = [], D = [], L = [];
+  const at = (x, y, z, rx = 0, ry = 0, rz = 0) => new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(1, 1, 1));
+  const cyl = (r, h, s = 8) => new THREE.CylinderGeometry(r, r, h, s), box = (x, y, z) => new THREE.BoxGeometry(x, y, z), ball = (r) => new THREE.SphereGeometry(r, 10, 8);
+  if (name === "torso") {
+    C.push([cyl(0.035, 0.66), at(0, 0, -0.06)]);
+    for (let i = 0; i < 6; i++) C.push([box(0.022, 0.03, 0.03), at(0, -0.28 + i * 0.11, -0.06)]); // vertebrae
+    for (let i = 0; i < 4; i++) { const y = 0.2 - i * 0.1, w = 0.46 - i * 0.03; for (const s of [-1, 1]) { C.push([box(w / 2, 0.022, 0.025), at(s * w / 4, y, 0.06, 0, 0, s * 0.12)]); C.push([box(0.022, 0.022, 0.2), at(s * w / 2, y - 0.02, -0.01)]); } }
+    C.push([box(0.56, 0.05, 0.08), at(0, 0.3, -0.04)]); C.push([box(0.4, 0.06, 0.2), at(0, -0.3, -0.02)]);
+    D.push([cyl(0.012, 0.5, 5), at(0.08, 0, 0.0, 0, 0, 0.1)]); D.push([cyl(0.012, 0.5, 5), at(-0.09, 0, 0.02, 0, 0, -0.08)]); D.push([box(0.14, 0.16, 0.1), at(0, 0.05, -0.02)]);
+    L.push([ball(0.05), at(0, 0.06, 0.04)]);
+  } else if (name === "head") {
+    const sk = ball(0.13); sk.scale(1, 1.08, 1.05); C.push([sk, at(0, 0.01, 0)]); C.push([box(0.16, 0.05, 0.12), at(0, -0.12, 0.03)]);
+    D.push([box(0.2, 0.04, 0.05), at(0, 0.02, 0.11)]); L.push([ball(0.022), at(-0.05, 0.02, 0.13)]); L.push([ball(0.022), at(0.05, 0.02, 0.13)]);
+  } else {
+    const leg = name.startsWith("leg"), h = leg ? 0.76 : 0.6, r = leg ? 0.03 : 0.024;
+    C.push([cyl(r, h), at(0, 0, 0)]); C.push([ball(r * 1.9), at(0, leg ? -0.02 : -0.02, 0)]); C.push([ball(r * 1.6), at(0, h / 2 - 0.02, 0)]);
+    D.push([cyl(r * 0.55, h * 0.5, 6), at(r * 1.7, h * 0.18, 0)]); D.push([cyl(r * 0.45, h * 0.5, 6), at(-r * 1.6, -h * 0.2, r)]);
+  }
+  const mesh = (list, mat) => { const m = new THREE.Mesh(lvMerge(list), mat); m.castShadow = false; m.raycast = () => {}; return m; };
+  const geo = { c: lvMerge(C), d: lvMerge(D), l: L.length ? lvMerge(L) : null };
+  return (GORE.endo[name] = geo);
+}
+function goreEndoMesh(name) {
+  const G = goreEndo(name), g = new THREE.Group();
+  const add = (geo, mat) => { if (!geo) return; const m = new THREE.Mesh(geo, mat); m.raycast = () => {}; g.add(m); };
+  add(G.c, GORE_CHROME); add(G.d, GORE_DARK); add(G.l, GORE_GLOW); g.userData.endo = true; return g;
+}
+const RD_NAMES = ["torso", "head", "armL", "armR", "legL", "legR"];
+// tear a part: holes in its skin (lvl 1 torn, 2 flayed), the skeleton inside
+function goreTear(p, name, lvl) {
+  if (!p || !p.mesh) return; lvl = Math.min(2, Math.max(p.gore || 0, lvl)); if (p.gore === lvl) return; p.gore = lvl;
+  const m = p.mesh;
+  if (m.isMesh) {
+    if (!p.mat0) p.mat0 = m.material;
+    if (m.material !== M.charred) m.material = goreMat(p.mat0, lvl);
+    if (name && !m.userData.endoIn) { m.userData.endoIn = true; const e = goreEndoMesh(name); if (name === "torso" || name === "head") e.scale.setScalar(name === "head" ? 1 : 1); m.add(e); }
+  } else m.traverse((o) => { if (o.isMesh && o.material && o.material.side !== THREE.BackSide && !o.userData.endo && o.material !== M.cutHot && (o.material === M.skin || o.material === M.pants || o.material.isMeshToonMaterial || o.material.isMeshStandardMaterial) && o.geometry?.userData?.rounded) { o.userData.mat0 ||= o.material; o.material = goreMat(o.userData.mat0, lvl); } });
+}
+// ---------- wires ----------
+const WIRE_COLS = [0xff3040, 0xffc040, 0x40c8ff, 0x1a1a22, 0xe8e8f0, 0x40ff90, 0xff7a20];
+function goreWireMesh() {
+  if (GORE.mesh) return GORE.mesh;
+  const nv = GORE_W * GORE_N * 2, ni = GORE_W * (GORE_N - 1) * 6;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(nv * 3), 3).setUsage(THREE.DynamicDrawUsage));
+  geo.setAttribute("color", new THREE.BufferAttribute(new Float32Array(nv * 3), 3));
+  const idx = new Uint32Array(ni); let o = 0;
+  for (let w = 0; w < GORE_W; w++) for (let i = 0; i < GORE_N - 1; i++) { const a = (w * GORE_N + i) * 2; idx.set([a, a + 1, a + 2, a + 1, a + 3, a + 2], o); o += 6; }
+  geo.setIndex(new THREE.BufferAttribute(idx, 1));
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+  mesh.frustumCulled = false; mesh.renderOrder = 1; GORE.mesh = mesh;
+  for (let w = 0; w < GORE_W; w++) GORE.w.push({ on: false, p: Array.from({ length: GORE_N }, () => new THREE.Vector3()), q: Array.from({ length: GORE_N }, () => new THREE.Vector3()), seg: 0.05, r: 0.006, life: 0, max: 1, body: null, rd: null, loc: new THREE.Vector3(), floor: -99, spark: 0, col: new THREE.Color() });
+  return mesh;
+}
+function goreWire(at, v, o = {}) {
+  { const c = camera.position; const tx = at.x - c.x, ty = at.y - c.y, tz = at.z - c.z; const L = Math.hypot(tx, ty, tz) || 1; const tow = -(v.x * tx + v.y * ty + v.z * tz) / L; if (tow > 0) { v = v.clone(); v.x += tx / L * tow * 1.6; v.y += ty / L * tow * 1.6; v.z += tz / L * tow * 1.6; } }
+  goreWireMesh(); if (GORE.mesh.parent !== levelGroup) levelGroup.add(GORE.mesh);
+  let W = GORE.w.find((x) => !x.on); if (!W) { W = GORE.w.reduce((a, b) => (a.life < b.life ? a : b)); }
+  W.on = true; W.life = W.max = o.life ?? 7 + Math.random() * 4; W.seg = o.seg ?? 0.035 + Math.random() * 0.035; W.r = o.r ?? 0.0028 + Math.random() * 0.0035;
+  W.body = o.body || null; W.rd = o.rd || null; W.spark = Math.random() < 0.6 ? 1 : 0;
+  if (W.body) { const t = W.body.translation(), r = W.body.rotation(); _r6gq.set(r.x, r.y, r.z, r.w).invert(); W.loc.set(at.x - t.x, at.y - t.y, at.z - t.z).applyQuaternion(_r6gq); }
+  W.col.setHex(WIRE_COLS[(Math.random() * WIRE_COLS.length) | 0]);
+  const dir = _r6g.copy(v).normalize();
+  for (let i = 0; i < GORE_N; i++) { W.p[i].copy(at).addScaledVector(dir, i * W.seg * 0.35); W.q[i].copy(W.p[i]).addScaledVector(v, -DT * (i / (GORE_N - 1)) * 1.4); }
+  const hit = world.castRay(new RAPIER.Ray(at, { x: 0, y: -1, z: 0 }), 6, true, undefined, GROUPS.envOnly, player?.col, undefined, (c) => !glassByHandle.has(c.handle));
+  W.floor = hit ? at.y - (hit.toi ?? hit.timeOfImpact) + 0.012 : at.y - 6;
+  return W;
+}
+function goreAnchor(W, out) {
+  if (!W.body) return null;
+  if (W.rd && (!ragdolls.includes(W.rd) || !W.rd.parts.some((p) => p.body === W.body))) { W.body = null; return null; }
+  try { const t = W.body.translation(), r = W.body.rotation(); _r6gq.set(r.x, r.y, r.z, r.w); return out.copy(W.loc).applyQuaternion(_r6gq).add(_r6g3.set(t.x, t.y, t.z)); } catch { W.body = null; return null; }
+}
+// render rate: verlet, a few constraint passes, the floor, then the ribbons
+function goreFrame(dt) {
+  if (!GORE.mesh || !GORE.mesh.parent) return;
+  const ts = state.fin ? state.fin.tsNow ?? 1 : state.ts ?? 1; const h = Math.min(0.033, dt) * Math.max(0.05, ts);
+  const P = GORE.mesh.geometry.attributes.position.array, C = GORE.mesh.geometry.attributes.color.array; const eye = camera.position;
+  let any = false;
+  for (let w = 0; w < GORE.w.length; w++) {
+    const W = GORE.w[w], base = w * GORE_N * 2 * 3;
+    if (!W.on) { for (let i = 0; i < GORE_N * 6; i++) P[base + i] = 0; continue; }
+    any = true; W.life -= dt * Math.max(0.2, ts);
+    if (W.life <= 0) { W.on = false; continue; }
+    const A = goreAnchor(W, _r6g2);
+    for (let i = 0; i < GORE_N; i++) {
+      const p = W.p[i], q = W.q[i];
+      if (i === 0 && A) { q.copy(p); p.copy(A); continue; }
+      const vx = (p.x - q.x) * 0.985, vy = (p.y - q.y) * 0.985, vz = (p.z - q.z) * 0.985; q.copy(p);
+      p.x += vx; p.y += vy - 16 * h * h; p.z += vz;
+      if (p.y < W.floor) { p.y = W.floor; q.x = p.x - vx * 0.5; q.z = p.z - vz * 0.5; }
+    }
+    for (let k = 0; k < 3; k++) for (let i = 0; i < GORE_N - 1; i++) {
+      const a = W.p[i], b = W.p[i + 1]; _r6g.subVectors(b, a); const d = _r6g.length() || 1e-6; const f = (d - W.seg) / d;
+      const pinA = i === 0 && A; if (pinA) b.addScaledVector(_r6g, -f); else { a.addScaledVector(_r6g, f * 0.5); b.addScaledVector(_r6g, -f * 0.5); }
+    }
+    // a live end: sparks and a crackle now and then
+    if (W.spark && W.life > W.max * 0.4 && Math.random() < 0.05 * Math.max(0.2, ts)) { const e = W.p[GORE_N - 1]; emitWorldSparks(e, _r6g.set(Math.random() - 0.5, 0.6, Math.random() - 0.5), 3, 2, 3); if (Math.random() < 0.15) noise(0.04, "highpass", 5000, 0.08, 1); }
+    const fade = Math.min(1, W.life / 1.2), r = W.r * fade;
+    for (let i = 0; i < GORE_N; i++) {
+      const p = W.p[i], n = W.p[Math.min(GORE_N - 1, i + 1)], m = W.p[Math.max(0, i - 1)];
+      _r6g.subVectors(n, m); _r6g3.subVectors(eye, p); _r6g.cross(_r6g3).normalize().multiplyScalar(r * (i === GORE_N - 1 ? 0.7 : 1));
+      const o = base + i * 6; P[o] = p.x + _r6g.x; P[o + 1] = p.y + _r6g.y; P[o + 2] = p.z + _r6g.z; P[o + 3] = p.x - _r6g.x; P[o + 4] = p.y - _r6g.y; P[o + 5] = p.z - _r6g.z;
+      const sh = i % 2 ? 0.8 : 1; C[o] = C[o + 3] = W.col.r * sh; C[o + 1] = C[o + 4] = W.col.g * sh; C[o + 2] = C[o + 5] = W.col.b * sh;
+    }
+  }
+  GORE.mesh.geometry.attributes.position.needsUpdate = true; GORE.mesh.geometry.attributes.color.needsUpdate = true; GORE.mesh.visible = any;
+}
+function goreReset() { for (const W of GORE.w) { W.on = false; W.body = null; W.rd = null; } GORE.track.length = 0; if (GORE.mesh) { GORE.mesh.parent?.remove(GORE.mesh); GORE.mesh.visible = false; } }
+// ---------- the bursts ----------
+const goreParts = (rd) => (rd.half ? rd.parts.map((p) => [p, null]) : rd.parts.map((p) => [p, RD_NAMES[rdIndex(rd, p)]]));
+function rdIndex(rd, p) { const i = rd.parts.indexOf(p); if (!rd.headless) return i; return i === 0 ? 0 : i + 1; }
+function goreNear(rd, at) { let best = null, bd = 1e9; for (const [p, n] of goreParts(rd)) { try { const t = p.body.translation(); const d = (t.x - at.x) ** 2 + (t.y - at.y) ** 2 + (t.z - at.z) ** 2; if (d < bd) { bd = d; best = [p, n]; } } catch {} } return best; }
+// tear at a point: the nearest part rips, wires burst out of it, chunks of skin fly
+function goreBurst(rd, at, dir, k = 1) {
+  if (!rd || !ragdolls.includes(rd)) return;
+  const near = goreNear(rd, at); if (!near) return; const [p, name] = near;
+  goreTear(p, name, k >= 0.9 ? 2 : 1);
+  const t = p.body.translation(); const c = _r6g2.set(t.x, t.y, t.z); const from = c.clone().lerp(at, 0.7);
+  const out = dir.clone().normalize();
+  const nw = Math.round(2 + 4 * k);
+  for (let i = 0; i < nw; i++) { const v = out.clone().multiplyScalar(2 + Math.random() * 5 * k).add(_r6g.set((Math.random() - 0.5) * 5, Math.random() * 4, (Math.random() - 0.5) * 5)); goreWire(from.clone().add(_r6g.set((Math.random() - 0.5) * 0.08, (Math.random() - 0.5) * 0.08, (Math.random() - 0.5) * 0.08)), v, { body: p.body, rd }); }
+  for (let i = 0; i < Math.round(0.5 + 1.5 * k); i++) goreWire(from.clone(), out.clone().multiplyScalar(4 + Math.random() * 6).add(_r6g.set((Math.random() - 0.5) * 6, 2 + Math.random() * 4, (Math.random() - 0.5) * 6)), { life: 5 });
+  const skin = p.mat0 || p.mesh.material;
+  for (let i = 0; i < Math.round(2 + 3 * k); i++) { const s = 0.03 + Math.random() * 0.06; chunk(from.clone(), [s, s * 0.35, s * (0.7 + Math.random() * 0.6)], i % 3 === 2 ? M.roboDark : skin, out.clone().multiplyScalar(2 + Math.random() * 4).add(_r6g.set((Math.random() - 0.5) * 4, 1 + Math.random() * 3, (Math.random() - 0.5) * 4)), 20, 1.1); }
+  emitWorldSparks(from, out, Math.round(20 + 30 * k), 2, 9); emitWorldSparks(from, _r6g.set(0, 1, 0), Math.round(10 * k), 0, 6);
+  worldSmoke(from, Math.round(2 + 2 * k), 0.3, 0x2a262e, 0.35, 0.45);
+  noise(0.12, "highpass", 3800, 0.35 * k, 0.8); noise(0.22, "bandpass", 700, 0.45 * k, 1.4, 260); tone("sawtooth", 180, 60, 0.12, 0.05 * k);
+  if (!GORE.track.includes(rd)) GORE.track.push(rd); rd.goreN = (rd.goreN || 0) + 1;
+}
+// a finisher kill: everything tears a little, the trunk and head a lot
+function goreKill(rd, at, dir) {
+  if (!rd) return;
+  for (const [p, n] of goreParts(rd)) goreTear(p, n, n === "torso" || n === "head" || Math.random() < 0.3 ? 2 : 1);
+  goreBurst(rd, at, dir.clone().lengthSq() > 1e-6 ? dir : _r6g.set(0, 1, 0), 1);
+  rd.goreT = state.time;
+}
+// sim rate: during a finisher, every hard knock on a torn body tears more
+function goreStep(dtw) {
+  if (!GORE.track.length || dtw <= 0) return;
+  for (let i = GORE.track.length - 1; i >= 0; i--) {
+    const rd = GORE.track[i];
+    if (!ragdolls.includes(rd) || state.time - (rd.goreT ?? state.time) > 8) { GORE.track.splice(i, 1); continue; }
+    if (!(state.fin || MF.cur) || (rd.goreN || 0) > 9) continue;
+    for (const p of rd.parts) {
+      let v; try { v = p.body.linvel(); } catch { continue; }
+      const lv = p.glv || (p.glv = new THREE.Vector3(v.x, v.y, v.z)); const dv = Math.hypot(v.x - lv.x, v.y - lv.y, v.z - lv.z); lv.set(v.x, v.y, v.z);
+      if (dv > 7.5 && state.time - (rd.goreHitT || -9) > 0.22) { rd.goreHitT = state.time; const t = p.body.translation(); goreBurst(rd, _r6g3.set(t.x, t.y, t.z), _r6g.set(v.x, v.y + 2, v.z).negate(), Math.min(1, dv / 16)); }
+    }
+  }
+}
+
+// ================= Round 6 · mini finishers on real bodies =================
+// While a scene runs the player's capsule only touches the level, never the enemy or its body, so nothing shoves
+// you up or sideways. Once the hit lands the enemy becomes a real ragdoll: one part is held on a path (the head in
+// your hand, the chest on the lance or the barrel), and everything else hangs, swings and kicks under physics.
+const R6 = { pcgT: 0 };
+function r6NoCollide(on) { try { if (player?.col) player.col.setCollisionGroups(on ? grp(G.PLAYER, G.ENV) : GROUPS.player); } catch {} }
+const _r6e = new THREE.Euler(), _r6v = new THREE.Vector3(), _r6v2 = new THREE.Vector3();
+const R6_OFF = { torso: 1.15, head: 1.69 };
+// where a part of the enemy would be if it stood where mfPlace puts it (same arguments)
+function r6At(S, name, d, lat = 0, up = 0, yawOff = 0, lean = 0, roll = 0, from = null) {
+  const p = new THREE.Vector3().copy(from || S.foot).addScaledVector(S.dir, d).addScaledVector(S.side, lat); p.y = S.e.floorY + up;
+  const q = new THREE.Quaternion().setFromEuler(_r6e.set(lean, Math.atan2(-S.dir.x, -S.dir.z) + yawOff, roll, "YXZ"));
+  // the part leans and rolls about its own centre, not about the feet, so a lean never swings it into your face
+  return { p: p.add(_r6v.set(0, (R6_OFF[name] ?? 1.15) * Math.cos(lean) * Math.cos(roll), 0)), q };
+}
+// the hit lands: the enemy dies into a ragdoll, and one part of it is held on the path fn gives
+function r6Hold(S, name, fn, kind) {
+  if (!S.rd) {
+    if (S.e.dead) return null;
+    S.rd = mfKill(S, kind || "melee", 0.02); if (!S.rd) return null;
+    S.rd.mfHeld = true; S.rd.launchSeen = true; S.grips = [];
+  }
+  const g = gripPart(S, S.rd, name, fn); if (g) g.name = name; return g;
+}
+function r6Release(S, name, v) {
+  if (!S.grips) return; const g = S.grips.find((x) => x.name === name); if (!g) return;
+  releaseGrip(S, g, v || null); if (!S.grips.length && S.rd) S.rd.mfHeld = false;
+}
+function r6Pos(S, name, out = new THREE.Vector3()) { const p = S.rd && ragdolls.includes(S.rd) ? rdPart(S.rd, name) : null; if (!p) return null; const t = p.body.translation(); return out.set(t.x, t.y, t.z); }
+// convulsions and kicks: random shoves on the loose parts
+function r6Twitch(S, k, only) {
+  const rd = S.rd; if (!rd || !ragdolls.includes(rd)) return;
+  for (const p of rd.parts) {
+    if (p.body.isKinematic?.() || (only && !only.includes(RD_NAMES[rd.parts.indexOf(p)]))) continue;
+    const m = p.body.mass(); p.body.applyImpulse({ x: (Math.random() - 0.5) * m * k, y: (Math.random() - 0.2) * m * k, z: (Math.random() - 0.5) * m * k }, true);
+    p.body.applyTorqueImpulse({ x: (Math.random() - 0.5) * m * k * 0.04, y: (Math.random() - 0.5) * m * k * 0.04, z: (Math.random() - 0.5) * m * k * 0.04 }, true);
+  }
+}
+function r6Step(S, dt) {
+  if (!S.grips?.length) return;
+  if (S.rd && !ragdolls.includes(S.rd)) { S.grips.length = 0; return; }
+  updateGrips(S, dt);
+}
+function r6End(S) {
+  if (S.grips?.length && S.rd && ragdolls.includes(S.rd)) releaseAll(S);
+  if (S.rd) S.rd.mfHeld = false; R6.pcgT = 0.6;
+}
+const r6Chest = (S, out = new THREE.Vector3()) => r6Pos(S, "torso", out) || mfChest(S, out);
+const r6Head = (S, out = new THREE.Vector3()) => r6Pos(S, "head", out) || mfHead(S, out);
+
+// ---------- pistol whip: the crack sends them reeling on loose legs, then the shot ----------
+MFA.whip.step = function (S, t) {
+  const hit = t >= 0.64, k = ramp(t, 0.64, 1.25), sway = hit ? wob(t, 5, 0.06) : 0;
+  const args = () => [1.15 + 0.75 * k + 0.1 * ramp(t, 1.3, 2.0), 0.28 * k + sway, -0.08 * bump(t, 0.7, 1.4), 0.5 * k - 0.2 * ramp(t, 1.4, 2.0), -0.28 * bump(t, 0.64, 1.3) + 0.08 * ramp(t, 1.3, 2.0), sway * 2];
+  if (!S.rd && !S.e.dead) {
+    mfPlace(S, ...args());
+    mfLimb(S.e, "armR", -0.4 * ramp(t, 0.2, 0.6), 0, 0); mfLimb(S.e, "armL", -0.3 * ramp(t, 0.3, 0.6), 0, 0.2 * ramp(t, 0.3, 0.6));
+    mfHead(S, S.look); S.look.y -= 0.1;
+  } else if (S.rd) { if (r6Head(S, _r6v2)) S.look.lerp(_r6v2, 0.35); }
+  cueAt(S, "swish", 0.5, () => { noise(0.18, "bandpass", 1400, 0.5, 1.5, 3000); });
+  cueAt(S, "crack", 0.64, () => {
+    const hp = mfHead(S); sfx.clunk(); noise(0.25, "lowpass", 800, 1.0, 0.8, 100); tone("square", 220, 60, 0.18, 0.18); noise(0.12, "highpass", 4000, 0.4, 0.6);
+    emitWorldSparks(hp, S.side.clone().negate(), 30, 0, 8); emitGunSparks(gunPoint(_sc.set(0, 0.05, -0.3)), 10, 1.4); hitstop(0.1); impactFrame(40); S.shake = 1; glitch(0.25); CAM.kickV -= 6;
+    const ss = { ...S }; // the reel path keeps reading the scene clock
+    r6Hold(S, "torso", () => r6At(S, "torso", ...args()), "shot");
+    if (S.rd) {
+      const h = rdPart(S.rd, "head"); const m = h.body.mass(); h.body.applyImpulse({ x: -S.side.x * 5 * m + S.dir.x * 2 * m, y: 1.2 * m, z: -S.side.z * 5 * m + S.dir.z * 2 * m }, true);
+      h.body.applyTorqueImpulse({ x: 0, y: 0.15 * m, z: 0.2 * m }, true);
+      goreBurst(S.rd, hp, S.side.clone().negate().addScaledVector(S.dir, 0.5), 0.6);
+      r6Twitch(S, 2.5, ["armL", "armR"]);
+    }
+  });
+  if (S.rd && t > 0.7 && t < 2.05 && Math.random() < 0.05) r6Twitch(S, 1.2, ["armL", "armR", "legL", "legR"]);
+  cueAt(S, "cock", 1.75, () => { sfx.latch?.(); tone("square", 1600, 1200, 0.04, 0.04); });
+  cueAt(S, "bang", 2.1, () => {
+    const hp = r6Head(S) || S.look.clone(); sfx.gunshot(); VM.recoil = 1; CAM.kickV += 4; S.shake = 1.2;
+    const mz = gunPoint(_sc.set(0, 0.05, -0.34)); emitSteam(mz, 5, 1.4); emitGunSparks(mz, 18, 1.8); arsFlash(0xffb060, 40, hp);
+    const rd = S.rd || mfKill(S, "shot", 0.25);
+    if (rd) {
+      goreBurst(rd, hp, S.dir, 1);
+      r6Release(S, "torso", S.dir.clone().multiplyScalar(2.6).add(_r6v.set(0, 0.6, 0)));
+      headBurst(rd, S.dir.clone(), null);
+      for (const p of rd.parts) { const m = p.body.mass(); p.body.applyImpulse({ x: S.dir.x * 2.5 * m, y: 0.5 * m, z: S.dir.z * 2.5 * m }, true); }
+    }
+    mfSlow(S, 0.3, 0.55); hitstop(0.08); impactFrame(70); glitch(0.4); flash("Pistol whip", "var(--amber)");
+  });
+  if (t > 2.15 && t < 3.0 && Math.random() < 0.4) emitSteam(gunPoint(_sc.set(0, 0.06, -0.34)), 1, 0.5);
+};
+
+// ---------- arc lance: the plate holds, you lean in, it gives; then the charge, deeper, the twist ----------
+Object.assign(LS, {
+  skid: { p: [0.06, -0.15, -0.66], e: [-1.5, 0.06, 0.12] },
+  brace: { p: [0.1, -0.19, -0.5], e: [-1.55, 0.02, 0.05] },
+  deeper: { p: [0.015, -0.15, -0.86], e: [-1.57, 0.0, 0.0] },
+});
+Object.assign(MFA.stab, {
+  dur: 4.3,
+  G: [[0, LNG.carry], [0.35, LS.back], [0.48, LS.thrust], [0.56, LS.skid], [0.72, LS.brace], [0.86, LS.deep], [1.3, LS.deep], [1.42, LS.deeper], [1.95, LS.deeper], [2.2, LS.twist], [2.85, LS.twist], [3.15, LS.pull], [4.3, LNG.carry]],
+  L: [[0, REST_L], [0.35, L_POINT], [0.6, L_DRAWN], [2.95, L_DRAWN], [3.5, REST_L], [4.3, REST_L]],
+  cam: [[0, 0, 0], [0.35, 0.02, 0.04, 0, 0.04], [0.48, -0.02, -0.05, 0, -0.08], [0.56, 0.04, 0.03, 0, 0.07], [0.74, 0.01, 0], [0.86, -0.05, -0.08, 0, -0.12], [1.05, 0, 0], [1.42, -0.03, -0.04, 0, -0.05], [1.6, 0, 0], [2.2, 0.03, 0.03, 0, 0.08], [2.85, 0.02, 0.02], [3.15, -0.02, 0], [4.3, 0, 0]],
+  fov: [[0, 0], [0.4, 4], [0.48, -4], [0.6, 3], [0.86, -9], [1.1, 3], [1.42, -4], [2.25, 6], [3.1, 0], [4.3, 0]],
+  tremble: (S, t) => (t > 0.5 && t < 0.86 ? 2.6 : t > 0.86 && t < 2.9 ? 1.7 : 0),
+});
+MFA.stab.LK = MFA.stab.L.map(([t, P0]) => [t, ..._flat(P0)]);
+MFA.stab.step = function (S, t) {
+  const W = ARS.W.lance; W.charge = t < 2.9 ? 1 : Math.max(0, 1 - (t - 2.9) * 3);
+  const e = S.e, zap = t > 0.9 && t < 2.85;
+  const args = () => [1.12 + 0.1 * ramp(t, 0.48, 0.56) - 0.03 * ramp(t, 0.56, 0.84) + 0.1 * ramp(t, 0.84, 0.92) + 0.07 * ramp(t, 1.42, 1.5) + wob(t, 31, 0.02) * (zap ? 1 : 0),
+    wob(t, 29, 0.025) * (zap ? 1 : 0), 0.16 * ramp(t, 0.86, 1.05) * (1 - ramp(t, 2.85, 3.1)), 0.55 * ramp(t, 2.2, 2.45), -0.22 * ramp(t, 0.86, 1.0) + 0.3 * ramp(t, 2.85, 3.1), wob(t, 27, 0.06) * (zap ? 1 : 0)];
+  if (!S.rd && !e.dead) {
+    // they take it on the chest plate: rock back, hands come up to the shaft
+    const st = ramp(t, 0.48, 0.6);
+    mfPlace(S, 1.05 + 0.12 * ramp(t, 0.48, 0.56) - 0.03 * ramp(t, 0.56, 0.84), wob(t, 17, 0.02) * st, 0, wob(t, 13, 0.04) * st, 0.18 * st - 0.1 * ramp(t, 0.6, 0.84), wob(t, 19, 0.05) * st);
+    mfLimb(e, "armL", -1.25 * st + wob(t, 21, 0.1) * st, 0.35 * st, 0.3 * st); mfLimb(e, "armR", -1.25 * st - wob(t, 21, 0.1) * st, -0.35 * st, -0.3 * st);
+    mfLimb(e, "head", 0.4 * st, 0, wob(t, 15, 0.1) * st); mfLimb(e, "torso", -0.12 * st, 0, 0);
+    mfLimb(e, "legL", 0.25 * st, 0, 0); mfLimb(e, "legR", -0.35 * st, 0, 0);
+    mfChest(S, S.look); S.look.y += 0.15;
+  } else if (S.rd) { r6Chest(S, _r6v2); S.look.lerp(_r6v2.setY(_r6v2.y + 0.15), 0.4); }
+  // the tip meets the plate: a shower of sparks, a hard stop, a scream of metal while you lean on it
+  cueAt(S, "clang", 0.48, () => { sfx.clunk(); sfx.lanceWall?.(); hitstop(0.11); impactFrame(45); S.shake = 1.3; CAM.kickV += 2.5; const c = mfChest(S); emitWorldSparks(c, S.dir.clone().negate().add(_r6v.set(0, 0.5, 0)), 60, 0, 10); emitWorldSparks(c, S.side, 20, 2, 7); tone("sawtooth", 2400, 1800, 0.35, 0.05); noise(0.4, "bandpass", 3200, 0.4, 3, 2200); flashEnemy(e); });
+  if (t > 0.56 && t < 0.86 && !S.rd && !e.dead) { const c = mfChest(S); if (Math.random() < 0.7) emitWorldSparks(c.clone().addScaledVector(S.dir, -0.2), _r6v.set(Math.random() - 0.5, Math.random() * 0.8, Math.random() - 0.5).sub(S.dir).normalize(), 4, 0, 6); if (Math.random() < 0.12) noise(0.08, "highpass", 4200, 0.18, 2); S.shake = Math.max(S.shake, 0.6); }
+  // it gives
+  cueAt(S, "pierce", 0.86, () => {
+    const c = mfChest(S);
+    r6Hold(S, "torso", () => r6At(S, "torso", ...args()), "lance");
+    sfx.lanceHit(); hitstop(0.16); impactFrame(80); glitch(0.45); S.shake = 1.8; CAM.kickV -= 3.5; MF.flash = 0.5;
+    noise(0.3, "lowpass", 500, 0.9, 0.8, 70); noise(0.18, "highpass", 3000, 0.5, 0.8); tone("square", 140, 40, 0.3, 0.12);
+    if (S.rd) {
+      goreBurst(S.rd, c, S.dir.clone().negate(), 1);
+      // out through the back: wires and pieces of plate
+      const back = c.clone().addScaledVector(S.dir, 0.22); const tb = rdPart(S.rd, "torso").body;
+      for (let i = 0; i < 6; i++) goreWire(back.clone(), S.dir.clone().multiplyScalar(4 + Math.random() * 4).add(_r6v.set((Math.random() - 0.5) * 3, Math.random() * 2, (Math.random() - 0.5) * 3)), { body: tb, rd: S.rd });
+      emitWorldSparks(back, S.dir, 50, 2, 12);
+      r6Twitch(S, 3);
+    }
+  });
+  for (const c of [0.95, 1.16, 1.42, 1.7, 2.0, 2.3, 2.6]) cueAt(S, "z" + c, c, () => { MF.flash = 0.9; glitch(0.4); S.shake = 1.5; sfx.lightning(); arsFlash(0xa8f6ff, 90, r6Chest(S)); impactFrame(30); r6Twitch(S, 2.6 + Math.random() * 1.5); });
+  if (zap && S.rd) {
+    const c = r6Chest(S); const tip = c.clone().addScaledVector(S.dir, -0.2);
+    if (Math.random() < 0.6) { const n = ["head", "armL", "armR", "legL", "legR"][(Math.random() * 5) | 0]; const lp = r6Pos(S, n, _sc2) || c; bolt(tip, lp.clone().add(_sc3.set((Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.2)), 0.1, 0.7); }
+    if (Math.random() < 0.5) emitWorldSparks(c, _sc3.set(Math.random() - 0.5, Math.random(), Math.random() - 0.5).normalize(), 3, 1, 6);
+    if (Math.random() < 0.15) tone("square", 1800 + Math.random() * 2400, 600, 0.05, 0.03);
+    if (Math.random() < 0.3) emitGunSparks(arsPoint(vmLance, _ap.set(0, 0.55, 0)), 2, 1.4);
+    if (Math.random() < 0.08) r6Twitch(S, 1.5, ["legL", "legR"]);
+  }
+  cueAt(S, "deeper", 1.42, () => { sfx.lanceHit(); hitstop(0.08); S.shake = 1.4; CAM.kickV -= 2; if (S.rd) goreBurst(S.rd, r6Chest(S), S.dir.clone().negate(), 0.6); noise(0.25, "lowpass", 400, 0.7, 0.8, 60); });
+  cueAt(S, "twist", 2.2, () => { sfx.servo(); noise(0.5, "bandpass", 900, 0.5, 2, 300); tone("sawtooth", 90, 50, 0.5, 0.1); S.shake = 1.6; if (S.rd) { goreBurst(S.rd, r6Chest(S), S.side, 0.8); r6Twitch(S, 4); } });
+  cueAt(S, "out", 2.95, () => {
+    const c = r6Chest(S); sfx.clunk(); noise(0.35, "lowpass", 500, 0.6, 1, 120); worldSmoke(c, 4, 0.3, 0x2a262e, 0.4, 0.5);
+    if (S.rd) { goreBurst(S.rd, c, S.dir.clone().negate(), 0.7); r6Release(S, "torso", S.dir.clone().multiplyScalar(0.8).add(_r6v.set(0, -0.5, 0))); }
+    else mfKill(S, "lance", 0.2);
+    flash("Arc lance · overload", "var(--cyan)");
+  });
+};
+
+// ---------- charge rifle: the barrel bounces off them, the second shove goes in; they hang on it kicking ----------
+RR.bounce = { p: [0.06, -0.235, -0.48], e: [0.02, 0.06, -0.12] };
+Object.assign(MFA.ram, {
+  G: [[0, RLG.rest], [0.3, RR.back], [0.45, RR.ram], [0.55, RR.bounce], [0.72, RR.ram], [0.85, RR.deep], [1.6, RR.deep], [2.4, RR.lift], [2.5, RR.blown], [3.0, RR.back], [3.9, RLG.rest]],
+  cam: [[0, 0, 0], [0.3, 0.02, 0.03, 0, 0.05], [0.45, -0.03, -0.04, 0, -0.09], [0.55, 0.04, 0.02, 0, 0.06], [0.72, -0.02, -0.03, 0, -0.06], [0.85, -0.05, -0.06, 0, -0.1], [1.05, 0, 0], [2.4, 0.05, 0.02], [2.5, 0.12, 0.06, 0, 0.12], [3.0, 0.02, 0], [3.9, 0, 0]],
+  fov: [[0, 0], [0.45, -5], [0.55, 2], [0.85, -8], [1.1, 2], [2.4, 12], [2.5, -12], [3.0, 0], [3.9, 0]],
+  tremble: (S, t) => (t > 0.55 && t < 0.85 ? 1.8 : t > 0.85 && t < 2.45 ? 0.5 + 2.2 * ramp(t, 0.85, 2.4) : 0),
+});
+MFA.ram.step = function (S, t) {
+  const W = ARS.W.rail; const ch = ramp(t, 0.9, 2.4); W.charge = t < 2.45 ? ch : 0; W.ready = false;
+  const e = S.e; const a = 0.3 + 1.4 * ch, z = t > 0.85 ? 1 : 0;
+  const args = () => [1.3 + 0.12 * ramp(t, 0.85, 0.95) + wob(t, 23, 0.01 * a) * z, wob(t, 29, 0.02 * a) * z, 0.32 * ch + 0.06 * ramp(t, 0.85, 1.0), wob(t, 19, 0.05 * a) * z, 0.4 * z - 0.3 * ch, wob(t, 23, 0.06 * a) * z];
+  if (!S.rd && !e.dead) {
+    const b1 = bump(t, 0.45, 0.72), st = ramp(t, 0.45, 0.55);
+    mfPlace(S, 1.22 + 0.16 * b1, wob(t, 13, 0.02) * st, 0, 0.2 * b1, 0.45 * b1, wob(t, 17, 0.04) * st);
+    mfLimb(e, "armL", -1.0 * st, 0.4 * st, 0.3 * st); mfLimb(e, "armR", -1.0 * st, -0.4 * st, -0.3 * st); mfLimb(e, "head", 0.55 * b1, 0, 0); mfLimb(e, "torso", 0.25 * b1, 0, 0);
+    mfLimb(e, "legL", 0.3 * b1, 0, 0); mfLimb(e, "legR", -0.2 * b1, 0, 0);
+    mfChest(S, S.look); S.look.y += 0.05;
+  } else if (S.rd) { r6Chest(S, _r6v2); S.look.lerp(_r6v2.setY(_r6v2.y + 0.05), 0.4); }
+  cueAt(S, "ram", 0.45, () => { sfx.lanceHit(); hitstop(0.1); impactFrame(45); S.shake = 1.2; CAM.kickV += 3; emitWorldSparks(mfChest(S), S.dir.clone().negate(), 40, 0, 8); tone("sawtooth", 80, 30, 0.3, 0.2); sfx.clunk(); flashEnemy(e); noise(0.3, "lowpass", 300, 0.9, 0.8, 60); });
+  cueAt(S, "ram2", 0.72, () => { sfx.clunk(); hitstop(0.05); S.shake = 1; CAM.kickV -= 2; emitWorldSparks(mfChest(S), S.dir.clone().negate(), 25, 0, 6); tone("sawtooth", 220, 120, 0.2, 0.08); });
+  cueAt(S, "pierce", 0.85, () => {
+    const c = mfChest(S);
+    r6Hold(S, "torso", () => r6At(S, "torso", ...args()), "explosion");
+    sfx.lanceHit(); hitstop(0.15); impactFrame(70); glitch(0.4); S.shake = 1.6; CAM.kickV -= 4; noise(0.35, "lowpass", 400, 1, 0.8, 50); tone("square", 120, 35, 0.3, 0.12);
+    if (S.rd) { goreBurst(S.rd, c, S.dir.clone().negate(), 1); r6Twitch(S, 3); }
+  });
+  cueAt(S, "whine", 0.9, () => { tone("sawtooth", 120, 2400, 1.6, 0.05); tone("sine", 300, 4200, 1.6, 0.04); noise(1.6, "bandpass", 2400, 0.2, 0.7, 6000); });
+  if (t > 0.9 && t < 2.45 && S.rd) {
+    const c = r6Chest(S); S.shake = Math.max(S.shake, 0.3 + ch);
+    // feet kick, hands claw at the barrel
+    if (Math.random() < 0.12 + ch * 0.1) r6Twitch(S, 2 + 3 * ch, ["legL", "legR"]);
+    if (Math.random() < 0.06) { for (const n of ["armL", "armR"]) { const p = rdPart(S.rd, n); if (!p) continue; const tp = p.body.translation(); const m = p.body.mass(); const to = _r6v.set(c.x - tp.x, c.y - tp.y - 0.1, c.z - tp.z).addScaledVector(S.dir, -0.4).normalize(); p.body.applyImpulse({ x: to.x * 3 * m, y: to.y * 3 * m + m, z: to.z * 3 * m }, true); } }
+    if (Math.random() < 0.3 + ch) emitWorldSparks(c.clone().addScaledVector(S.dir, -0.2), _sc3.set(Math.random() - 0.5, Math.random() * 0.6, Math.random() - 0.5).normalize(), 2, 2, 5 + ch * 6);
+    if (Math.random() < ch * 0.5) arsFlash(0x7ff6ff, 20 + ch * 70, c);
+    if (Math.random() < ch * 0.4) bolt(c, c.clone().add(_sc3.set((Math.random() - 0.5) * 1.2, (Math.random() - 0.3) * 1.2, (Math.random() - 0.5) * 1.2)), 0.08, 0.6);
+    if (Math.random() < 0.4) emitGunSparks(arsPoint(vmRail, _ap.set(0, 0.05, -0.3 - Math.random() * 0.4)), 1, 1 + ch);
+    if (ch > 0.6 && Math.random() < 0.2) glitch(0.15 * ch);
+    if (ch > 0.5 && Math.random() < 0.03) goreBurst(S.rd, c, S.dir.clone().negate(), 0.4);
+  }
+  cueAt(S, "boom", 2.46, () => {
+    const c = r6Chest(S); const rd = S.rd || mfKill(S, "explosion", 0.1);
+    if (rd) {
+      if (S.grips?.length) releaseAll(S); rd.mfHeld = false;
+      for (const [p, n] of goreParts(rd)) goreTear(p, n, 2);
+      dismember(rd);
+      for (const p of rd.parts) { const tp = p.body.translation(); const out = _sc2.set(tp.x - c.x, tp.y - c.y + 0.4, tp.z - c.z).normalize().addScaledVector(S.dir, 0.8).normalize(); const m = p.body.mass(); p.body.applyImpulse({ x: out.x * 9 * m, y: out.y * 9 * m + 3 * m, z: out.z * 9 * m }, true); p.body.applyTorqueImpulse({ x: (Math.random() - 0.5) * m, y: (Math.random() - 0.5) * m, z: (Math.random() - 0.5) * m }, true);
+        for (let i = 0; i < 2; i++) goreWire(_r6v.set(tp.x, tp.y, tp.z).clone(), out.clone().multiplyScalar(3 + Math.random() * 4), { body: p.body, rd }); }
+      goreBurst(rd, c, S.dir, 1); rd.launchSeen = true; rd.carHit = true;
+    }
+    { const v0 = player.body.linvel(); explosion(c, 4.2); player.body.setLinvel(v0, true); } S.move = S.foot.clone().addScaledVector(S.dir, -0.7); S.moveK = 5; MF.flash = 1; impactFrame(110); glitch(0.8); S.shake = 2; mfSlow(S, 0.25, 0.7);
+    for (let i = 0; i < 10; i++) { const m = new THREE.Mesh(UNIT_RBOX, [M.bot, M.mullion, M.rubble][i % 3]); m.scale.set(0.05 + Math.random() * 0.1, 0.04 + Math.random() * 0.08, 0.04 + Math.random() * 0.08); addDebris(m, c.clone(), _sc3.set((Math.random() - 0.5) * 10, 3 + Math.random() * 6, (Math.random() - 0.5) * 10).addScaledVector(S.dir, 4), 6); }
+    worldSmoke(c, 8, 1.2, 0x2a262e, 0.9, 0.5); railBeam(arsWorld(vmRail, RL_MUZZLE), c.clone().addScaledVector(S.dir, 6)); sfx.rail();
+    flash("Charge rifle · overload", "var(--cyan)");
+  });
+};
+
+// ---------- the lasso: same squeeze, but the cut tears them open ----------
+{
+  const step0 = MFA.lasso.step;
+  MFA.lasso.step = function (S, t) {
+    const had = S.cues.has("cut"); step0.call(this, S, t);
+    if (!had && S.cues.has("cut") && S.e.dead) {
+      // the two halves are the newest two bodies
+      const halves = ragdolls.filter((r) => r.half && state.time - r.born < 0.2);
+      for (const h of halves) { const p = h.parts[0]; goreTear(p, null, 2); const tp = p.body.translation(); for (let i = 0; i < 7; i++) goreWire(_r6v.set(tp.x, tp.y, tp.z).clone(), _r6v2.set((Math.random() - 0.5) * 4, (Math.random() - 0.3) * 4, (Math.random() - 0.5) * 4), { body: p.body, rd: h }); }
+    }
+  };
+}
+
+// ---------- head grab: your hand on their face, the rest of them along for the ride ----------
+MFA.grab.step = function (S, t) {
+  const e = S.e; const grabbed = t >= 0.42, lunge = ramp(t, 0, 0.42);
+  const hand = (out) => out; // (the head is the held part; the hand pose follows the camera)
+  if (S.how === "floor") {
+    S.move = _sc.copy(S.pStart).lerp(_sc2.copy(S.eStart).addScaledVector(S.dir, -0.85), lunge).clone();
+    if (!grabbed) S.foot.copy(S.move).setY(e.floorY);
+    const lift = ramp(t, 0.45, 1.0) * (1 - ramp(t, 1.0, 1.14)) + 0.32 * bump(t, 1.3, 1.55);
+    const slam = ramp(t, 1.0, 1.14) * (1 - bump(t, 1.3, 1.55) * 0.9);
+    if (!S.rd && !e.dead) {
+      mfPlace(S, 0.85, 0, 0, 0, -0.5 * (grabbed ? 1 : 0), 0);
+      mfLimb(e, "armL", -0.6 * lunge, 0, 0.4); mfLimb(e, "armR", -0.6 * lunge, 0, -0.4);
+      mfHead(S, S.look);
+    } else if (S.rd) r6Head(S, S.look);
+    cueAt(S, "grab", 0.42, () => {
+      const hp = mfHead(S);
+      r6Hold(S, "head", () => { const tt = S.t; const lf = ramp(tt, 0.45, 1.0) * (1 - ramp(tt, 1.0, 1.14)) + 0.32 * bump(tt, 1.3, 1.55); const sl = ramp(tt, 1.0, 1.14) * (1 - bump(tt, 1.3, 1.55) * 0.9);
+        const p = S.foot.clone().addScaledVector(S.dir, 0.85 + 0.25 * sl); p.y = THREE.MathUtils.lerp(e.floorY + 1.69 + 0.4 * lf, e.floorY + 0.2, sl);
+        const q = new THREE.Quaternion().setFromEuler(_r6e.set(-0.3 * lf + 1.45 * sl, Math.atan2(-S.dir.x, -S.dir.z), 0, "YXZ")); return { p, q }; }, "slam");
+      sfx.clunk(); noise(0.2, "lowpass", 600, 0.8, 0.8, 100); hitstop(0.06); S.shake = 0.8; emitWorldSparks(hp, S.dir.clone().negate(), 12, 0, 5); r6Twitch(S, 2, ["legL", "legR", "armL", "armR"]);
+    });
+    if (S.rd && t > 0.45 && t < 1.0 && Math.random() < 0.15) r6Twitch(S, 2.2, ["legL", "legR", "armL", "armR"]);
+    const floorHit = (k) => { const hp = r6Head(S) || mfHead(S); hp.y = e.floorY + 0.02; grabImpact(S, hp, _mvU, k); if (S.rd) { goreBurst(S.rd, hp.clone().setY(e.floorY + 0.2), _mvU, k); r6Twitch(S, 4 * k); } };
+    cueAt(S, "slam", 1.14, () => floorHit(1));
+    cueAt(S, "slam2", 1.55, () => floorHit(0.7));
+    cueAt(S, "let", 1.9, () => r6Release(S, "head", _r6v.set(0, -1, 0)));
+  } else {
+    const drive = ramp(t, 0.45, S.how === "wall" ? 1.12 : 1.02);
+    const toWall = S.wn.clone().negate();
+    const ePos = _sc.copy(S.drive0).lerp(S.drive1, drive).clone();
+    const rebound = S.how === "wall" ? 0.22 * bump(t, 1.14, 1.5) : 0;
+    const behind = ePos.clone().addScaledVector(toWall, -(0.85 + rebound));
+    S.move = (grabbed ? behind : _sc2.copy(S.pStart).lerp(_sc3.copy(S.eStart).addScaledVector(S.dir, -0.85), lunge)).clone();
+    if (grabbed) { S.dir.lerp(toWall, 0.2).normalize(); S.side.set(-S.dir.z, 0, S.dir.x); }
+    if (!S.rd) S.foot.copy(S.move).setY(e.floorY);
+    if (!S.rd && !e.dead) {
+      mfPlace(S, 0, 0, 0.05, 0, -0.45 * (grabbed ? 1 : 0), 0, ePos.clone());
+      e.group.rotation.y = Math.atan2(toWall.x, toWall.z);
+      mfLimb(e, "armL", -0.8 * lunge, 0, 0.4); mfLimb(e, "armR", -0.8 * lunge, 0, -0.4); mfLimb(e, "head", -0.4 * lunge, 0, 0);
+      mfHead(S, S.look); S.look.addScaledVector(toWall, 0.6);
+    } else if (S.rd && !S.thrown) { r6Head(S, S.look); S.look.addScaledVector(toWall, 0.6); }
+    else if (S.how === "window") S.look.copy(S.wp).addScaledVector(S.wn, -3);
+    cueAt(S, "grab", 0.42, () => {
+      const hp = mfHead(S);
+      r6Hold(S, "head", () => { const tt = S.t; const dr = ramp(tt, 0.45, S.how === "wall" ? 1.12 : 1.02); const rb = S.how === "wall" ? 0.22 * bump(tt, 1.14, 1.5) : 0;
+        const p = S.drive0.clone().lerp(S.drive1, dr).addScaledVector(toWall, -rb); p.y = e.floorY + 1.62 - 0.08 * dr;
+        if (S.how === "wall") { const lim = S.wp.clone().addScaledVector(S.wn, 0.19); const along = p.clone().sub(lim).dot(toWall); if (along > 0) p.addScaledVector(toWall, -along); }
+        const q = new THREE.Quaternion().setFromEuler(_r6e.set(-0.4, Math.atan2(toWall.x, toWall.z), 0, "YXZ")); return { p, q }; }, S.how === "window" ? "window" : "slam");
+      sfx.clunk(); noise(0.2, "lowpass", 600, 0.8, 0.8, 100); hitstop(0.06); S.shake = 0.8; emitWorldSparks(hp, S.dir.clone().negate(), 12, 0, 5);
+    });
+    if (S.rd && t > 0.45 && t < 1.1 && Math.random() < 0.15) r6Twitch(S, 2, ["legL", "legR"]);
+    if (S.how === "wall") {
+      const wallHit = (k) => { const at = S.wp.clone().add(_sc3.set(0, -0.08 * (1 - k), 0)); grabImpact(S, at, S.wn, k); if (S.rd) { goreBurst(S.rd, at, S.wn, k); r6Twitch(S, 4 * k); } };
+      cueAt(S, "slam", 1.12, () => wallHit(1));
+      cueAt(S, "slam2", 1.62, () => wallHit(0.7));
+      cueAt(S, "let", 1.9, () => r6Release(S, "head", S.wn.clone().multiplyScalar(0.5)));
+    } else {
+      cueAt(S, "throw", 1.02, () => {
+        const at = S.wp.clone(); shatter(S.P, at, S.wn.clone().negate(), 24); sfx.glass?.();
+        const rd = S.rd || mfKill(S, "window", 0.1, S.wn.clone().negate());
+        if (rd) {
+          if (S.grips?.length) releaseAll(S); rd.mfHeld = false; S.thrown = true;
+          rd.born = state.time - 0.05; rd.launchSeen = false; rd.thrown = true;
+          for (const p of rd.parts) { const m = p.body.mass(); p.body.setLinvel({ x: -S.wn.x * 13, y: 3.5, z: -S.wn.z * 13 }, true); p.body.applyTorqueImpulse({ x: (Math.random() - 0.5) * m, y: 0, z: (Math.random() - 0.5) * m }, true); }
+          goreBurst(rd, at, S.wn.clone().negate(), 0.6);
+        }
+        hitstop(0.1); impactFrame(60); glitch(0.4); S.shake = 1.2; mfSlow(S, 0.3, 0.9); CAM.kickV -= 3;
+      });
+    }
+  }
+};
+
+// ================= Round 6 · hands: one hand off the gun for the grapple, one-handed shots in the air =================
+// The breacher and the charge rifle are held in two hands. When the grapple fires, the left hand lets go of the
+// foregrip and swings out to throw the hook, then closes on the line; the right hand carries the gun alone, pushed a
+// little further out and toward the middle, and its shots kick the wrist up harder. Back on the ground, or once the
+// line is gone, the left hand goes back to the grip.
+const ONEH = { w: 0, lastRc: 0 };
+const ONEH_GUNS = { breacher: 1, rail: 1 };
+function oneHandWant() { return !!(player && ONEH_GUNS[player.weapon] && (player.grapple || hookFx.state === "retract" || VM.grapFire > 0.05)); }
+function oneHandPose(dt, R, out) {
+  const want = oneHandWant() && !MF.cur && !ARS.anim ? 1 : 0;
+  ONEH.w += (want - ONEH.w) * (1 - Math.exp(-dt * (want ? 10 : 6)));
+  if (!out || !ONEH_GUNS[player.weapon]) return;
+  if (want) out.ik = 0; // the left hand leaves the grip (arsenalPost eases the weight down, so it slides off rather than jumps)
+  const w = ONEH.w; if (w < 0.001) return;
+  const W = ARS.W[player.weapon]; const rc = W ? W.recoil * W.recoil : 0;
+  // braced one-handed: arm a touch straighter, the gun toward the middle, a slight cant, and a wrist that flips on the shot
+  R.p[0] -= 0.045 * w; R.p[1] += 0.015 * w; R.p[2] -= 0.04 * w; R.el = Math.max(0, R.el - 0.12 * w);
+  R.r[1] -= 0.05 * w; R.w[2] -= 0.12 * w; R.w[0] += 0.35 * rc * w; R.p[1] += 0.03 * rc * w; R.p[2] += 0.04 * rc * w;
+  if (W && W.recoil > 0.97 && ONEH.lastRc <= 0.97) { CAM.kickV += 2.2 * w; CAM.rollV += (Math.random() < 0.5 ? -1 : 1) * 1.5 * w; }
+  ONEH.lastRc = W ? W.recoil : 0;
+}
+
+// ================= Round 6 · stims on the move =================
+// Sprinting or sliding, the stim skips the pen flick: straight from the hand to the port, a quick jab, and the camera
+// only dips a little so you keep your line.
+function stimMoving() { return !!(player.sprinting || player.sliding || Math.hypot(player.vel.x, player.vel.z) > 7.5); }
+const STIM_FAST = 1.6;
+
+// ================= Round 6 · traffic, only for a body you throw out of a window =================
+// A body leaves the building because you threw it (a carried body, the head grab's window throw): then a car comes.
+// Nothing else calls a car any more, and there is no combo for it.
+function carxThrown(rd, t, v, T) {
+  if (!rd?.thrown) return false;
+  if (CARX.cur || CARX.cd > 0 || state.fin || !player || player.dead) return false;
+  const car = CARS.find((c) => c.state === "idle"); if (!car) return false;
+  if (T <= 0) return false;
+  const ok = carxStart(rd, car, { kind: "air", T }); if (ok) CARX.cd = state.mode === "test" ? 3 : 6; return ok;
+}
+// the testing ground is open air: a thrown body counts once it goes through (or past) a window
+const R6W = [];
+function r6Watch() {
+  for (let i = R6W.length - 1; i >= 0; i--) {
+    const w = R6W[i]; if (!ragdolls.includes(w.rd) || state.time > w.until || w.rd.carHit) { R6W.splice(i, 1); continue; }
+    const t = w.rd.torso.translation();
+    for (const P of panes) if (Math.abs(t.x - P.center.x) < P.half.x + 0.6 && Math.abs(t.y - P.center.y) < P.half.y + 0.6 && Math.abs(t.z - P.center.z) < P.half.z + 0.6) { R6W.splice(i, 1); carxThrown(w.rd, t, w.rd.torso.linvel(), 0.45); break; }
+  }
+}
+// the halves of a sliced body during a finisher: torn skin and a fistful of wires out of each cut
+function goreHalf(h) { try { const p = h.rd.parts[0]; goreTear(p, null, 2); const t = p.body.translation(); for (let i = 0; i < 6; i++) goreWire(new THREE.Vector3(t.x, t.y, t.z), new THREE.Vector3((Math.random() - 0.5) * 4, (Math.random() - 0.3) * 4, (Math.random() - 0.5) * 4), { body: p.body, rd: h.rd }); GORE.track.includes(h.rd) || GORE.track.push(h.rd); h.rd.goreT = state.time; } catch {} }
+// shader warm-up for the new materials, so the first tear or mirror does not hitch
+function r6Warm(add) {
+  for (const m of [M.skin, M.pants, M.bot]) if (m) add(new THREE.Mesh(UNIT_RBOX, goreMat(m, 1)));
+  add(goreEndoMesh("torso")); add(goreWireMesh()); add(new THREE.Mesh(UNIT_BOX, MIR.fbMat ||= new THREE.MeshStandardMaterial({ color: 0x9aa2aa, metalness: 1, roughness: 0.08, envMap: envTex, envMapIntensity: 0.9 })));
+}
+
+// ================= Round 6 · mirrors =================
+// A few wall mirrors in the office spaces. Each is a real reflection (a second camera renders the room mirrored),
+// scuffed like a real one: smudges and fingerprints that soften and dull it, fine scratches that catch the light,
+// and the silvering going dark and spotty at the edges. Only the nearest mirror you can see renders its reflection
+// (every other frame when it is not close); the rest show a cheap chrome stand-in. You show up in them as UNIT-7.
+// Shoot one and it cracks into a spider web; again and it falls out of the frame in shards.
+const MIR = { list: [], n: 0, f: 0, scuff: null, pose: false };
+function mirScuff() {
+  if (MIR.scuff) return MIR.scuff;
+  const S = 512, c = document.createElement("canvas"); c.width = c.height = S; const x = c.getContext("2d");
+  let seed = 4242; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  x.fillStyle = "#000"; x.fillRect(0, 0, S, S);
+  // red: smudges and fingerprints (soften and dull the reflection)
+  x.globalCompositeOperation = "lighter";
+  for (let i = 0; i < 26; i++) { const px = rnd() * S, py = rnd() * S, r = 20 + rnd() * 70; const g = x.createRadialGradient(px, py, 0, px, py, r); g.addColorStop(0, `rgba(${(60 + rnd() * 90) | 0},0,0,1)`); g.addColorStop(1, "rgba(0,0,0,0)"); x.fillStyle = g; x.beginPath(); x.ellipse(px, py, r, r * (0.5 + rnd() * 0.6), rnd() * 3, 0, Math.PI * 2); x.fill(); }
+  for (let i = 0; i < 9; i++) { const px = S * (0.2 + rnd() * 0.6), py = S * (0.3 + rnd() * 0.5); x.strokeStyle = "rgba(110,0,0,0.55)"; x.lineWidth = 1.4; for (let k = 0; k < 7; k++) { x.beginPath(); x.ellipse(px, py, 4 + k * 2.2, 6 + k * 2.8, 0.3, 0, Math.PI * 2); x.stroke(); } }
+  // a wipe mark: someone dragged a sleeve across it
+  for (let i = 0; i < 3; i++) { x.strokeStyle = "rgba(70,0,0,0.6)"; x.lineWidth = 26 + rnd() * 20; x.lineCap = "round"; x.beginPath(); const y0 = rnd() * S; x.moveTo(rnd() * S * 0.3, y0); x.bezierCurveTo(S * 0.4, y0 + (rnd() - 0.5) * 120, S * 0.6, y0 + (rnd() - 0.5) * 120, S * (0.7 + rnd() * 0.3), y0 + (rnd() - 0.5) * 80); x.stroke(); }
+  // green: scratches, long fine ones and clusters of short ones
+  for (let i = 0; i < 70; i++) { const px = rnd() * S, py = rnd() * S, a = rnd() * Math.PI, l = 10 + rnd() * (rnd() < 0.2 ? 260 : 60); x.strokeStyle = `rgba(0,${(90 + rnd() * 160) | 0},0,1)`; x.lineWidth = 0.6 + rnd() * 0.9; x.beginPath(); x.moveTo(px, py); x.quadraticCurveTo(px + Math.cos(a) * l * 0.5 + (rnd() - 0.5) * 8, py + Math.sin(a) * l * 0.5 + (rnd() - 0.5) * 8, px + Math.cos(a) * l, py + Math.sin(a) * l); x.stroke(); }
+  // blue: the silvering failing at the edges, and a few dark spots
+  const id = x.getImageData(0, 0, S, S), d = id.data;
+  for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
+    const e = Math.min(i, j, S - 1 - i, S - 1 - j) / S; const n = Math.sin(i * 0.09 + Math.sin(j * 0.05) * 3) * 0.5 + Math.sin(j * 0.13 + i * 0.02) * 0.5;
+    const v = Math.max(0, 1 - e / (0.045 + 0.03 * n)) ; d[(j * S + i) * 4 + 2] = Math.min(255, v * 255);
+  }
+  x.putImageData(id, 0, 0);
+  for (let i = 0; i < 40; i++) { const px = rnd() * S, py = rnd() * S, r = 1 + rnd() * 4; x.fillStyle = `rgba(0,0,${(120 + rnd() * 135) | 0},1)`; x.beginPath(); x.arc(px, py, r, 0, Math.PI * 2); x.fill(); }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.NoColorSpace;
+  return (MIR.scuff = t);
+}
+const MIR_SHADER = {
+  name: "ScuffedMirror",
+  uniforms: { color: { value: null }, tDiffuse: { value: null }, textureMatrix: { value: null }, tScuff: { value: null }, uOff: { value: new THREE.Vector2() }, uScale: { value: new THREE.Vector2(1, 1) }, uCrack: { value: new THREE.Vector4(0.5, 0.5, 0, 0) } },
+  vertexShader: /* glsl */`
+    uniform mat4 textureMatrix; varying vec4 vUv; varying vec2 vUv2;
+    void main() { vUv = textureMatrix * vec4(position, 1.0); vUv2 = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: /* glsl */`
+    uniform vec3 color; uniform sampler2D tDiffuse; uniform sampler2D tScuff; uniform vec2 uOff; uniform vec2 uScale; uniform vec4 uCrack;
+    varying vec4 vUv; varying vec2 vUv2;
+    float h21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    void main() {
+      vec4 s = texture2D(tScuff, vUv2 * uScale + uOff);
+      // the edge loss comes from the mirror's own edges, not the tiled texture
+      vec2 eu = min(vUv2, 1.0 - vUv2) * uScale; float edge = 1.0 - smoothstep(0.0, 0.09, min(eu.x, eu.y) + 0.02 * sin(vUv2.y * 40.0 + vUv2.x * 17.0));
+      float desil = max(edge * 0.85, s.b * 0.7);
+      // cracks: spokes out of the hit and rings round it; each pane of the web reflects a little off
+      vec2 dd = (vUv2 - uCrack.xy) * uScale; float r = length(dd); float an = atan(dd.y, dd.x);
+      float sec = floor(an * 1.27 + h21(vec2(floor(r * 6.0))) * 2.0);
+      float spoke = 1.0 - smoothstep(0.0, 0.012 + r * 0.004, abs(fract(an * 1.27 + 0.13 * sin(r * 23.0)) - 0.5) * r * 3.0);
+      float ring = 1.0 - smoothstep(0.0, 0.006, abs(fract(r * 7.0 + 0.2 * h21(vec2(sec))) - 0.5) * 0.14);
+      float reach = smoothstep(uCrack.z, uCrack.z * 0.6, r) * uCrack.w;
+      float crack = max(spoke, ring * step(0.03, r)) * reach;
+      vec2 tilt = reach > 0.01 ? (vec2(h21(vec2(sec, 1.0)), h21(vec2(sec, 2.0))) - 0.5) * 0.03 * reach : vec2(0.0);
+      vec2 off = (s.r * 0.006) * vec2(sin(vUv2.y * 70.0), cos(vUv2.x * 60.0)) + tilt;
+      vec4 base = texture2DProj(tDiffuse, vUv + vec4(off * vUv.w, 0.0, 0.0));
+      vec4 b2 = texture2DProj(tDiffuse, vUv + vec4((off + vec2(0.007, -0.005) * s.r) * vUv.w, 0.0, 0.0));
+      vec4 b3 = texture2DProj(tDiffuse, vUv + vec4((off + vec2(-0.006, 0.006) * s.r) * vUv.w, 0.0, 0.0));
+      vec3 c = mix(base.rgb, (base.rgb + b2.rgb + b3.rgb) / 3.0, clamp(s.r * 1.6, 0.0, 1.0));
+      c *= color;
+      c = mix(c, c * 0.72 + vec3(0.035, 0.036, 0.034), clamp(s.r * 1.2, 0.0, 1.0));
+      c += vec3(0.16) * s.g * s.g;
+      c = mix(c, vec3(0.05, 0.045, 0.04) + 0.15 * c, desil);
+      c = mix(c, vec3(0.85, 0.88, 0.9), crack * 0.75);
+      gl_FragColor = vec4(c, 1.0);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`,
+};
+function propMirror(x, y, z, nx, nz, o = {}) {
+  const m = p5m(); const w = o.w ?? 0.9, h = o.h ?? 1.35, ft = 0.04;
+  const frameM = o.gold ? m.gold : m.steel;
+  const g = p5Asm([[P5G.box(w, ft, 0.035), frameM, 0, h / 2 - ft / 2, 0], [P5G.box(w, ft, 0.035), frameM, 0, -h / 2 + ft / 2, 0], [P5G.box(ft, h - ft * 2, 0.035), frameM, -w / 2 + ft / 2, 0, 0], [P5G.box(ft, h - ft * 2, 0.035), frameM, w / 2 - ft / 2, 0, 0],
+    [P5G.box(w - 0.02, h - 0.02, 0.01), m.black, 0, 0, -0.012]], false);
+  const geo = new THREE.PlaneGeometry(w - ft * 2, h - ft * 2);
+  const fb = new THREE.Mesh(geo, MIR.fbMat ||= new THREE.MeshStandardMaterial({ color: 0x9aa2aa, metalness: 1, roughness: 0.08, envMap: envTex, envMapIntensity: 0.9 })); fb.position.z = 0.004; g.add(fb);
+  let refl = null;
+  try {
+    const res = SET.quality === "low" ? 256 : 400;
+    refl = new Reflector(geo, { textureWidth: res, textureHeight: Math.round(res * (h / w)), clipBias: 0.003, shader: MIR_SHADER, multisample: 0, color: 0xd8dcde });
+    const U = refl.material.uniforms; U.tScuff.value = mirScuff(); U.uOff.value.set(Math.random(), Math.random()); U.uScale.value.set(w / 1.2, h / 1.2); U.uCrack.value = new THREE.Vector4(0.5, 0.5, 0, 0);
+    refl.position.z = 0.005; refl.visible = false; g.add(refl);
+    const orb = refl.onBeforeRender; refl.slot = MIR.n % 2;
+    refl.onBeforeRender = function (rr, sc, cam) { if (MIR.skip && (MIR.f % 2) !== this.slot) return; mirSelf(true); try { orb.call(this, rr, sc, cam); } finally { mirSelf(false); } };
+  } catch (err) { console.warn("mirror", err); refl = null; }
+  MIR.n++;
+  const P = propMake("mirror", g, { refl, fb, w, h, hits: 0, dens: 2.5 });
+  const yaw = Math.atan2(nx, nz); P.n = new THREE.Vector3(nx, 0, nz); MIR.list.push(P);
+  return propBody(P, new THREE.Vector3(x + nx * 0.025, y, z + nz * 0.025), new THREE.Quaternion().setFromAxisAngle(_p5up, yaw), w / 2, h / 2, 0.02, false);
+}
+// you, in the mirror: the full UNIT-7 body stands where you are while the reflection renders
+function mirSelf(on) {
+  if (state.fin) return;
+  try {
+    if (on) {
+      if (!finRig) finRig = buildFinRig();
+      const pp = playerPos(); finRig.root.position.set(pp.x, pp.y - (P.half + P.radius), pp.z); finRig.root.rotation.set(0, yaw, 0);
+      if (!MIR.posed) { MIR.posed = true; applyFinPose(finRig, P2.idle); }
+      finRig.root.visible = true; if (finRig.sword) finRig.sword.visible = !!player.ownsSword;
+      MIR.selfVis = selfBody.visible; selfBody.visible = false;
+    } else { finRig.root.visible = false; selfBody.visible = MIR.selfVis ?? selfBody.visible; }
+  } catch {}
+}
+function mirReset() { MIR.list.length = 0; MIR.n = 0; MIR.posed = false; }
+// per frame: only the best mirror reflects
+function mirFrame() {
+  MIR.f++; if (!MIR.list.length) return;
+  const c = camera.position, f = _r6g.set(0, 0, -1).applyQuaternion(camera.quaternion);
+  let best = null, bd = 15;
+  for (const P of MIR.list) {
+    if (P.gone || !P.refl || P.broken || !P.g.visible) continue;
+    const p = P.g.position; const dx = p.x - c.x, dy = p.y - c.y, dz = p.z - c.z; const d = Math.hypot(dx, dy, dz);
+    if (d > bd) continue; const n = P.g.getWorldDirection(_r6g2); if (n.x * -dx + n.y * -dy + n.z * -dz < 0.05 * d) continue;
+    if ((f.x * dx + f.y * dy + f.z * dz) < -0.3 * d) continue;
+    bd = d; best = P;
+  }
+  for (const P of MIR.list) { if (!P.refl || P.gone) continue; const on = P === best && !state.fin; P.refl.visible = on; P.fb.visible = !on && !P.broken; }
+  MIR.skip = bd > 6;
+}
+PK.mirror = {
+  hp: 2, brk: 2.5,
+  hit(P, at, d, pw) { // a spider web out of the hit
+    P.hits++; if (P.refl) { const lp = P.g.worldToLocal(at.clone()); const U = P.refl.material.uniforms.uCrack.value; U.set(lp.x / (P.w - 0.08) + 0.5, lp.y / (P.h - 0.08) + 0.5, 0.35 + 0.25 * P.hits, Math.min(1, 0.7 + 0.3 * P.hits)); }
+    P.fb.material = MIR.crackMat ||= new THREE.MeshStandardMaterial({ color: 0x8a9096, metalness: 1, roughness: 0.32, envMap: envTex, envMapIntensity: 0.7 });
+    sfx.glass?.(false); emitWorldSparks(at, P.n, 6, 2, 3); tone("sine", 3200, 2600, 0.08, 0.02);
+    for (let i = 0; i < 3; i++) chunk(at.clone().addScaledVector(P.n, 0.03), [0.03 + Math.random() * 0.04, 0.03 + Math.random() * 0.05, 0.006], MIR.fbMat, P.n.clone().multiplyScalar(1.5).add(_r6g.set(rv(2), rv(1), rv(2))), 16, 2.5);
+  },
+  break(P, at, d, pw) { // out of the frame in shards; the black backing stays
+    P.broken = true; if (P.refl) { P.refl.visible = false; P.g.remove(P.refl); P.refl.dispose?.(); P.refl = null; } P.fb.visible = false;
+    const cols = 3, rows = 4, w = P.w - 0.08, h = P.h - 0.08;
+    for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
+      const lp = new THREE.Vector3(-w / 2 + w * (i + 0.5) / cols + rv(0.05), -h / 2 + h * (j + 0.5) / rows + rv(0.05), 0.01); const wp = P.g.localToWorld(lp);
+      const v = P.n.clone().multiplyScalar(0.6 + Math.random() * 1.5).add(d.clone().multiplyScalar(1.5 + pw)).add(_r6g.set(rv(1.5), Math.random(), rv(1.5)));
+      chunk(wp, [w / cols * (0.6 + Math.random() * 0.4), h / rows * (0.6 + Math.random() * 0.4), 0.006], MIR.fbMat, v, 12, 2.5);
+    }
+    sfx.glass?.(true); noise(0.5, "highpass", 3000, 0.6, 0.6); emitWorldSparks(at, P.n, 14, 2, 4);
+  },
+  again(P, at, d, pw) { P.loose = true; propLoose(P, at, P.n.clone().multiplyScalar(0.6).add(d.clone().multiplyScalar(0.8)), 1.2 + pw * 0.5, 2.5); p5Snd.metal?.(1); },
+};
+
+// ================= Round 6 · the idle props, held like a person holds them =================
+// The phone is a modern handset (rounded glass slab, metal band, camera bump, a lit screen under reflective glass)
+// lying against the palm: fingers curl round its far edge onto the glass, the thumb works the screen. The banana is
+// built like a real one: five-sided and ridged, a stalk, a dark blossom end, freckles, green near the stem; the fist
+// closes round its lower third, and the peel comes down in four strips that curl back smoothly from the top.
+// Both are fixed in the hand, and the hand turns so the screen (or the fruit) faces you.
+const R6I = { built: false, grip: {}, fingers: {}, peel: [] };
+function r6PhoneScreenTex() {
+  const W = 288, H = 600, c = document.createElement("canvas"); c.width = W; c.height = H; const x = c.getContext("2d");
+  const rr = (X, Y, w, h, r) => { x.beginPath(); x.moveTo(X + r, Y); x.arcTo(X + w, Y, X + w, Y + h, r); x.arcTo(X + w, Y + h, X, Y + h, r); x.arcTo(X, Y + h, X, Y, r); x.arcTo(X, Y, X + w, Y, r); x.closePath(); };
+  x.clearRect(0, 0, W, H); x.save(); rr(0, 0, W, H, 34); x.clip();
+  x.fillStyle = "#0b0e15"; x.fillRect(0, 0, W, H);
+  const cols = [["#ff5a6e", "#7a1f3a"], ["#4ff0ff", "#123a5a"], ["#ffb547", "#5a3210"], ["#9a7bff", "#2a1a5a"], ["#48ff9a", "#104a30"], ["#ff8a3d", "#4a1a10"]];
+  let y = 64;
+  for (let i = 0; y < H * 2.2; i++) {
+    const h = 150 + ((i * 53) % 70);
+    x.fillStyle = "#141a26"; rr(12, y, W - 24, h, 14); x.fill();
+    x.fillStyle = "#2a3346"; x.beginPath(); x.arc(32, y + 22, 10, 0, Math.PI * 2); x.fill();
+    x.fillStyle = "#c8d0dc"; x.fillRect(50, y + 15, 70 + ((i * 17) % 50), 7); x.fillStyle = "#6a7488"; x.fillRect(50, y + 26, 44, 5);
+    const [a, b] = cols[i % cols.length]; const g = x.createLinearGradient(0, y + 40, W, y + h - 30); g.addColorStop(0, a); g.addColorStop(1, b); x.fillStyle = g; rr(20, y + 40, W - 40, h - 76, 8); x.fill();
+    x.fillStyle = "rgba(255,255,255,.18)"; for (let k = 0; k < 4; k++) { x.beginPath(); x.arc(40 + ((i * 41 + k * 67) % (W - 80)), y + 60 + ((k * 37) % (h - 110)), 8 + k * 5, 0, Math.PI * 2); x.fill(); }
+    x.fillStyle = "#8a95a8"; x.fillRect(24, y + h - 28, 18, 10); x.fillRect(54, y + h - 28, 18, 10); x.fillRect(84, y + h - 28, 18, 10);
+    y += h + 12;
+  }
+  x.restore();
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; return t;
+}
+function r6PhoneUiTex() {
+  const W = 288, H = 600, c = document.createElement("canvas"); c.width = W; c.height = H; const x = c.getContext("2d");
+  x.clearRect(0, 0, W, H);
+  const g = x.createLinearGradient(0, 0, 0, 64); g.addColorStop(0, "rgba(8,10,16,1)"); g.addColorStop(1, "rgba(8,10,16,0.0)"); x.fillStyle = g; x.fillRect(0, 0, W, 64);
+  x.fillStyle = "#e8ecf2"; x.font = "600 19px sans-serif"; x.fillText("9:41", 30, 34);
+  for (let i = 0; i < 4; i++) x.fillRect(206 + i * 7, 32 - i * 4, 4, 6 + i * 4);
+  x.strokeStyle = "#e8ecf2"; x.lineWidth = 2; x.strokeRect(240, 20, 26, 13); x.fillRect(242, 22, 18, 9); x.fillRect(267, 24, 2, 5);
+  x.fillStyle = "#000"; x.beginPath(); x.arc(W / 2, 30, 11, 0, Math.PI * 2); x.fill(); // the punch-hole camera
+  x.fillStyle = "rgba(230,236,242,.7)"; x.beginPath(); x.roundRect?.(W / 2 - 56, H - 16, 112, 5, 3); x.fill(); // home bar
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+function r6RoundRect(w, h, r) { const s = new THREE.Shape(); const x = -w / 2, y = -h / 2; s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r); s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h); s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r); s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y); return s; }
+function r6Phone() {
+  const W = 0.071, H = 0.148, D = 0.0078, R = 0.0105;
+  const ph = new THREE.Group();
+  const back = new THREE.MeshStandardMaterial({ color: 0x1d2a3a, roughness: 0.18, metalness: 0.3, envMap: envTex, envMapIntensity: 1 });
+  const band = new THREE.MeshStandardMaterial({ color: 0x8c9098, roughness: 0.32, metalness: 1, envMap: envTex, envMapIntensity: 1.1 });
+  const body = new THREE.Mesh(new THREE.ExtrudeGeometry(r6RoundRect(W, H, R), { depth: D, bevelEnabled: true, bevelThickness: 0.0009, bevelSize: 0.0009, bevelSegments: 2, curveSegments: 8 }), [back, band]);
+  body.geometry.translate(0, 0, -D / 2); ph.add(body);
+  // the screen: the feed (scrolls), the status bar over it, then a sheet of glass that catches the room
+  const sw = W - 0.003, sh = H - 0.003;
+  const feed = r6PhoneScreenTex(); feed.wrapT = THREE.ClampToEdgeWrapping;
+  const scr = new THREE.Mesh(new THREE.PlaneGeometry(sw, sh), new THREE.MeshBasicMaterial({ map: feed, toneMapped: false, alphaTest: 0.5 }));
+  scr.position.z = D / 2 + 0.0011; ph.add(scr);
+  const ui = new THREE.Mesh(new THREE.PlaneGeometry(sw, sh), new THREE.MeshBasicMaterial({ map: r6PhoneUiTex(), transparent: true, toneMapped: false, depthWrite: false }));
+  ui.position.z = D / 2 + 0.0013; ph.add(ui);
+  const glass = new THREE.Mesh(new THREE.ExtrudeGeometry(r6RoundRect(sw, sh, R - 0.001), { depth: 0.0002, bevelEnabled: false, curveSegments: 8 }), new THREE.MeshStandardMaterial({ color: 0x0a0c10, roughness: 0.04, metalness: 0.1, envMap: envTex, envMapIntensity: 1.6, transparent: true, opacity: 0.28, depthWrite: false }));
+  glass.position.z = D / 2 + 0.0015; ph.add(glass);
+  // the camera bump on the back, three lenses and a flash
+  const bump = new THREE.Mesh(new THREE.ExtrudeGeometry(r6RoundRect(0.03, 0.03, 0.007), { depth: 0.0018, bevelEnabled: true, bevelThickness: 0.0005, bevelSize: 0.0005, bevelSegments: 1, curveSegments: 6 }), back);
+  bump.rotation.y = Math.PI; bump.position.set(W / 2 - 0.021, H / 2 - 0.021, -D / 2 - 0.0005); ph.add(bump);
+  const lensM = new THREE.MeshStandardMaterial({ color: 0x05070a, roughness: 0.05, metalness: 0.6, envMap: envTex }), ringM = band;
+  for (const [lx, ly] of [[-0.007, 0.007], [-0.007, -0.007], [0.007, 0]]) {
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.0052, 0.0052, 0.0016, 18), ringM); ring.rotation.x = Math.PI / 2; ring.position.set(W / 2 - 0.021 - lx, H / 2 - 0.021 + ly, -D / 2 - 0.0028); ph.add(ring);
+    const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.0038, 0.0038, 0.0018, 18), lensM); lens.rotation.x = Math.PI / 2; lens.position.copy(ring.position); lens.position.z -= 0.0003; ph.add(lens);
+  }
+  // side buttons
+  for (const [by, bh, sx] of [[0.03, 0.018, -1], [0.008, 0.012, -1], [0.02, 0.026, 1]]) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.0012, bh, 0.003), band); b.position.set(sx * (W / 2 + 0.0009), by, 0); ph.add(b); }
+  const heart = new THREE.Mesh(new THREE.CircleGeometry(0.011, 20), new THREE.MeshBasicMaterial({ color: 0xff3d5a, transparent: true, opacity: 0, toneMapped: false, depthWrite: false })); heart.position.set(0, -0.005, D / 2 + 0.0016); ph.add(heart);
+  ph.userData = { tex: feed, heart, scr };
+  ph.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.renderOrder = 2; } });
+  return ph;
+}
+// ---------- the banana ----------
+const BAN = { L: 0.195, s0: 0.46, grip: 0.22 };
+const banSpine = (s, out) => out.set(0.026 * (1 - (2 * s - 1) ** 2) - 0.008 * s, -BAN.grip * BAN.L + s * BAN.L, 0);
+function banR(s) {
+  if (s < 0.03) return 0.0045 + (s / 0.03) * 0.006;
+  if (s < 0.16) return 0.0105 + smooth((s - 0.03) / 0.13) * 0.0085;
+  if (s < 0.72) return 0.019 + Math.sin(((s - 0.16) / 0.56) * Math.PI) * 0.0012;
+  if (s < 0.9) return 0.019 - smooth((s - 0.72) / 0.18) * 0.0135;
+  return 0.0052 - (s - 0.9) * 0.004;
+}
+const banRidge = (a) => 0.94 + 0.06 * Math.pow(Math.abs(Math.cos(a * 2.5)), 0.6);
+function banTex() {
+  const W = 256, H = 512, c = document.createElement("canvas"); c.width = W; c.height = H; const x = c.getContext("2d");
+  let seed = 9; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const g = x.createLinearGradient(0, 0, 0, H);
+  // v = 0 the blossom end, v = 1 the stalk
+  g.addColorStop(0.0, "#2a1c0c"); g.addColorStop(0.03, "#5a4216"); g.addColorStop(0.07, "#e9c63a"); g.addColorStop(0.5, "#f3d244"); g.addColorStop(0.82, "#e2cf3c"); g.addColorStop(0.9, "#a8b23a"); g.addColorStop(0.95, "#6a7a2a"); g.addColorStop(1.0, "#3a3418");
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+  // ridges: darker lines down the five edges, a little lighter on the faces
+  for (let k = 0; k < 5; k++) { const u = ((k + 0.5) / 5) * W; const rg = x.createLinearGradient(u - 14, 0, u + 14, 0); rg.addColorStop(0, "rgba(120,90,20,0)"); rg.addColorStop(0.5, "rgba(120,90,20,.38)"); rg.addColorStop(1, "rgba(120,90,20,0)"); x.fillStyle = rg; x.fillRect(u - 14, H * 0.05, 28, H * 0.88); }
+  // freckles and a couple of bruises
+  for (let i = 0; i < 160; i++) { const px = rnd() * W, py = H * (0.08 + rnd() * 0.78), r = 0.6 + rnd() * 2.2; x.fillStyle = `rgba(${70 + rnd() * 40 | 0},${40 + rnd() * 20 | 0},10,${0.35 + rnd() * 0.5})`; x.beginPath(); x.ellipse(px, py, r, r * (1 + rnd()), 0, 0, Math.PI * 2); x.fill(); }
+  for (let i = 0; i < 3; i++) { const px = rnd() * W, py = H * (0.25 + rnd() * 0.5); const rg = x.createRadialGradient(px, py, 0, px, py, 14 + rnd() * 10); rg.addColorStop(0, "rgba(120,80,20,.35)"); rg.addColorStop(1, "rgba(120,80,20,0)"); x.fillStyle = rg; x.fillRect(px - 30, py - 30, 60, 60); }
+  // fine lengthwise fibres
+  x.globalAlpha = 0.12; x.strokeStyle = "#6a5010"; for (let i = 0; i < 60; i++) { const u = rnd() * W; x.beginPath(); x.moveTo(u, H * 0.06); x.lineTo(u + (rnd() - 0.5) * 6, H * 0.92); x.stroke(); } x.globalAlpha = 1;
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; return t;
+}
+// a tube along the spine from s=a to s=b, angles th0..th1 (a full ring, or one strip of peel), radius scale k
+function banTube(a, b, th0, th1, ns, na, k = 1, inner = false) {
+  const pos = [], uv = [], idx = [], meta = []; const sp = new THREE.Vector3();
+  for (let i = 0; i <= ns; i++) {
+    const s = a + (b - a) * (i / ns); banSpine(s, sp); const r = banR(s) * k;
+    for (let j = 0; j <= na; j++) { const th = th0 + (th1 - th0) * (j / na); const rr = r * (inner ? 1 : banRidge(th)); pos.push(sp.x + Math.cos(th) * rr, sp.y, Math.sin(th) * rr); uv.push(th / (Math.PI * 2), s); meta.push(s, th); }
+  }
+  for (let i = 0; i < ns; i++) for (let j = 0; j < na; j++) { const p = i * (na + 1) + j, q = p + na + 1; if (inner) idx.push(p, p + 1, q, p + 1, q + 1, q); else idx.push(p, q, p + 1, p + 1, q, q + 1); }
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+  g.userData.meta = meta; g.userData.rest = new Float32Array(pos); return g;
+}
+function r6Banana() {
+  const B = new THREE.Group(); const tex = banTex();
+  const skin = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.55, metalness: 0, envMap: envTex, envMapIntensity: 0.25 });
+  const pith = new THREE.MeshStandardMaterial({ color: 0xf6efd2, roughness: 0.8, side: THREE.DoubleSide });
+  const fruitM = new THREE.MeshStandardMaterial({ color: 0xeed79a, roughness: 0.45, envMap: envTex, envMapIntensity: 0.25 });
+  const brown = new THREE.MeshStandardMaterial({ color: 0x3a2a14, roughness: 0.85 });
+  // the lower part never peels: one closed tube with a blossom nub
+  const low = new THREE.Mesh(banTube(0.0, BAN.s0 + 0.002, 0, Math.PI * 2, 18, 20), skin); B.add(low);
+  const nub = new THREE.Mesh(new THREE.SphereGeometry(0.0048, 10, 8), brown); banSpine(0, nub.position); nub.position.y -= 0.002; B.add(nub);
+  // four strips of peel, each with its pale inside
+  const strips = [];
+  for (let k = 0; k < 4; k++) {
+    const th0 = (k / 4) * Math.PI * 2 + 0.02, th1 = ((k + 1) / 4) * Math.PI * 2 - 0.02;
+    const out = new THREE.Mesh(banTube(BAN.s0, 1.0, th0, th1, 22, 6), skin), inn = new THREE.Mesh(banTube(BAN.s0, 1.0, th0, th1, 22, 6, 0.9, true), pith);
+    B.add(out, inn); strips.push({ out, inn, th: (th0 + th1) / 2, c: 0, cv: 0 });
+  }
+  // the stalk end, which comes away with the first strip
+  const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.0034, 0.0046, 0.018, 8), brown); banSpine(1, stalk.position); stalk.position.y += 0.006; B.add(stalk);
+  // the fruit inside, top rounded
+  const fruit = new THREE.Group(); B.add(fruit);
+  const fg = banTube(BAN.s0 - 0.04, 0.86, 0, Math.PI * 2, 14, 16, 0.78, false); const fm = new THREE.Mesh(fg, fruitM); fruit.add(fm);
+  const ftop = new THREE.Mesh(new THREE.SphereGeometry(0.0118, 14, 10), fruitM); banSpine(0.86, ftop.position); ftop.scale.set(1, 1.25, 1); fruit.add(ftop);
+  fruit.visible = false;
+  B.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.renderOrder = 2; } });
+  B.userData = { strips, fruit, ftop, stalk };
+  return B;
+}
+// curl a strip: c=0 on the fruit, c=1 hanging right down; the fold starts at the top and runs down to s0 as c grows
+const _bp = new THREE.Vector3(), _bn = new THREE.Vector3(), _bh = new THREE.Vector3(), _bu = new THREE.Vector3(0, 1, 0), _bb = new THREE.Vector3();
+function banCurl(st) {
+  for (const m of [st.out, st.inn]) {
+    const g = m.geometry, P = g.attributes.position.array, rest = g.userData.rest, meta = g.userData.meta;
+    const c = st.c; const sh = 1 - c * (1 - BAN.s0 + 0.02); // the hinge travels down
+    _bn.set(Math.cos(st.th), 0, Math.sin(st.th)); _bb.set(-Math.sin(st.th), 0, Math.cos(st.th));
+    const L = BAN.L, kappa = 15 + 30 * c; // how tight it rolls back
+    for (let i = 0, n = meta.length / 2; i < n; i++) {
+      const s = meta[i * 2]; const o = i * 3;
+      if (s <= sh || c <= 0.001) { P[o] = rest[o]; P[o + 1] = rest[o + 1]; P[o + 2] = rest[o + 2]; continue; }
+      banSpine(sh, _bh); const rh = banR(sh);
+      // where this vertex sits across and out from the strip's centre line, at rest
+      banSpine(s, _bp); const rx = rest[o] - _bp.x, rz = rest[o + 2]; const across = rx * _bb.x + rz * _bb.z, radial = rx * _bn.x + rz * _bn.z - banR(s) * (m === st.inn ? 0.9 : 1);
+      const l = (s - sh) * L; const ke = Math.max(1e-3, kappa * Math.min(1, c * 2.2)); const amax = Math.PI * 0.9, l0 = amax / ke;
+      let fwd, out2, a;
+      if (l <= l0) { a = l * ke; fwd = Math.sin(a) / ke; out2 = (1 - Math.cos(a)) / ke; }
+      else { a = amax; fwd = Math.sin(amax) / ke + (l - l0) * Math.cos(amax); out2 = (1 - Math.cos(amax)) / ke + (l - l0) * Math.sin(amax); }
+      // the strip: up from the hinge, curling outward and down; a touch of droop under its own weight
+      const px = _bh.x + _bn.x * (rh + out2) + _bb.x * across * (1 + 0.25 * c), py = _bh.y + fwd - 0.004 * c * l * 30, pz = _bn.z * (rh + out2) + _bb.z * across * (1 + 0.25 * c);
+      const nx = -Math.sin(a) * 0 + Math.cos(a), ny = -Math.sin(a); // the strip's own outward normal after the turn (in the n/up plane)
+      P[o] = px + _bn.x * radial * nx; P[o + 1] = py + radial * ny; P[o + 2] = pz + _bn.z * radial * nx;
+    }
+    g.attributes.position.needsUpdate = true; g.computeVertexNormals();
+  }
+}
+function r6IdleBuild() {
+  if (R6I.built) return; R6I.built = true;
+  const P = idleProps();
+  for (const k of ["phone", "banana"]) { P[k].parent?.remove(P[k]); }
+  const phone = r6Phone(), banana = r6Banana(); phone.visible = banana.visible = false; armL.hand.add(phone, banana);
+  IDLE.props = { phone, banana };
+  // how each sits in the hand (hand space: fingers along -z, palm on -y, thumb on +x)
+  // phone: back on the palm, long side across the knuckles, screen facing out of the palm
+  R6I.grip.phone = { p: new THREE.Vector3(0.0, -0.034, -0.068), q: new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3(0, 0, -1), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, -1, 0))) };
+  // banana: through the fist, stalk out of the thumb side
+  R6I.grip.banana = { p: new THREE.Vector3(0.0, -0.037, -0.094), q: new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(new THREE.Vector3(0, 0, -1), new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, -1, 0))) };
+  for (const k of ["phone", "banana"]) { IDLE.props[k].position.copy(R6I.grip[k].p); IDLE.props[k].quaternion.copy(R6I.grip[k].q); }
+}
+// the hand turns so the held thing faces the camera (eased in and out with the idle)
+const _r6hq = new THREE.Quaternion(), _r6hq2 = new THREE.Quaternion(), _r6hq3 = new THREE.Quaternion(), _r6hm = new THREE.Matrix4(), _r6hv = new THREE.Vector3(), _r6he = new THREE.Euler();
+function r6HandFace(kind, ex, ey, ez, w) {
+  const hand = armL.hand, wrist = hand.parent, G = R6I.grip[kind];
+  vmCamera.updateMatrixWorld(true); hand.updateWorldMatrix(true, false);
+  _r6hm.copy(vmCamera.matrixWorld).invert().multiply(hand.matrixWorld); _r6hv.setFromMatrixPosition(_r6hm);
+  _r6hm.lookAt(_iv0.set(0, 0, 0), _r6hv, _iup); _r6hq.setFromRotationMatrix(_r6hm).multiply(_r6hq2.setFromEuler(_r6he.set(ex, ey, ez, "YXZ"))); // the prop, facing the camera
+  _r6hq.multiply(_r6hq2.copy(G.q).invert()); // the hand that holds it so
+  // into the wrist's frame
+  vmCamera.getWorldQuaternion(_r6hq2); wrist.getWorldQuaternion(_r6hq3); _r6hq3.premultiply(_r6hq2.invert());
+  _r6hq.premultiply(_r6hq3.invert());
+  hand.quaternion.slerp(_r6hq, w);
+}
+function r6Fingers(kind, w, thumb) {
+  const A = armL;
+  if (kind === "phone") {
+    // round the far edge and onto the glass; the little finger a bit lower and looser
+    const J = [[-1.55, -1.5, -0.75], [-1.6, -1.45, -0.7], [-1.55, -1.5, -0.75], [-1.45, -1.55, -0.9]];
+    A.fingers.forEach((segs, i) => segs.forEach((jt, j) => { jt.rotation.x += (J[i][j] - jt.rotation.x) * w; jt.rotation.y += ((i - 1.5) * 0.06 - jt.rotation.y) * w; }));
+    // the thumb lies over the screen and flicks up it
+    A.thumb.rotation.set(THREE.MathUtils.lerp(A.thumb.rotation.x, -0.35 - 0.35 * thumb, w), THREE.MathUtils.lerp(A.thumb.rotation.y, A.side * -0.9, w), 0); A.thumb2.rotation.x = THREE.MathUtils.lerp(A.thumb2.rotation.x, -0.25 - 0.5 * thumb, w);
+  } else {
+    setFingers(A, 1, HAND_GRIP, true);
+  }
+}
+// replaces idlePose's prop work and idlePost
+function r6IdleProps(C, t) {
+  const P = IDLE.props;
+  if (C.kind === "phone") {
+    P.phone.visible = t > 0.3 && t < 8.7 && !C.out; P.banana.visible = false;
+    const sw = [1.3, 2.2, 2.9, 3.6, 4.4, 5.9, 6.6, 7.3]; let off = 0; for (const s of sw) off += smooth((t - s) / 0.35) * 0.075; off += Math.max(0, t - 1) * 0.0035;
+    P.phone.userData.tex.offset.y = -Math.min(1.15, off); P.phone.userData.tex.repeat.y = 0.45; P.phone.userData.tex.offset.y += 0.55;
+    for (const s of sw) if (t > s && !C.cues.has(s)) { C.cues.add(s); tone("sine", 2400, 2200, 0.03, 0.015); }
+    const lk = t > 5.0 && t < 5.7 ? Math.sin(((t - 5.0) / 0.7) * Math.PI) : 0; P.phone.userData.heart.material.opacity = lk; P.phone.userData.heart.scale.setScalar(0.5 + lk);
+    if (t > 5.0 && !C.cues.has("like")) { C.cues.add("like"); tone("sine", 1500, 2600, 0.12, 0.03); }
+    if (t > 0.3 && !C.cues.has("out")) { C.cues.add("out"); sfx.servo?.(); }
+    VM.idleThumb = sw.reduce((a, s) => a + (t > s && t < s + 0.35 ? Math.sin(((t - s) / 0.35) * Math.PI) : 0), 0);
+  } else {
+    const U = P.banana.userData; P.banana.visible = t > 0.3 && !C.cues.has("toss") && !C.out; P.phone.visible = false;
+    // four strips, each over most of a second, overlapping: smooth and unhurried
+    const pk = [0.9, 1.3, 1.7, 2.1];
+    U.strips.forEach((st, i) => { const want = smooth(clamp01((t - pk[i]) / 1.0)); st.c = want; banCurl(st); });
+    U.stalk.visible = t < pk[0] + 0.25; U.fruit.visible = t > pk[0] + 0.1;
+    for (const s of pk) if (t > s && !C.cues.has(s)) { C.cues.add(s); noise(0.22, "bandpass", 1500, 0.18, 2, 500); }
+    for (const [s, k] of [[3.78, 1], [4.2, 0.6]]) if (t > s && !C.cues.has(s)) { C.cues.add(s); sfx.clunk?.(); noise(0.1, "lowpass", 900, 0.5 * k, 1, 300); CAM.kickV -= 3 * k; shake = Math.max(shake, 0.15 * k); U.ftop.scale.set(1.35, 1.25 * (0.45 + 0.3 * (1 - k)), 1.35); }
+    if (t > 4.6 && !C.cues.has("hm")) { C.cues.add("hm"); tone("sine", 220, 160, 0.4, 0.04); tone("sine", 330, 250, 0.35, 0.03, 0.3); }
+    if (t > 6.85 && !C.cues.has("toss")) { C.cues.add("toss"); idleTossBanana(); }
+    VM.idleThumb = 0; IDLE.bonk = smooth((t - 3.3) / 0.4) * (1 - smooth((t - 4.4) / 0.5));
+  }
+}
+function r6IdleReset() { const P = IDLE.props; if (!P?.banana?.userData?.strips) return; for (const st of P.banana.userData.strips) { st.c = 0; banCurl(st); } P.banana.userData.ftop.scale.set(1, 1.25, 1); P.banana.userData.stalk.visible = true; P.banana.userData.fruit.visible = false; armL.hand.rotation.set(0, 0, 0); }
+const R6_FACE = { phone: [-0.42, 0, 0.1], banana: [0.05, 0.25, 0.12] };
+
+// ================= Round 6 · the testing ground menu =================
+// The wall of key hints is gone. Tab opens one menu with two tabs: Simulation (spawn anything, the world's clock and
+// gravity, god mode, scenes to watch, places to go, the boss pen) and Settings (the game's own settings). The keys
+// still work; the full list is folded away at the bottom of the Simulation tab.
+const TGM = { tab: "sim", ts: 1, grav: 1, live: false, open: false };
+const TGM_SPAWN = [["brawler", "Brawler"], ["gunman", "Gunman"], ["bot", "Heavy bot"], ["shield", "Shield"], ["drone", "Drone"], ["turret", "Turret"], ["worker", "Worker"]];
+const TGM_TP = [["Start", { x: 0, y: 1.3, z: 8 }, Math.PI], ["Office corner", { x: -45, y: 1.3, z: 43 }, Math.PI], ["Finisher fence", { x: 0, y: 1.3, z: -34 }, 0], ["Boss pen", null, 0]];
+(() => {
+  const st = document.createElement("style");
+  st.textContent = `#tghint{margin-top:8px;font-size:10.5px;letter-spacing:.06em;color:var(--dim)}#tghint kbd{font-family:var(--mono);color:var(--ink);border:1px solid rgba(217,226,234,.3);padding:0 4px;margin-right:5px}
+#tgmenu .tg-tabs{display:flex;gap:0;margin-left:auto}#tgmenu .tg-tabs button{all:unset;cursor:pointer;padding:9px 16px;border:1px solid rgba(217,226,234,.25);font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--dim)}
+#tgmenu .tg-tabs button+button{border-left:none}#tgmenu .tg-tabs button.on{color:#0a0b0f;background:var(--amber);border-color:var(--amber)}
+#tgmenu .tg-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px 28px}
+#tgmenu .tg-btns{display:flex;flex-wrap:wrap;gap:6px;padding:10px 0;border-bottom:1px solid rgba(217,226,234,.1)}
+#tgmenu .tg-b{all:unset;cursor:pointer;padding:7px 11px;border:1px solid rgba(217,226,234,.25);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink)}
+#tgmenu .tg-b:hover,#tgmenu .tg-b:focus-visible{border-color:var(--amber);color:var(--amber)}
+#tgmenu details{border-top:1px solid rgba(217,226,234,.12);padding-top:10px}#tgmenu summary{cursor:pointer;font:600 10px var(--mono,monospace);letter-spacing:.24em;text-transform:uppercase;color:var(--amber)}
+#tgmenu .tg-keys{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px 18px;margin-top:10px;font-size:12px;color:var(--dim)}#tgmenu .tg-keys kbd{font-family:var(--mono);color:var(--ink);border:1px solid rgba(217,226,234,.3);padding:0 4px;margin-right:6px}
+@media (max-width:520px){#tgmenu .tg-grid{grid-template-columns:1fr}}`;
+  document.head.appendChild(st);
+  const ov = document.createElement("div"); ov.id = "tgmenu"; ov.className = "ov"; ov.hidden = true; ov.setAttribute("role", "dialog"); ov.setAttribute("aria-label", "Testing ground");
+  ov.innerHTML = `<div class="ov-card"><div class="ov-head"><div><div class="eyebrow">Grid 2200</div><h2>Testing ground</h2></div><div class="tg-tabs" role="tablist"><button type="button" data-tab="sim">Simulation</button><button type="button" data-tab="set">Settings</button></div><button type="button" class="ov-x">Close</button></div><div id="tgbody"></div></div>`;
+  document.body.appendChild(ov);
+  ov.querySelector(".ov-x").addEventListener("click", () => tgmClose());
+  for (const b of ov.querySelectorAll(".tg-tabs button")) b.addEventListener("click", () => { TGM.tab = b.dataset.tab; tgmRender(); });
+  ov.addEventListener("keydown", (e) => { if (e.code === "Tab" && !e.shiftKey && document.activeElement === ov.querySelector(".ov-x")) { /* let focus wrap */ } });
+  // the old key wall is folded away; one line points at the menu
+  const lg = document.getElementById("legend"); if (lg) { const h = document.createElement("div"); h.id = "tghint"; h.hidden = true; h.innerHTML = "<kbd>Tab</kbd>testing menu · spawn, scenes, settings"; lg.after(h); }
+})();
+function tgmOpen() {
+  if (state.mode !== "test" || state.fin || TGM.open) return;
+  TGM.open = true; document.exitPointerLock?.(); setTimeout(() => { tgmRender(); $("tgmenu").hidden = false; $("tgmenu").querySelector(".ov-x").focus({ preventScroll: true }); }, 40);
+}
+function tgmClose() { TGM.open = false; $("tgmenu").hidden = true; if (state.started && !state.over) { $("screen").hidden = true; requestLock(); } }
+function tgmFront(d = 5) { const pp = playerPos(); return new THREE.Vector3(pp.x - Math.sin(yaw) * d, 0, pp.z - Math.cos(yaw) * d); }
+function tgmDo(fn, msg) { try { fn(); } catch (err) { console.warn(err); } if (msg) flash(msg, "var(--amber)"); }
+function tgmAim() { const o = camOrigin(), d = lookDir(); const h = world.castRay(new RAPIER.Ray(o, d), 60, true, undefined, GROUPS.playerShot, player.col); return h ? o.clone().addScaledVector(d, h.toi ?? h.timeOfImpact) : o.clone().addScaledVector(d, 12); }
+function tgmRender() {
+  const ov = $("tgmenu"), B = $("tgbody"); B.innerHTML = "";
+  for (const b of ov.querySelectorAll(".tg-tabs button")) { b.classList.toggle("on", b.dataset.tab === TGM.tab); b.setAttribute("aria-selected", b.dataset.tab === TGM.tab ? "true" : "false"); }
+  if (TGM.tab === "set") { const g = document.createElement("div"); g.className = "set-grid"; g.id = "tgset"; B.append(g); tgmSettings(g); return; }
+  const grid = document.createElement("div"); grid.className = "tg-grid"; B.append(grid);
+  const sec = (title) => { const s = document.createElement("section"); s.className = "set-sec"; const h = document.createElement("h3"); h.textContent = title; s.append(h); grid.append(s); return s; };
+  const btns = (s, list) => { const w = document.createElement("div"); w.className = "tg-btns"; for (const [label, fn, close = true] of list) { const b = document.createElement("button"); b.type = "button"; b.className = "tg-b"; b.textContent = label; b.addEventListener("click", () => { fn(); if (close) tgmClose(); else tgmRender(); }); w.append(b); } s.append(w); return w; };
+  const row = (s, label, ctl, note) => { const r = document.createElement("div"); r.className = "set-row"; const l = document.createElement("div"); l.className = "set-l"; l.textContent = label; if (note) { const n = document.createElement("small"); n.textContent = note; l.append(n); } const c = document.createElement("div"); c.className = "set-c"; c.append(...ctl); r.append(l, c); s.append(r); };
+  const tog = (on, fn) => { const b = document.createElement("button"); b.type = "button"; b.className = "set-tog" + (on ? " on" : ""); b.textContent = on ? "On" : "Off"; b.setAttribute("aria-pressed", on ? "true" : "false"); b.addEventListener("click", () => { fn(); tgmRender(); }); return b; };
+  const seg = (opts, cur, fn) => opts.map(([v, name]) => { const b = document.createElement("button"); b.type = "button"; b.className = "set-seg" + (cur === v ? " on" : ""); b.textContent = name; b.addEventListener("click", () => { fn(v); tgmRender(); }); return b; });
+  // spawn
+  const s1 = sec("Spawn in front of you");
+  row(s1, "Live AI", [tog(TGM.live, () => (TGM.live = !TGM.live))], "Off: a still dummy that respawns. On: it fights back.");
+  btns(s1, TGM_SPAWN.map(([type, name]) => [name, () => tgmDo(() => { const p = tgmFront(6); if (TGM.live) { spawnEnemy(type, p.x, 0, p.z); const e = enemies[enemies.length - 1]; e.alert = true; } else spawnDummy(type, p.x, p.z); updateCount(); }, name + " spawned")]));
+  btns(s1, [["Hostile wave", () => tgmDo(() => pressed.add("KeyJ"))], ["Reset dummies, boxes, stims", () => pressed.add("KeyL")], ["Clear bodies and debris", () => tgmDo(() => { for (const r of [...ragdolls]) removeRagdoll(r); for (const s of [...shards]) removeShard(s); goreReset(); }, "Bodies and debris cleared")]]);
+  // the world
+  const s2 = sec("World");
+  row(s2, "God mode", [tog(player.god, () => (player.god = !player.god))]);
+  row(s2, "Time", seg([[1, "100%"], [0.5, "50%"], [0.25, "25%"]], TGM.ts, (v) => (TGM.ts = v)), "Slows the world, not you");
+  row(s2, "Gravity", seg([[1, "Normal"], [0.35, "Moon"], [0.02, "Near zero"]], TGM.grav, (v) => { TGM.grav = v; world.gravity = { x: 0, y: -21.6 * v, z: 0 }; }), "Bodies, props, debris");
+  btns(s2, [["Explosion where you aim", () => tgmDo(() => { TGM.boomAt = tgmAim(); })], ["Shatter all glass", () => tgmDo(() => { for (const P of panes) if (!P.broken) shatter(P, P.center.clone(), new THREE.Vector3(0, -1, 0), 2); }, "Glass gone")], ["Restock stims", () => tgmDo(() => (player.stims = 3), "Stims 3/3")]]);
+  // scenes
+  const s3 = sec("Scenes");
+  btns(s3, [["Car on the nearest body", () => tgmDo(() => carxForce())], ["Idle · phone", () => tgmDo(() => { idleCancel(); IDLE.cur = null; idleStart("phone"); })], ["Idle · banana", () => tgmDo(() => { idleCancel(); IDLE.cur = null; idleStart("banana"); })],
+    ["Sword finisher on the nearest", () => tgmDo(() => pressed.add("KeyN"))], ["Combo book", () => { tgmClose(); setTimeout(() => { document.exitPointerLock?.(); setTimeout(openBook, 60); }, 80); }, false]]);
+  // places
+  const s4 = sec("Go to");
+  btns(s4, TGM_TP.map(([name, at, yw]) => [name, () => tgmDo(() => { if (!at) { pressed.add("KeyB"); return; } player.body.setTranslation(at, true); player.body.setLinvel({ x: 0, y: 0, z: 0 }, true); player.prev = new THREE.Vector3(at.x, at.y, at.z); yaw = yw; }, name)]));
+  // boss pen
+  const s5 = sec("Boss pen");
+  btns(s5, [["Next boss", () => pressed.add("KeyB")], ["Skip boss phase", () => pressed.add("KeyP")], ["Clear the pen", () => pressed.add("KeyO")]]);
+  // the keys, folded
+  const d = document.createElement("details"); d.innerHTML = `<summary>All keys</summary><div class="tg-keys">${[["Tab", "this menu"], ["N", "sword finisher"], ["J", "live hostiles"], ["L", "reset dummies, boxes, stims"], ["H", "god mode"], ["K", "combo book"], ["M", "call a car"], ["I", "idle animation"], ["F", "melee · mini finisher · pick up a body"], ["W Space LMB", "head grab"], ["T", "inspect · pistol spin"], ["U", "office corner"], ["B", "boss pen"], ["P", "skip boss phase"], ["O", "clear pen"], ["X", "stim (also while sprinting or sliding)"]].map(([k, t]) => `<span>${k.split(" ").map((x) => `<kbd>${x}</kbd>`).join("")}${t}</span>`).join("")}</div>`;
+  B.append(d);
+}
+function tgmSettings(g) {
+  for (const [title, rows] of SET_UI) {
+    const sec = document.createElement("section"); sec.className = "set-sec"; const h = document.createElement("h3"); h.textContent = title; sec.append(h);
+    for (const [k, label, kind, o = {}] of rows) {
+      const row = document.createElement("div"); row.className = "set-row"; const lab = document.createElement("div"); lab.className = "set-l"; lab.textContent = label; if (o.note) { const n = document.createElement("small"); n.textContent = o.note; lab.append(n); }
+      const ctl = document.createElement("div"); ctl.className = "set-c"; const v = getSet(k);
+      if (kind === "toggle") { const b = document.createElement("button"); b.type = "button"; b.className = "set-tog" + (v ? " on" : ""); b.textContent = v ? "On" : "Off"; b.addEventListener("click", () => { applySet(k, !getSet(k)); tgmRender(); }); ctl.append(b); }
+      else if (kind === "range") { const r = document.createElement("input"); r.type = "range"; r.min = o.min; r.max = o.max; r.step = o.step; r.value = v; r.setAttribute("aria-label", label); const out = document.createElement("output"); out.textContent = o.fmt(v); r.addEventListener("input", () => { const x = +r.value; out.textContent = o.fmt(x); applySet(k, x); }); ctl.append(r, out); }
+      else for (const [val, name] of o.opts) { const b = document.createElement("button"); b.type = "button"; b.className = "set-seg" + (v === val ? " on" : ""); b.textContent = name; b.addEventListener("click", () => { applySet(k, val); tgmRender(); }); ctl.append(b); }
+      row.append(lab, ctl); sec.append(row);
+    }
+    g.append(sec);
+  }
+}
+// per sim step: the menu's key, the queued explosion
+function tgmStep() {
+  if (state.mode !== "test") return;
+  if (pressed.has("Tab")) tgmOpen();
+  if (TGM.boomAt) { const a = TGM.boomAt; TGM.boomAt = null; explosion(a, 3.6, "test charge"); }
+}
+function tgmReset() { TGM.ts = 1; if (TGM.grav !== 1) { TGM.grav = 1; } try { world.gravity = { x: 0, y: -21.6, z: 0 }; } catch {} const h = $("tghint"); if (h) h.hidden = state.mode !== "test"; }
+
 // ---------- loop ----------
 let acc = 0, last = performance.now();
 function simStep() {
   if (state.tsMode !== "normal") { state.tsTimer -= DT; if (state.tsTimer <= 0) { if (state.tsMode === "stop") sfx.resume(); setTime("normal", 0); } }
-  let ts = state.ts;
+  let ts = state.ts * (state.mode === "test" ? TGM.ts : 1);
   if (hitstopT > 0) { hitstopT -= DT; ts = Math.min(ts, 0.08); }
   ts = comboRamp(ts); ts = carxTs(ts); ts = mfTs(scopeTs(ts));
   state.time += DT;
@@ -12711,7 +13693,7 @@ function simStep() {
   if (player.dead) return;
   updateEnemies(DT * ts); enStep(DT * ts); bossStep(DT * ts);
   updateBolts(DT * ts);
-  stepWorldMoves(DT * ts); arsWorldStep(DT * ts); propsStep(DT * ts);
+  stepWorldMoves(DT * ts); arsWorldStep(DT * ts); propsStep(DT * ts); goreStep(DT * ts); r6Watch();
   for (const rd of ragdolls) {
     const t = rd.torso.translation(), v = rd.torso.linvel(); const tp = new THREE.Vector3(t.x, t.y, t.z), tv = new THREE.Vector3(v.x * ts, v.y * ts, v.z * ts);
     crashCheck(tp, tv, 0.35, 6);
@@ -12760,7 +13742,7 @@ function frame(now) {
       if (s.pp) { s.mesh.position.lerpVectors(s.pp, s.mesh.position, al); s.mesh.quaternion.copy(_q.copy(s.pq).slerp(s.mesh.quaternion, al)); }
       if (state.time - s.born > 7 || t.y < -70) removeShard(s);
     }
-    propsSync(state.fin ? 1 : al);
+    propsSync(state.fin ? 1 : al); goreFrame(dt); mirFrame();
     for (let i = fx.length - 1; i >= 0; i--) {
       const f = fx[i]; f.t -= dt;
       if (f.life) {
@@ -12820,7 +13802,7 @@ setVoice(VOICE.on); renderBook();
 document.querySelector("#mnav button").focus({ preventScroll: true });
 state.pendingRestart = true; state.pendingFresh = true;
 // test hooks
-window.__res = { PROPS, propHitH, propsBlast, propChair, propPainting, propCoffee, propCooler, propPlant, propCabinet, propVending, propExt, explosion, BOOM5, get barrels() { return barrels; }, MF, MFA, SLING, SCOPE, mfStart, meleeTarget, meleeStrike, mfCan, pistolSpin, scopeUpdate, comboLanded, COMBOS, CARX, CARRY, IDLE, carxForce, carxOffer, carryPick, carryDrop, pressed, get panes() { return panes; }, idleStart, get ragdolls2() { return ragdolls; }, BOSSES, BOSS_KINDS, bossPenSpawn, bossPenSkip, bossPenClear, scene, renderer, LV, FLOORS, damageEnemy, killEnemy, buildFloor, lvCleared, get CITYR() { return CITYR; }, get finRig() { return finRig; }, applyFinPose, pose2, P2, FIN_POSES, rigIK, rigHandAim, rigPalm, FIN2, get U7M() { return globalThis.U7M_; },
+window.__res = { R6, GORE, MIR, TGM, ONEH, R6I, goreBurst, goreKill, goreWire, propMirror, tgmOpen, tgmClose, oneHandPose, idleProps, grappleRay, fireGrapple, PROPS, propHitH, propsBlast, propChair, propPainting, propCoffee, propCooler, propPlant, propCabinet, propVending, propExt, explosion, BOOM5, get barrels() { return barrels; }, MF, MFA, SLING, SCOPE, mfStart, meleeTarget, meleeStrike, mfCan, pistolSpin, scopeUpdate, comboLanded, COMBOS, CARX, CARRY, IDLE, carxForce, carxOffer, carryPick, carryDrop, pressed, get panes() { return panes; }, idleStart, get ragdolls2() { return ragdolls; }, BOSSES, BOSS_KINDS, bossPenSpawn, bossPenSkip, bossPenClear, scene, renderer, LV, FLOORS, damageEnemy, killEnemy, buildFloor, lvCleared, get CITYR() { return CITYR; }, get finRig() { return finRig; }, applyFinPose, pose2, P2, FIN_POSES, rigIK, rigHandAim, rigPalm, FIN2, get U7M() { return globalThis.U7M_; },
   view(pos, at, fov = 40) { const cam = new THREE.PerspectiveCamera(fov, innerWidth / innerHeight, 0.05, 400); cam.position.set(...pos); cam.lookAt(new THREE.Vector3(...at)); scene.updateMatrixWorld(true); renderer.setRenderTarget(null); renderer.render(scene, cam); return renderer.domElement.toDataURL("image/png"); },
   FX2, FPROPS, DOORWAYS, ARS, WDEF, arsCancel, solveArmIK, armL, armR, cur, rig, get vmCam() { return vmCamera; }, SET, openSettings, applySet, bootFloor,
   get player() { return player; }, get enemies() { return enemies; }, get panes() { return panes; }, get bolts() { return bolts; }, state, keys, mouse, pressed,
