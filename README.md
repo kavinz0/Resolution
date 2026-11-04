@@ -29,7 +29,6 @@ You can also turn on GitHub Pages (Settings → Pages → Deploy from branch →
 | R | Pistol: vent and reload |
 | V | Kick |
 | Q | Throw the disc. Look up to hang it in the air as a grapple anchor |
-| C with the pistol, in the air or sprinting | Window dive in slow motion |
 | X | Inject a health stim |
 | W into a ledge / sprint into a hurdle | Climb it / vault it |
 | F | Inspect your weapon |
@@ -46,7 +45,6 @@ You can also turn on GitHub Pages (Settings → Pages → Deploy from branch →
 ## Moves and impacts
 
 - **Kick (V).** A front push kick with your own right leg: the knee chambers below the view, the boot snaps out into frame, holds, and re-chambers while the arms counterbalance and the view leans back. It launches enemies, breaks glass and partitions, opens med boxes and shoves bodies. In the air it hits harder and pushes you off the target.
-- **Window dive (pistol only).** With the pistol out, press C in the air or at a sprint to dive forward. Time slows, the view rolls onto its side, you can keep shooting, and any glass you touch bursts. You land in a shoulder roll.
 - **Disc (Q).** Picked up at the armory with the sword and pistol. It flies off the left forearm with a backhand flick, bounces three times off walls and floors, cuts through enemies and glass, and comes home to your arm. Thrown upward it slows and hangs in the air for 3 s; grapple it to be reeled in and slung past it.
 - **Flying cars.** Of every five bodies launched out of the building, the 2nd and 4th are hit by a flying car: a white flash, a fireball that cools to red, rising black smoke, sparks, burning debris, camera shake by distance, and the wreck tumbling away.
 - **Wall slams.** A body thrown into a wall hard enough cracks it with a spiderweb crater and stays pinned there, limbs hanging, with plaster chips falling.

@@ -265,7 +265,6 @@ body.fin #bars::before, body.fin #bars::after { height: 11vh; }
       <span><kbd>C</kbd> while grappling: breach a window</span>
       <span><kbd>V</kbd>Kick (launches enemies, breaks glass, opens med boxes)</span>
       <span><kbd>Q</kbd>Throw the disc: 3 bounces, then it comes back. Look up to hang it in the air and grapple it for a boost</span>
-      <span><kbd>C</kbd> with the pistol, in the air or sprinting: dive through a window in slow motion</span>
       <span><kbd>X</kbd>Inject a stim (from red-locked med boxes: shoot, kick or grapple them)</span>
       <span><kbd>W</kbd> into a ledge: climb it · sprint into a low hurdle: vault it</span>
       <span><kbd>F</kbd>Inspect your weapon</span>
@@ -660,7 +659,6 @@ const sfx = {
   finSlash() { noise(0.6, "highpass", 2400, 0.85, 0.7, 9000); tone("sine", 2800, 260, 0.7, 0.12); tone("square", 62, 28, 1.0, 0.3); noise(1.2, "lowpass", 420, 0.65); for (let i = 0; i < 10; i++) tone("square", 2600 + Math.random() * 3200, 1400, 0.02, 0.035, 0.05 + i * 0.06); },
   kickSwing() { noise(0.2, "bandpass", 420, 0.35, 1.2, 1300); tone("sine", 140, 90, 0.12, 0.05); },
   kickHit() { tone("sine", 130, 38, 0.24, 0.55); noise(0.14, "lowpass", 900, 0.65); tone("square", 85, 45, 0.09, 0.16); noise(0.06, "highpass", 2600, 0.25); },
-  dive() { noise(0.6, "bandpass", 500, 0.4, 0.8, 140); tone("sine", 300, 70, 0.7, 0.1); tone("sine", 48, 44, 0.9, 0.12); },
   grab() { noise(0.07, "lowpass", 1100, 0.45); tone("sine", 210, 110, 0.07, 0.16); tone("square", 1800, 1500, 0.02, 0.03); },
   discThrow() { noise(0.28, "bandpass", 2200, 0.28, 4, 800); tone("sine", 700, 1500, 0.22, 0.05); tone("square", 1300, 1200, 0.03, 0.05); },
   discHit() { tone("square", 1100, 500, 0.06, 0.08); noise(0.08, "highpass", 3000, 0.35); },
@@ -1578,17 +1576,15 @@ function stepPlayer(dt) {
   const shiftHeld = keys.has("ShiftLeft") || keys.has("ShiftRight");
   player.sprinting = shiftHeld && keys.has("KeyW") && grounded && !crouchKey && !player.blocking && !player.grapple && player.dashT < 0.1;
   updateSwap(dt);
-  // window dive: only with the pistol out, in the air or at a sprint
-  if (crouchPressed && player.hasPistol && !player.dive && !player.grapple && canAct() && (!grounded || player.sprinting || hspeed > 7.5)) startDive(vel, grounded, fwd);
 
   // breach: slide while on the grapple, or just after letting go
-  if (crouchPressed && player.ownsSword && !player.hasPistol && !player.dive && (player.grapple || (!grounded && state.time - player.lastGrapple < 1.5))) {
+  if (crouchPressed && player.ownsSword && (player.grapple || (!grounded && state.time - player.lastGrapple < 1.5))) {
     player.breach = true; flash("Breach", "var(--amber)"); fovKick = 10;
     const d = player.grapple ? player.grapple.point.clone().sub(playerPos()).normalize() : vel.clone().normalize();
     vel.addScaledVector(d, 10);
   }
 
-  if (crouchKey && grounded && !player.sliding && hspeed > 5 && !player.dive && !player.diveRoll && !player.climb) {
+  if (crouchKey && grounded && !player.sliding && hspeed > 5 && !player.climb) {
     player.sliding = true; player.slideHits = new Set();
     const boost = Math.min(hspeed * 1.25, 21) / Math.max(hspeed, 0.001);
     vel.x *= boost; vel.z *= boost; sfx.dash();
@@ -3548,7 +3544,7 @@ function restart(fromScratch) {
     setObjective("Testing ground");
     log("TESTING GROUND: dummies respawn 3 s after they die. Glass, walls and towers reset with R.");
     setTimeout(() => log("Keys: N finisher on the dummy you face · J spawn live hostiles · L respawn dummies and med boxes, refill stims · H god mode", "tip"), 400);
-    setTimeout(() => log("Moves: V kick · Q disc (look up to hang it in the air, then grapple it) · C with the pistol, in the air or sprinting: dive · X stim (shoot, kick or grapple a red-locked med box) · jump at a ledge holding W to climb · sprint at a hurdle to vault", "tip"), 1400);
+    setTimeout(() => log("Moves: V kick · Q disc (look up to hang it in the air, then grapple it) · X stim (shoot, kick or grapple a red-locked med box) · jump at a ledge holding W to climb · sprint at a hurdle to vault", "tip"), 1400);
     setTimeout(() => log("Weapons: 1 fists · 2 sword · 3 steam pistol (R vents it, F inspects it, spins it while you grapple) · G sling mode, hold Space on the line to focus", "tip"), 900);
   } else if (state.checkpoint === 2) {
     player = createPlayer(new THREE.Vector3(0, 1.2, -24), 0);
@@ -3774,11 +3770,11 @@ function endBoot() {
   document.querySelector("#lids .top").style.transform = document.querySelector("#lids .bot").style.transform = "scaleY(0)";
 }
 
-// ================= moves: kick, window dive, disc, impacts, ledge climb and vault, stims =================
-TS.dive = 0.35; TS.stim = 0.3;
+// ================= moves: kick, disc, impacts, ledge climb and vault, stims =================
+TS.stim = 0.3;
 const V3 = THREE.Vector3;
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
-// camera offsets the moves add on top of the normal view (look down for a stim, roll into a dive, dip on a climb)
+// camera offsets the moves add on top of the normal view (look down for a stim, dip on a climb)
 const MV = { pitch: 0, roll: 0, eye: 0, back: 0 };
 // Catmull-Rom through keyframes [[t, ...values]]. The velocity stays continuous through every key, so a motion
 // flows like a body with weight instead of a puppet snapping between poses.
@@ -3888,14 +3884,6 @@ function landKick(vel) {
   vel.addScaledVector(flat, -3.5); if (air) vel.y = Math.max(vel.y, 4.5); // you push off what you kicked
 }
 
-// ---------- window dive (pistol only, C in the air or at a sprint): you launch forward, time slows, you can shoot ----------
-function startDive(vel, grounded, fwd) {
-  const sp = Math.max(13.5, Math.hypot(vel.x, vel.z) * 1.05);
-  vel.x = fwd.x * sp; vel.z = fwd.z * sp; vel.y = grounded ? 6.2 : Math.max(vel.y, 3.8);
-  const side = keys.has("KeyA") ? -1 : keys.has("KeyD") ? 1 : Math.random() < 0.5 ? -1 : 1;
-  player.dive = { t: 0, side }; player.sliding = false; player.breach = false; player.kick = null;
-  setTime("dive", 1.9); sfx.dive(); flash("Dive", "var(--amber)"); fovKick += 9; speedLines(0.8); glitch(0.2); CAM.kickV -= 2;
-}
 
 // ---------- ledge climb and hurdle vault ----------
 const _rayN = (o, d, len, pred) => world.castRayAndGetNormal(new RAPIER.Ray(o, d), len, true, undefined, GROUPS.envOnly, player.col, undefined, pred);
@@ -3947,8 +3935,7 @@ function startClimb(pos, f, h, rel, ft, panes, kind, hs) {
     C.dur = kind === "step" ? 0.48 : 0.62 + rel * 0.17;
     C.top = new V3(edge.x + f.x * 0.5, h + P.half + P.radius + 0.05, edge.z + f.z * 0.5);
   }
-  player.climb = C; player.immuneUntil = state.time + 1; player.sliding = false; player.dive = null; player.kick = null;
-  if (state.tsMode === "dive") setTime("normal", 0);
+  player.climb = C; player.immuneUntil = state.time + 1; player.sliding = false; player.kick = null;
   sfx.grab(); CAM.landV -= kind === "vault" ? 0.5 : 1.3; shake = Math.max(shake, 0.08);
   if (kind === "climb") flash("Climb", "var(--dim)");
 }
@@ -4422,24 +4409,13 @@ function tossInjector() {
 // player time: called from stepPlayer just before the velocity is written back
 function stepMoves(dt, vel, grounded, fwd, wish) {
   // kick
-  if (pressed.has("KeyV") && !player.kick && canAct() && !player.dive) { player.kick = { t: 0, hit: false }; sfx.kickSwing(); VM.inspect = null; }
+  if (pressed.has("KeyV") && !player.kick && canAct()) { player.kick = { t: 0, hit: false }; sfx.kickSwing(); VM.inspect = null; }
   if (player.kick) {
     const K = player.kick; K.t += dt;
     if (!K.hit && K.t >= KICK.hit) { K.hit = true; landKick(vel); }
     if (grounded) { const k = Math.pow(0.03, dt); vel.x *= k; vel.z *= k; } // you plant to kick
     if (K.t >= KICK.dur) player.kick = null;
   }
-  // dive
-  if (player.dive) {
-    const D = player.dive; D.t += dt;
-    vel.y -= P.gravity * 0.45 * dt; // you hang in the air a little longer than a jump
-    crashCheck(playerPos(), vel, P.radius + 0.35, 0);
-    if ((grounded && D.t > 0.15) || D.t > 2.4 || player.grapple || player.climb) {
-      player.dive = null; if (state.tsMode === "dive") setTime("normal", 0);
-      if (grounded) { player.diveRoll = { t: 0, side: D.side }; vel.x *= 0.55; vel.z *= 0.55; CAM.landV -= 2.2; shake = Math.max(shake, 0.18); sfx.clunk(); sfx.dash(); }
-    }
-  }
-  if (player.diveRoll) { player.diveRoll.t += dt; if (player.diveRoll.t > 0.55) player.diveRoll = null; }
   // disc throw
   if (pressed.has("KeyQ")) {
     if (!player.ownsDisc) flash("No disc yet", "var(--dim)");
@@ -4478,7 +4454,7 @@ function stepMoves(dt, vel, grounded, fwd, wish) {
   stepStim(dt);
   // ledge climb and hurdle vault
   if (player.climb) stepClimb(player.climb, vel, dt);
-  else if (keys.has("KeyW") && !player.grapple && !player.sling && !player.dive && !player.kick && !player.stimUse && state.time > (player.climbCd || 0)) {
+  else if (keys.has("KeyW") && !player.grapple && !player.sling && !player.kick && !player.stimUse && state.time > (player.climbCd || 0)) {
     const f = fwd.clone(); const pos = playerPos();
     if (!grounded && vel.y < 5) tryLedge(pos, f, vel, false);
     else if (grounded && player.sprinting) tryLedge(pos, f, vel, true);
@@ -4533,12 +4509,6 @@ function movePoses(R, L, dt) {
   const sword = player.hasSword, pistol = player.hasPistol; let sl = false, sr = false;
   const al = (state.alpha || 0) * DT;
   if (player.kick) KICK_ARMS(R, L, ckey(KICK_W, player.kick.t + al)[0], sword, pistol);
-  if (player.dive) {
-    const w = smooth(clamp01(player.dive.t / 0.18));
-    if (pistol) { R.p[2] -= 0.06 * w; R.p[1] += 0.05 * w; R.p[0] -= 0.04 * w; R.r[0] += 0.08 * w; }
-    lerpPose(L, { p: [-0.3, -0.27, -0.1], r: [0.4, 0.75, 0.2], el: 0.2, w: [0, 0, 0.5], curl: 0.3 }, w);
-  }
-  if (player.diveRoll) { const q = Math.sin(Math.PI * clamp01(player.diveRoll.t / 0.55)); L.p[1] -= 0.12 * q; L.r[0] -= 0.6 * q; R.p[1] -= 0.06 * q; }
   const C = player.climb;
   if (C) {
     const k = clamp01((C.t + al) / C.dur);
@@ -4575,8 +4545,6 @@ function updateMoveCam(dt) {
   let pitchT = 0, rollT = 0, eyeT = 0, backT = 0, fast = false;
   const al = (state.alpha || 0) * DT;
   if (player.kick) { const w = ckey(KICK_W, player.kick.t + al)[0]; pitchT += 0.045 * w; backT += 0.07 * w; rollT -= 0.03 * w; }
-  if (player.dive) { const w = smooth(clamp01(player.dive.t / 0.22)); rollT += player.dive.side * 0.3 * w; eyeT -= 0.32 * w; }
-  if (player.diveRoll) { const k = clamp01(player.diveRoll.t / 0.55); const q = Math.sin(Math.PI * k); rollT += player.diveRoll.side * 0.3 * (1 - smooth(k)); pitchT -= 0.42 * q; eyeT -= 0.32 * (1 - smooth(k)) - 0.15 * q * 0; fast = true; }
   const C = player.climb;
   if (C) {
     const k = clamp01((C.t + al) / C.dur);
@@ -4622,11 +4590,10 @@ function updateMoveVisuals(dt) {
   updateImpactFx(dt * Math.max(0.05, state.ts));
 }
 function moveSelfLegs() {
-  const C = player.climb, D = player.dive;
+  const C = player.climb;
   const set = (L, hip, knee) => { L.hip.rotation.x = hip; L.knee.rotation.x = knee; };
   if (C?.kind === "vault") { const q = Math.sin(Math.PI * clamp01(C.t / C.dur)); for (const L of selfLegs) set(L, 1.3 * q, -1.9 * q); }
   else if (C) { const k = clamp01(C.t / C.dur); for (const L of selfLegs) set(L, k < 0.5 ? 0.15 + Math.sin(k * 30 + L.side) * 0.12 : 0.9, k < 0.5 ? -0.35 : -1.4); }
-  else if (D) { for (const L of selfLegs) set(L, 0.05 + L.side * 0.08, -0.25); }
   else if (player.kick) set(selfLegs[0], -0.12, -0.2);
 }
 function updateMoveHud() {
