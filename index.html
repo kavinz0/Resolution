@@ -579,7 +579,7 @@ const DT = 1 / 60;
 const TS = { normal: 1, slow: 0.3, stop: 0.02, focus: 0.18 };
 
 // ---------- settings (persisted per browser) ----------
-const SET_DEF = { sens: 1, invert: false, fov: 88, vol: 0.8, voiceVol: 0.9, subs: true, shake: 1, quality: "auto", shadows: true, fps: false, cel: 0.7 };
+const SET_DEF = { sens: 1, invert: false, fov: 88, vol: 0.8, voiceVol: 0.9, subs: true, shake: 1, quality: "auto", shadows: true, fps: false, cel: 0.7, gore: "full", coolant: "blue" };
 const SET = (() => { try { return { ...SET_DEF, ...JSON.parse(localStorage.getItem("res.settings") || "{}") }; } catch { return { ...SET_DEF }; } })();
 function saveSettings() { try { localStorage.setItem("res.settings", JSON.stringify(SET)); } catch {} }
 const qualityCap = () => (SET.quality === "high" ? Math.min(devicePixelRatio, 2) : SET.quality === "low" ? 0.75 : Math.min(devicePixelRatio, 1.25));
@@ -1433,6 +1433,7 @@ function partMaterial(type, name) {
 }
 function buildHumanoidMesh(type) {
   if (TYPES[type].mesh) return TYPES[type].mesh();
+  if (AND.on[type]) return andBuild(type);
   const g = new THREE.Group(); const meshes = {};
   const s = type === "bot" ? 1.12 : 1;
   for (const [name, hx, hy, hz, x, y, z] of PARTS) {
@@ -1508,13 +1509,13 @@ function buildSwordMesh() {
 
 // ---------- enemies ----------
 function spawnEnemy(type, x, y, z) {
-  const { group, meshes } = buildHumanoidMesh(type);
+  const { group, meshes, and } = buildHumanoidMesh(type);
   group.position.set(x, y, z); group.rotation.y = Math.random() * Math.PI * 2; levelGroup.add(group);
   const body = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(x, y + 0.95, z));
   const col = world.createCollider(RAPIER.ColliderDesc.capsule(0.55, 0.38).setCollisionGroups(GROUPS.enemy), body);
   const ctrl = world.createCharacterController(0.05);
   const T = TYPES[type];
-  const e = { type, T, hp: T.hp, group, meshes, body, col, ctrl, floorY: y, alert: false, dead: false,
+  const e = { type, T, hp: T.hp, group, meshes, and, body, col, ctrl, floorY: y, alert: false, dead: false,
     cool: 1 + Math.random() * 1.5, tele: 0, burstLeft: 0, stun: 0, wander: new THREE.Vector3(x, y, z), wanderT: 0,
     strafe: Math.random() < 0.5 ? 1 : -1, walk: 0, vel: new THREE.Vector3(), knock: new THREE.Vector3() };
   enemySetup(e); enemies.push(e); enemyByHandle.set(col.handle, e);
@@ -1552,7 +1553,7 @@ function updateEnemies(dt) {
       e.meshes.armR.rotation.x = e.meshes.armL.rotation.x = -0.3 * f;
     } else if (e.stun > 0) {
       e.stun -= dt; e.tele = 0; e.meshes.glow.visible = false;
-      e.meshes.visor.material = e.stun > 0 ? M.stun : M.visor;
+      if (!e.and) e.meshes.visor.material = e.stun > 0 ? M.stun : M.visor;
       e.group.rotation.x = -Math.min(0.35, e.stun * 0.5);
     } else if (e.dummy) {
       e.group.rotation.x = 0; e.alert = false; face = toP.clone();
@@ -1708,7 +1709,7 @@ function damageEnemy(e, dmg, point, dir, kind) {
   if (shieldBlocks(e, point, dir, kind)) return;
   e.hp -= dmg; e.alert = !e.dummy;
   if (state.mode === "test") popDamage(point, dmg, e.hp <= 0);
-  crossTimer = 0.12; impactFx(point, kind);
+  crossTimer = 0.12; impactFx(point, kind); if (e.and) try { andHit(e, dmg, point, dir, kind); } catch (err) { console.warn(err); }
   if (kind !== "punch" && kind !== "heavy" && kind !== "explosion" && kind !== "shot" && kind !== "kick" && kind !== "breacher" && kind !== "rail" && kind !== "lightning" && kind !== "gauntlet") sfx.slash();
   if (e.hp <= 0 && canFinish(e, kind)) { e.hp = 0; startFinisher(e); return; }
   if (e.hp <= 0) {
@@ -1726,6 +1727,7 @@ function killEnemy(e, hitPoint, dir, force) {
   levelGroup.remove(e.group);
   if (e.T.die) e.T.die(e, hitPoint, dir, force); else spawnRagdoll(e, hitPoint, dir, force);
   if ((state.fin || MF.cur || e.finishing) && e.rd && ragdolls.includes(e.rd)) try { goreKill(e.rd, hitPoint, dir); } catch (err) { console.warn(err); }
+  if (e.and) try { andKillFx(e, hitPoint, dir, !!(state.fin || MF.cur || e.finishing)); } catch (err) { console.warn(err); }
   sfx.kill();
   if (e.dummy && state.mode === "test") TEST.respawn.push({ type: e.type, x: e.home.x, z: e.home.z, y: e.home.y, t: 3 });
   for (const b of bolts) if (b.owner === e) b.owner = null;
@@ -1751,12 +1753,14 @@ function spawnRagdoll(e, hitPoint, dir, force) {
       .setLinearDamping(0.15).setAngularDamping(1.6).setCcdEnabled(name === "torso"));
     const col = world.createCollider(RAPIER.ColliderDesc.cuboid(hx * s, hy, hz * s).setDensity(e.type === "bot" ? 3 : 1).setFriction(0.8).setRestitution(0.1).setCollisionGroups(GROUPS.ragdoll), body);
     body.setLinvel({ x: e.vel.x, y: 0, z: e.vel.z }, true);
-    const mesh = new THREE.Mesh(rbox(hx * 2 * s, hy * 2, hz * 2 * s, 0.45, 0.2), partMaterial(e.type, name));
-    mesh.castShadow = true; ink(mesh); levelGroup.add(mesh);
-    if (name === "head") { const v = new THREE.Mesh(rbox(0.22, 0.06, 0.03, 0.45), M.pants); v.position.set(0, 0.04, 0.18); mesh.add(v); }
+    const am = e.and ? andRagMesh(e, name) : null;
+    const mesh = am || new THREE.Mesh(rbox(hx * 2 * s, hy * 2, hz * 2 * s, 0.45, 0.2), partMaterial(e.type, name));
+    if (am) { mesh.scale.setScalar(e.group.scale.x || 1); mesh.position.copy(wp); mesh.quaternion.copy(pq); levelGroup.add(mesh); }
+    else { mesh.castShadow = true; ink(mesh); levelGroup.add(mesh); }
+    if (name === "head" && !am) { const v = new THREE.Mesh(rbox(0.22, 0.06, 0.03, 0.45), M.pants); v.position.set(0, 0.04, 0.18); mesh.add(v); }
     parts[name] = { body, col, mesh };
   }
-  const rd = { parts: Object.values(parts), torso: parts.torso.body, born: state.time };
+  const rd = { parts: Object.values(parts), torso: parts.torso.body, born: state.time, andA: e.and || null };
   const joint = (a, b, anchorA, anchorB) => {
     const j = world.createImpulseJoint(RAPIER.JointData.spherical(anchorA, anchorB), parts[a].body, parts[b].body, true);
     j.setContactsEnabled(false); (rd.joints ||= {})[b] = j;
@@ -1776,11 +1780,13 @@ function spawnRagdoll(e, hitPoint, dir, force) {
 }
 // keep the body where it lies but drop its physics, so corpses cost nothing
 function freezeRagdoll(rd) {
+  if (rd.andA && !rd.baked) try { andBake(rd); } catch (err) { console.warn(err); }
   for (const p of rd.parts) { ragByHandle.delete(p.col.handle); world.removeRigidBody(p.body); }
   ragdolls.splice(ragdolls.indexOf(rd), 1);
 }
 function removeRagdoll(rd) {
   for (const p of rd.parts) { ragByHandle.delete(p.col.handle); world.removeRigidBody(p.body); levelGroup.remove(p.mesh); dispGeo(p.mesh.geometry); }
+  if (rd.baked) { levelGroup.remove(rd.baked); rd.baked.geometry.dispose(); rd.baked = null; }
   ragdolls.splice(ragdolls.indexOf(rd), 1);
 }
 
@@ -2789,7 +2795,7 @@ function fireGun() {
       ev("shot", { e: null });
       const bx = stimBoxByHandle.get(h); if (bx) openBox(bx, d, "shot");
       const rd = ragByHandle.get(h);
-      if (rd) rd.parts.find((p) => p.col.handle === h).body.applyImpulseAtPoint({ x: d.x * 14, y: 3, z: d.z * 14 }, at, true);
+      if (rd) { rd.parts.find((p) => p.col.handle === h).body.applyImpulseAtPoint({ x: d.x * 14, y: 3, z: d.z * 14 }, at, true); andCorpseHit(rd, at, d); }
       propHitH(h, at, d, 1);
       emitWorldSparks(at.clone().addScaledVector(n, 0.02), n, 10, 0, 6); spark(at, 0xffc070);
     }
@@ -2916,7 +2922,8 @@ function sliceEnemy(e, dir, kind = "finisher") {
   const half = (upper) => {
     const g = new THREE.Group(); levelGroup.add(g);
     const box = (w, h, d, m, x, y, z) => { const mesh = new THREE.Mesh(rbox(w, h, d, 0.45, 0.2), m); mesh.position.set(x, y, z); mesh.castShadow = true; ink(mesh); g.add(mesh); return mesh; };
-    if (upper) {
+    if (e.and) andHalf(e, upper, g);
+    else if (upper) {
       box(0.6 * s, 0.45, 0.36 * s, mat("torso"), 0, 0.225, 0);
       const head = box(0.34 * s, 0.36, 0.34 * s, mat("head"), 0, 0.64, 0);
       const v = new THREE.Mesh(rbox(e.type === "bot" ? 0.3 : 0.22, 0.06, 0.03, 0.45), M.visor); v.position.set(0, 0.04, 0.18); head.add(v);
@@ -4646,7 +4653,7 @@ function carImpact(car) {
     addDebris(m, at.clone(), car.dir.clone().multiplyScalar(8 + Math.random() * 12).add(new V3((Math.random() - 0.5) * 12, Math.random() * 9, (Math.random() - 0.5) * 12)), 5, false);
   }
   // the body goes with the car, charred
-  for (const p of rd.parts) { p.mesh.material = M.charred; p.body.setLinvel({ x: car.dir.x * 24 + (Math.random() - 0.5) * 6, y: 7 + Math.random() * 4, z: car.dir.z * 24 + (Math.random() - 0.5) * 6 }, true); p.body.setAngvel({ x: (Math.random() - 0.5) * 20, y: (Math.random() - 0.5) * 20, z: (Math.random() - 0.5) * 20 }, true); }
+  for (const p of rd.parts) { p.mesh.traverse((o) => { if (o.isMesh && o.userData.andSeg) o.material = M.charred; }); p.mesh.material = M.charred; p.body.setLinvel({ x: car.dir.x * 24 + (Math.random() - 0.5) * 6, y: 7 + Math.random() * 4, z: car.dir.z * 24 + (Math.random() - 0.5) * 6 }, true); p.body.setAngvel({ x: (Math.random() - 0.5) * 20, y: (Math.random() - 0.5) * 20, z: (Math.random() - 0.5) * 20 }, true); }
   rd.carHit = true;
   // the car becomes a burning wreck that tumbles away and falls
   car.state = "wreck"; car.t = 0; car.v.copy(car.dir).multiplyScalar(car.speed * 0.45).add(new V3(0, 3, 0)); car.av.set((Math.random() - 0.5) * 3, (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 5);
@@ -5740,6 +5747,10 @@ const SET_UI = [
     ["shadows", "Shadows", "toggle"],
     ["cel", "Cel shading", "range", { min: 0, max: 1, step: 0.05, fmt: (v) => Math.round(v * 100) + "%" }],
     ["fps", "Show frame rate", "toggle"],
+  ]],
+  ["Violence", [
+    ["gore", "Gore", "seg", { opts: [["full", "Full"], ["sparks", "Sparks only"], ["off", "Off"]], note: "Androids only. No blood anywhere: coolant, oil, sparks and metal" }],
+    ["coolant", "Coolant colour", "seg", { opts: [["blue", "Blue"], ["white", "White"], ["off", "Off"]] }],
   ]],
 ];
 function getSet(k) { return k === "voice" ? VOICE.on : SET[k]; }
@@ -9531,6 +9542,7 @@ function lvTestYard() {
   lvSlider(-14, 54, 1.2, 2.4, -18, -8, 0.7, 0);
   p5TestOffice();
   bossPenBuild();
+  try { andViewBuild(); } catch (err) { console.warn(err); }
   lvFlushPanels();
 }
 const TEST_NEW = [["shield", -20, 44], ["drone", -12, 44, 1.6], ["turret", -4, 48, 3.0], ["worker", 4, 44], ["gunman", -43.5, 50.5], ["brawler", -50, 44]];
@@ -10960,7 +10972,7 @@ function carxStep(dtw) {
   const tp = ragdolls.includes(S.rd) ? rdPos(S.rd) : null;
   if (!S.hit && tp && tp.distanceTo(car.pos) < 2.4) {
     S.hit = true; S.hitT = S.t; const at = tp.clone();
-    for (const p of S.rd.parts) { p.mesh.material = M.charred; p.body.setLinvel({ x: S.vel.x * 0.75 + (Math.random() - 0.5) * 5, y: 6 + Math.random() * 4, z: S.vel.z * 0.75 + (Math.random() - 0.5) * 5 }, true); p.body.setAngvel({ x: (Math.random() - 0.5) * 22, y: (Math.random() - 0.5) * 22, z: (Math.random() - 0.5) * 22 }, true); }
+    for (const p of S.rd.parts) { p.mesh.traverse((o) => { if (o.isMesh && o.userData.andSeg) o.material = M.charred; }); p.mesh.material = M.charred; p.body.setLinvel({ x: S.vel.x * 0.75 + (Math.random() - 0.5) * 5, y: 6 + Math.random() * 4, z: S.vel.z * 0.75 + (Math.random() - 0.5) * 5 }, true); p.body.setAngvel({ x: (Math.random() - 0.5) * 22, y: (Math.random() - 0.5) * 22, z: (Math.random() - 0.5) * 22 }, true); }
     S.rd.carHit = true;
     boomSprite(at, "flash", 0.2, 10); for (let i = 0; i < 10; i++) boomSprite(at.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.6, (Math.random() - 0.5), (Math.random() - 0.5) * 1.6)), "fire", 0.5 + Math.random() * 0.4, 3 + Math.random() * 3, car.dir.clone().multiplyScalar(6 + Math.random() * 6));
     emitWorldSparks(at, car.dir, 70, 0, 14); emitWorldSparks(at, new THREE.Vector3(0, 1, 0), 40, 2, 8); worldSmoke(at, 5, 0.6, 0x2a262e, 0.6, 0.5);
@@ -12744,12 +12756,13 @@ function goreEndoMesh(name) {
 const RD_NAMES = ["torso", "head", "armL", "armR", "legL", "legR"];
 // tear a part: holes in its skin (lvl 1 torn, 2 flayed), the skeleton inside
 function goreTear(p, name, lvl) {
-  if (!p || !p.mesh) return; lvl = Math.min(2, Math.max(p.gore || 0, lvl)); if (p.gore === lvl) return; p.gore = lvl;
+  if (!p || !p.mesh || andGore() !== "full") return; lvl = Math.min(2, Math.max(p.gore || 0, lvl)); if (p.gore === lvl) return; p.gore = lvl;
   const m = p.mesh;
   if (m.isMesh) {
     if (!p.mat0) p.mat0 = m.material;
     if (m.material !== M.charred) m.material = goreMat(p.mat0, lvl);
-    if (name && !m.userData.endoIn) { m.userData.endoIn = true; const e = goreEndoMesh(name); if (name === "torso" || name === "head") e.scale.setScalar(name === "head" ? 1 : 1); m.add(e); }
+    if (name && !m.userData.endoIn) { m.userData.endoIn = true; const e = m.userData.andA ? andEndoFor(m) : goreEndoMesh(name); if (e) m.add(e); }
+    if (m.userData.andA) m.traverse((o) => { if (o !== m && o.isMesh && o.userData.andSeg && o.material === andMat(o.userData.andA.type)) { o.material = goreMat(o.material, lvl); if (!o.userData.endoIn) { o.userData.endoIn = true; const en = andEndoFor(o); if (en) o.add(en); } } });
   } else m.traverse((o) => { if (o.isMesh && o.material && o.material.side !== THREE.BackSide && !o.userData.endo && o.material !== M.cutHot && (o.material === M.skin || o.material === M.pants || o.material.isMeshToonMaterial || o.material.isMeshStandardMaterial) && o.geometry?.userData?.rounded) { o.userData.mat0 ||= o.material; o.material = goreMat(o.userData.mat0, lvl); } });
 }
 // ---------- wires ----------
@@ -12769,6 +12782,7 @@ function goreWireMesh() {
   return mesh;
 }
 function goreWire(at, v, o = {}) {
+  if (andGore() !== "full") return;
   { const c = camera.position; const tx = at.x - c.x, ty = at.y - c.y, tz = at.z - c.z; const L = Math.hypot(tx, ty, tz) || 1; const tow = -(v.x * tx + v.y * ty + v.z * tz) / L; if (tow > 0) { v = v.clone(); v.x += tx / L * tow * 1.6; v.y += ty / L * tow * 1.6; v.z += tz / L * tow * 1.6; } }
   goreWireMesh(); if (GORE.mesh.parent !== levelGroup) levelGroup.add(GORE.mesh);
   let W = GORE.w.find((x) => !x.on); if (!W) { W = GORE.w.reduce((a, b) => (a.life < b.life ? a : b)); }
@@ -12829,7 +12843,7 @@ function rdIndex(rd, p) { const i = rd.parts.indexOf(p); if (!rd.headless) retur
 function goreNear(rd, at) { let best = null, bd = 1e9; for (const [p, n] of goreParts(rd)) { try { const t = p.body.translation(); const d = (t.x - at.x) ** 2 + (t.y - at.y) ** 2 + (t.z - at.z) ** 2; if (d < bd) { bd = d; best = [p, n]; } } catch {} } return best; }
 // tear at a point: the nearest part rips, wires burst out of it, chunks of skin fly
 function goreBurst(rd, at, dir, k = 1) {
-  if (!rd || !ragdolls.includes(rd)) return;
+  if (!rd || !ragdolls.includes(rd) || andGore() !== "full") return;
   const near = goreNear(rd, at); if (!near) return; const [p, name] = near;
   goreTear(p, name, k >= 0.9 ? 2 : 1);
   const t = p.body.translation(); const c = _r6g2.set(t.x, t.y, t.z); const from = c.clone().lerp(at, 0.7);
@@ -12846,7 +12860,7 @@ function goreBurst(rd, at, dir, k = 1) {
 }
 // a finisher kill: everything tears a little, the trunk and head a lot
 function goreKill(rd, at, dir) {
-  if (!rd) return;
+  if (!rd || andGore() !== "full") return;
   for (const [p, n] of goreParts(rd)) goreTear(p, n, n === "torso" || n === "head" || Math.random() < 0.3 ? 2 : 1);
   goreBurst(rd, at, dir.clone().lengthSq() > 1e-6 ? dir : _r6g.set(0, 1, 0), 1);
   rd.goreT = state.time;
@@ -13214,6 +13228,7 @@ function r6Watch() {
 function goreHalf(h) { try { const p = h.rd.parts[0]; goreTear(p, null, 2); const t = p.body.translation(); for (let i = 0; i < 6; i++) goreWire(new THREE.Vector3(t.x, t.y, t.z), new THREE.Vector3((Math.random() - 0.5) * 4, (Math.random() - 0.3) * 4, (Math.random() - 0.5) * 4), { body: p.body, rd: h.rd }); GORE.track.includes(h.rd) || GORE.track.push(h.rd); h.rd.goreT = state.time; } catch {} }
 // shader warm-up for the new materials, so the first tear or mirror does not hitch
 function r6Warm(add) {
+  try { for (const t of ["gunman", "worker"]) { const r = andBuild(t); add(r.group); } } catch (err) { console.warn(err); }
   for (const m of [M.skin, M.pants, M.bot]) if (m) add(new THREE.Mesh(UNIT_RBOX, goreMat(m, 1)));
   add(goreEndoMesh("torso")); add(goreWireMesh()); add(new THREE.Mesh(UNIT_BOX, MIR.fbMat ||= new THREE.MeshStandardMaterial({ color: 0x9aa2aa, metalness: 1, roughness: 0.08, envMap: envTex, envMapIntensity: 0.9 })));
 }
@@ -13591,7 +13606,7 @@ const R6_FACE = { phone: [-0.42, 0, 0.1], banana: [0.05, 0.25, 0.12] };
 // still work; the full list is folded away at the bottom of the Simulation tab.
 const TGM = { tab: "sim", ts: 1, grav: 1, live: false, open: false };
 const TGM_SPAWN = [["brawler", "Brawler"], ["gunman", "Gunman"], ["bot", "Heavy bot"], ["shield", "Shield"], ["drone", "Drone"], ["turret", "Turret"], ["worker", "Worker"]];
-const TGM_TP = [["Start", { x: 0, y: 1.3, z: 8 }, Math.PI], ["Office corner", { x: -45, y: 1.3, z: 43 }, Math.PI], ["Finisher fence", { x: 0, y: 1.3, z: -34 }, 0], ["Boss pen", null, 0]];
+const TGM_TP = [["Start", { x: 0, y: 1.3, z: 8 }, Math.PI], ["Robot viewer", { x: 48, y: 1.3, z: 33 }, Math.PI], ["Office corner", { x: -45, y: 1.3, z: 43 }, Math.PI], ["Finisher fence", { x: 0, y: 1.3, z: -34 }, 0], ["Boss pen", null, 0]];
 (() => {
   const st = document.createElement("style");
   st.textContent = `#tghint{margin-top:8px;font-size:10.5px;letter-spacing:.06em;color:var(--dim)}#tghint kbd{font-family:var(--mono);color:var(--ink);border:1px solid rgba(217,226,234,.3);padding:0 4px;margin-right:5px}
@@ -13647,6 +13662,7 @@ function tgmRender() {
   const s3 = sec("Scenes");
   btns(s3, [["Car on the nearest body", () => tgmDo(() => carxForce())], ["Idle · phone", () => tgmDo(() => { idleCancel(); IDLE.cur = null; idleStart("phone"); })], ["Idle · banana", () => tgmDo(() => { idleCancel(); IDLE.cur = null; idleStart("banana"); })],
     ["Sword finisher on the nearest", () => tgmDo(() => pressed.add("KeyN"))], ["Combo book", () => { tgmClose(); setTimeout(() => { document.exitPointerLock?.(); setTimeout(openBook, 60); }, 80); }, false]]);
+  andViewMenu(sec, btns, row, seg);
   // places
   const s4 = sec("Go to");
   btns(s4, TGM_TP.map(([name, at, yw]) => [name, () => tgmDo(() => { if (!at) { pressed.add("KeyB"); return; } player.body.setTranslation(at, true); player.body.setLinvel({ x: 0, y: 0, z: 0 }, true); player.prev = new THREE.Vector3(at.x, at.y, at.z); yaw = yw; }, name)]));
@@ -13679,6 +13695,795 @@ function tgmStep() {
 }
 function tgmReset() { TGM.ts = 1; if (TGM.grav !== 1) { TGM.grav = 1; } try { world.gravity = { x: 0, y: -21.6, z: 0 }; } catch {} const h = $("tghint"); if (h) h.hidden = state.mode !== "test"; }
 
+// ================= Round 7 · androids: a real robot under a human disguise =================
+// Every guard, brawler, riot unit and worker is one skinned mesh on a 16-bone robot skeleton: elbows, knees, ankles,
+// hands with fingers, a neck, and a face plate that splits down the middle. The six old joint names (torso, head, armL,
+// armR, legL, legR) are bones with the same pivots, so every pose, finisher and ragdoll in the game drives them as before.
+// The whole body is one draw call (plus its ink hull), so a squad costs less than the old box people did.
+// Layers: E endoskeleton, H skin hidden under clothes (viewer only), S visible skin, U uniform, D details that are always on.
+const AND = { geo: new Map(), mat: {}, on: { gunman: 1, brawler: 1, shield: 1, worker: 1 }, n: 0 };
+const _r7am4 = new THREE.Matrix4(), _r7aq = new THREE.Quaternion(), _r7ae = new THREE.Euler(), _r7av = new THREE.Vector3(), _r7as = new THREE.Vector3();
+const AG = (() => {
+  const c = (g) => { g.userData.cached = true; return g; };
+  return { sph: c(new THREE.SphereGeometry(1, 16, 12)), sphL: c(new THREE.SphereGeometry(1, 10, 7)), cyl: c(new THREE.CylinderGeometry(1, 1, 1, 12)), cylL: c(new THREE.CylinderGeometry(1, 1, 1, 7)), lathe: new Map(), part: new Map() };
+})();
+// a tapered limb, top at y = 0 down to y = -len, with soft rounded ends
+function aLimb(r0, r1, r2, len, seg = 14) {
+  const key = [r0, r1, r2, len, seg].map((v) => v.toFixed(4)).join(","); let g = AG.lathe.get(key); if (g) return g;
+  const pts = [], n = 10;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n, y = -len + t * len; // bottom to top
+    const r = t < 0.5 ? THREE.MathUtils.lerp(r2, r1, smooth(t / 0.5)) : THREE.MathUtils.lerp(r1, r0, smooth((t - 0.5) / 0.5));
+    const cap = Math.min(1, Math.sin(Math.min(1, t / 0.07) * Math.PI / 2), Math.sin(Math.min(1, (1 - t) / 0.07) * Math.PI / 2));
+    pts.push(new THREE.Vector2(Math.max(0.0005, r * (0.55 + 0.45 * cap)), y));
+  }
+  pts[0].x = 0.0005; pts[n].x = 0.0005;
+  g = new THREE.LatheGeometry(pts, seg); g.userData.cached = true; AG.lathe.set(key, g); return g;
+}
+// a torso-like body of revolution from a profile [[r, y], ...] given top to bottom
+function aBody(prof, seg = 20) {
+  const key = "b" + prof.flat().map((v) => v.toFixed(3)).join(","); let g = AG.lathe.get(key); if (g) return g;
+  const pts = prof.slice().reverse().map(([r, y]) => new THREE.Vector2(Math.max(0.0005, r), y));
+  g = new THREE.LatheGeometry(pts, seg); g.userData.cached = true; AG.lathe.set(key, g); return g;
+}
+// a partial ellipsoid shell: a slice of the unit sphere (phi around y from -x, theta from the top)
+function aSlice(p0, pl, t0, tl, ws = 14, hs = 10) {
+  const key = ["s", p0, pl, t0, tl, ws, hs].map((v) => (+v).toFixed(3)).join(","); let g = AG.part.get(key); if (g) return g;
+  g = new THREE.SphereGeometry(1, ws, hs, p0, pl, t0, tl); g.userData.cached = true; AG.part.set(key, g); return g;
+}
+function aTorus(r, t, arc = Math.PI * 2, rs = 6, ts = 16) {
+  const key = ["t", r, t, arc, rs, ts].map((v) => (+v).toFixed(4)).join(","); let g = AG.part.get(key); if (g) return g;
+  g = new THREE.TorusGeometry(r, t, rs, ts, arc); g.userData.cached = true; AG.part.set(key, g); return g;
+}
+// a sculpted half face in head space: a slice of an ellipsoid pushed forward and back by a few soft shapes
+function aFace(side, fi, skin) {
+  const key = `face:${side}:${fi}:${skin}`; let g = AG.part.get(key); if (g) return g;
+  const fv = [[1, 1, 1, 1], [1.1, 0.9, 1.04, 0.95], [0.92, 1.08, 0.97, 1.06], [1.04, 1.03, 1.08, 0.97]][fi];
+  const ax = 0.096 * fv[2], ay = 0.118, az = 0.098, cy = 0.008, cz = 0.012;
+  const p0 = side < 0 ? 0.25 : Math.PI / 2, pl = Math.PI / 2 - 0.25;
+  g = new THREE.SphereGeometry(1, 22, 26, p0, pl, Math.PI * 0.18, Math.PI * 0.6);
+  const P = g.attributes.position, n = P.count, col = new Float32Array(n * 3);
+  const base = new THREE.Color(skin), lip = new THREE.Color(skin).lerp(new THREE.Color(0x9a5a54), 0.38), brow = new THREE.Color(skin).multiplyScalar(0.82);
+  const G = (x, y, sx, sy) => Math.exp(-((x / sx) ** 2 + (y / sy) ** 2));
+  for (let i = 0; i < n; i++) {
+    let x = P.getX(i) * ax, y = P.getY(i) * ay + cy, z = P.getZ(i) * az + cz;
+    const X = x, Y = y - 0.01, ax2 = Math.abs(X);
+    let d = 0;
+    // the nose: a ridge that grows toward the tip, then the tip and the wings
+    const ridge = THREE.MathUtils.clamp((0.04 - Y) / 0.065, 0, 1) * (Y > -0.03 ? 1 : Math.exp(-(((Y + 0.03) / 0.008) ** 2)));
+    d += 0.02 * fv[0] * ridge * Math.exp(-((X / (0.009 + 0.006 * ridge)) ** 2));
+    d += 0.007 * fv[0] * G(X, Y + 0.028, 0.012, 0.01) + 0.004 * G(ax2 - 0.014, Y + 0.03, 0.007, 0.007);
+    d -= 0.014 * G(ax2 - 0.036, Y - 0.012, 0.021, 0.014); // eye sockets
+    d += 0.007 * fv[1] * G(ax2 - 0.032, Y - 0.036, 0.03, 0.008); // brow ridge
+    d += 0.006 * G(ax2 - 0.052, Y + 0.012, 0.02, 0.018); // cheekbones
+    d -= 0.004 * G(ax2 - 0.056, Y + 0.04, 0.02, 0.02); // under the cheekbone
+    const lipM = G(X, Y + 0.058, 0.022, 0.01); d += 0.0045 * lipM; d -= 0.0035 * G(X, Y + 0.0585, 0.021, 0.0022); // lips, the line between them
+    d += 0.008 * fv[3] * G(X, Y + 0.09, 0.022, 0.014); // chin
+    d -= 0.003 * G(X, Y + 0.072, 0.014, 0.006); // under the lip
+    // only the front pushes; the edges stay on the ellipsoid so the halves meet the skull
+    const front = THREE.MathUtils.clamp((z - cz) / az, 0, 1) ** 1.5; z += d * front;
+    P.setXYZ(i, x, y, z);
+    const c = base.clone().lerp(lip, Math.min(1, lipM * 1.6)).lerp(brow, 0.6 * G(ax2 - 0.032, Y - 0.042, 0.028, 0.005)); col.set([c.r, c.g, c.b], i * 3);
+  }
+  g.setAttribute("color", new THREE.BufferAttribute(col, 3)); g.computeVertexNormals(); g.userData.cached = true; AG.part.set(key, g); return g;
+}
+// the colours every android shares
+const AC = { chrome: 0xb7bfcb, chrome2: 0x8e98a6, graph: 0x2b2e37, seam: 0x111217, rubber: 0x17181c, core: 0x6ff4ff, red: 0xff4050, blue: 0x3fa8ff, glass: 0x0b0d12, gold: 0xc9a245 };
+const AND_SKIN = [0xdcb9a0, 0xcfa98d, 0xbd9479, 0xe2c4ae, 0x9c7660];
+const AND_HAIR = [0x2a2320, 0x4a3a2c, 0x6d6862, 0x1b1a1c, 0x7a5a3c, 0xa9a39a];
+// pick a variant: 6 per type, each a fixed mix of face, height, hat, wear and colours
+function andVariant(type, i) {
+  const r = (k) => { const x = Math.sin((i + 1) * 91.7 + k * 13.3 + type.length * 7.1) * 43758.5453; return x - Math.floor(x); };
+  return { i, face: i % 4, h: [0.956, 1, 1.044][Math.floor(r(1) * 3)], skin: AND_SKIN[Math.floor(r(2) * AND_SKIN.length)], hair: AND_HAIR[Math.floor(r(3) * AND_HAIR.length)],
+    hat: Math.floor(r(4) * 3), wear: Math.floor(r(5) * 3), shirt: Math.floor(r(6) * 4), tie: r(7) < 0.5, coat: r(8) < 0.3, glasses: r(9) < 0.35, badge: 100 + Math.floor(r(10) * 899), r };
+}
+const AND_PAL = {
+  gunman: { top: 0x646b78, top2: 0x4b525d, pants: 0x2d3039, boot: 0x1b1c21, hat: 0x3a404b, belt: 0x1e1f24, acc: 0x2a73c8 },
+  brawler: { top: 0x24272e, top2: 0x15161a, pants: 0x25272d, boot: 0x18191d, hat: 0x1f2126, belt: 0x1e1f24, acc: 0x8a2e2a },
+  shield: { top: 0x313947, top2: 0x232934, pants: 0x262c36, boot: 0x17181c, hat: 0x2a313c, belt: 0x1b1d22, acc: 0xc9a245 },
+  worker: { top: 0xe6e8ec, top2: 0xc9ccd3, pants: 0x33343d, boot: 0x2a221d, hat: 0x2a2320, belt: 0x241f1c, acc: 0x3c9a62 },
+};
+const WORKER_TOPS = [[0xe6e8ec, 0xc9ccd3], [0x9db4d4, 0x7f97b8], [0x8a6f5a, 0x6f5746], [0x5b8a83, 0x46706a]];
+const WORKER_PANTS = [0x33343d, 0x4a4238, 0x2e3542, 0x3d3a36];
+// the segments and the bone each one rides; rest positions in the body's own space (feet at y 0, facing +z)
+const AND_BONES = [
+  ["root", -1, 0, 0, 0], ["torso", 0, 0, 1.15, 0], ["pelvis", 0, 0, 1.02, 0], ["head", 0, 0, 1.69, 0], ["faceL", 3, 0, 0, 0], ["faceR", 3, 0, 0, 0],
+  ["armL", 0, -0.41, 1.46, 0], ["elbowL", 6, 0, -0.3, 0], ["armR", 0, 0.41, 1.46, 0], ["elbowR", 8, 0, -0.3, 0],
+  ["legL", 0, -0.15, 0.8, 0], ["kneeL", 10, 0, -0.4, 0], ["ankleL", 11, 0, -0.33, 0], ["legR", 0, 0.15, 0.8, 0], ["kneeR", 13, 0, -0.4, 0], ["ankleR", 14, 0, -0.33, 0],
+];
+const AND_SEG = { chest: 1, pelvis: 2, head: 3, faceL: 4, faceR: 5, uaL: 6, faL: 7, uaR: 8, faR: 9, thL: 10, shL: 11, ftL: 12, thR: 13, shR: 14, ftR: 15 };
+const AND_BW = (() => { const w = []; for (const b of AND_BONES) { const p = b[1] >= 0 ? w[b[1]] : [0, 0, 0]; w.push([p[0] + b[2], p[1] + b[3], p[2] + b[4]]); } return w; })();
+
+// ---------- the body plan: every primitive of one android, by segment and layer ----------
+function andPlan(type, v) {
+  const pal = { ...AND_PAL[type] }; const S = {}; for (const k in AND_SEG) S[k] = [];
+  if (type === "worker") { const t = WORKER_TOPS[v.shirt]; pal.top = t[0]; pal.top2 = t[1]; pal.pants = WORKER_PANTS[(v.i + v.shirt) % 4]; pal.hat = v.hair; }
+  const sk = v.skin, big = type === "brawler" ? 1.1 : type === "shield" ? 1.08 : 1, slim = type === "worker" ? 0.97 : 1;
+  const put = (seg, tag, geo, col, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) => {
+    S[seg].push([geo, _r7am4.compose(_r7av.set(x, y, z), _r7aq.setFromEuler(_r7ae.set(rx, ry, rz)), _r7as.set(sx, sy, sz)).clone(), col, tag]);
+  };
+  const ell = (seg, tag, col, x, y, z, rx, ry, rz, a = 0, b = 0, c = 0, lo = false) => put(seg, tag, lo ? AG.sphL : AG.sph, col, x, y, z, a, b, c, rx, ry, rz);
+  const cyl = (seg, tag, col, x, y, z, r, h, a = 0, b = 0, c = 0, lo = false) => put(seg, tag, lo ? AG.cylL : AG.cyl, col, x, y, z, a, b, c, r, h, r);
+  const box = (seg, tag, col, x, y, z, w, h, d, a = 0, b = 0, c = 0, rr = 0.3) => put(seg, tag, rbox(w, h, d, rr, 0.03), col, x, y, z, a, b, c);
+  // ===== torso: chest (origin at the torso pivot) =====
+  const chestProf = (k) => [[0.11 * k, 0.37], [0.2 * k, 0.345], [0.255 * k, 0.3], [0.27 * k, 0.2], [0.255 * k, 0.07], [0.215 * k, -0.04], [0.19 * k, -0.13]];
+  const zs = 0.62;
+  put("chest", "H", aBody(chestProf(0.97 * slim)), sk, 0, 0, 0, 0, 0, 0, big, 1, zs);
+  put("chest", "U", aBody(chestProf(1.0 * slim)), pal.top, 0, 0, 0, 0, 0, 0, big, 1, zs);
+  // shoulder yokes fill the gap to the arms
+  for (const s of [-1, 1]) ell("chest", "U", pal.top, s * 0.27 * big, 0.285, 0, 0.09, 0.062, 0.088);
+  // the collar, and the neck seam showing above it
+  put("chest", "U", aTorus(0.075, 0.022, Math.PI * 2, 6, 18), pal.top2, 0, 0.355, 0.0, Math.PI / 2, 0, 0, 1, 1.0, 1);
+  // E: the endoskeleton inside the chest: spine, ribs, core, clavicles
+  for (let i = 0; i < 6; i++) cyl("chest", "E", AC.graph, 0, -0.1 + i * 0.075, -0.07, 0.03, 0.05, 0, 0, 0, true);
+  for (let i = 0; i < 4; i++) put("chest", "E", aTorus(0.17 - i * 0.012, 0.012, Math.PI * 1.55, 5, 18), AC.chrome, 0, 0.22 - i * 0.075, -0.01, Math.PI / 2, 0, Math.PI * 0.225 + Math.PI, 1, 0.7, 1);
+  box("chest", "E", AC.chrome2, 0, 0.11, 0.1, 0.05, 0.26, 0.025);
+  ell("chest", "E", AC.core, 0, 0.12, 0.04, 0.06, 0.06, 0.05);
+  for (const s of [-1, 1]) { put("chest", "E", AG.cyl, AC.chrome, s * 0.2, 0.31, 0.02, 0, 0, Math.PI / 2 - s * 0.15, 0.018, 0.3, 0.018); ell("chest", "E", AC.chrome2, s * 0.37, 0.31, 0, 0.05, 0.05, 0.05); }
+  // ===== the pelvis (origin at the waist, 1.02) =====
+  const hipProf = [[0.17, 0.02], [0.2, -0.06], [0.205, -0.16], [0.17, -0.23], [0.08, -0.27]];
+  put("pelvis", "H", aBody(hipProf.map(([r, y]) => [r * 0.96, y])), sk, 0, 0, 0, 0, 0, 0, big * slim, 1, 0.66);
+  put("pelvis", "U", aBody(hipProf), pal.pants, 0, 0, 0, 0, 0, 0, big * slim, 1, 0.66);
+  put("pelvis", "U", aTorus(0.188 * big * slim, 0.018, Math.PI * 2, 5, 24), pal.belt, 0, -0.015, 0, Math.PI / 2, 0, 0, 1, 0.66 / 1, 1);
+  box("pelvis", "D", AC.chrome2, 0, -0.015, 0.128, 0.05, 0.035, 0.012);
+  box("pelvis", "E", AC.chrome, 0, -0.13, 0, 0.3, 0.1, 0.14, 0, 0, 0, 0.4);
+  for (const s of [-1, 1]) ell("pelvis", "E", AC.chrome2, s * 0.15, -0.21, 0, 0.055, 0.055, 0.055);
+  cyl("pelvis", "E", AC.graph, 0, 0.0, -0.07, 0.03, 0.1, 0, 0, 0, true);
+  // ===== head (origin at the head pivot, 1.69) =====
+  const fv = [[1, 1, 1, 1], [1.08, 0.95, 1.05, 0.95], [0.94, 1.06, 0.96, 1.05], [1.03, 1.02, 1.1, 0.98]][v.face];
+  // neck with the vertebra plates showing at the back
+  cyl("head", "S", sk, 0, -0.15, -0.005, 0.048, 0.13);
+  for (let i = 0; i < 3; i++) box("head", "D", AC.graph, 0, -0.19 + i * 0.035, -0.045, 0.06, 0.022, 0.02, 0.15, 0, 0, 0.4);
+  for (const s of [-1, 1]) cyl("head", "D", AC.seam, s * 0.046, -0.13, -0.005, 0.0035, 0.1, 0, 0, 0, true);
+  // skull, ears, the back of the head; the front is the face plate (two halves, their own bones)
+  ell("head", "S", sk, 0, 0.02, -0.012, 0.1 * fv[2], 0.125, 0.112);
+  for (const s of [-1, 1]) { ell("head", "S", sk, s * 0.098 * fv[2], 0.0, -0.01, 0.014, 0.03, 0.022); }
+  // the sensor cluster under the face plate: dark, with a ring of lenses (seen when the mask splits)
+  ell("head", "D", AC.graph, 0, 0.0, 0.045, 0.078, 0.095, 0.05);
+  for (const [x, y, r] of [[-0.034, 0.02, 0.016], [0.034, 0.02, 0.016], [0, -0.022, 0.012], [0, 0.05, 0.008]]) { ell("head", "D", AC.glass, x, y, 0.088, r, r, r * 0.6, 0, 0, 0, true); }
+  // jaw and chin
+  put("head", "S", aSlice(0, Math.PI, Math.PI * 0.55, Math.PI * 0.4), sk, 0, -0.02, 0.0, 0, 0, 0, 0.088 * fv[2], 0.11 * fv[3], 0.1);
+  // the face plate: each half is one smooth sculpted surface (nose, brow, sockets, cheekbones, lips, chin), split at the
+  // centre seam; the dark glass eyes sit in the sockets
+  for (const s of [-1, 1]) {
+    const seg = s < 0 ? "faceL" : "faceR";
+    put(seg, "S", aFace(s, v.face, sk), 0xffffff);
+    ell(seg, "D", AC.glass, s * 0.036, 0.021, 0.083, 0.0135, 0.0105, 0.012, 0, 0, 0, true);
+  }
+  // hair, hats, helmets
+  if (type === "shield") {
+    put("head", "U", aSlice(0, Math.PI * 2, 0, Math.PI * 0.62), pal.hat, 0, 0.015, -0.005, 0, 0, 0, 0.128, 0.15, 0.14);
+    put("head", "U", aSlice(Math.PI * 0.18, Math.PI * 0.64, Math.PI * 0.3, Math.PI * 0.42), AC.glass, 0, 0.0, 0.0, 0, 0, 0, 0.13, 0.15, 0.15); // the face shield
+    box("head", "U", pal.top2, 0, -0.1, 0.0, 0.2, 0.05, 0.2, 0, 0, 0, 0.5); // chin guard
+    for (const s of [-1, 1]) box("head", "D", pal.acc, s * 0.115, 0.04, 0.0, 0.02, 0.03, 0.08);
+  } else if (type === "gunman") {
+    if (v.hat === 0) { // field cap
+      put("head", "U", aSlice(0, Math.PI * 2, 0, Math.PI * 0.42), pal.hat, 0, 0.05, -0.012, 0, 0, 0, 0.112, 0.105, 0.124);
+      box("head", "U", pal.hat, 0, 0.065, 0.11, 0.17, 0.012, 0.08, 0.2, 0, 0, 0.4);
+      box("head", "D", pal.acc, 0, 0.105, 0.095, 0.035, 0.02, 0.008);
+    } else { // light helmet with a rail
+      put("head", "U", aSlice(0, Math.PI * 2, 0, Math.PI * 0.48), pal.hat, 0, 0.04, -0.012, 0, 0, 0, 0.124, 0.13, 0.134);
+      for (const s of [-1, 1]) box("head", "D", AC.graph, s * 0.123, 0.05, 0.0, 0.012, 0.025, 0.1);
+      if (v.hat === 2) box("head", "D", AC.graph, 0, 0.12, 0.1, 0.05, 0.03, 0.04); // a night-vision mount
+    }
+    box("head", "D", AC.rubber, 0.105, 0.0, 0.01, 0.022, 0.035, 0.025); // earpiece
+    put("head", "D", AG.cylL, AC.rubber, 0.1, -0.08, 0.02, 0.2, 0, 0, 0.0035, 0.14, 0.0035);
+  } else {
+    // synthetic hair: a cap of it, cropped for brawlers, styled for workers
+    const top = type === "brawler" ? 0.36 : 0.44 + (v.i % 3) * 0.04;
+    put("head", "U", aSlice(0, Math.PI * 2, 0, Math.PI * top), type === "brawler" ? 0x1c1b1d : v.hair, 0, 0.034, -0.02, 0, 0, 0, 0.106 * fv[2], 0.112, 0.122);
+    if (type === "worker" && v.glasses) { for (const s of [-1, 1]) put("faceR", "D", aTorus(0.02, 0.0025, Math.PI * 2, 4, 14), 0x222326, s * 0.036, 0.022, 0.102); box("faceR", "D", 0x222326, 0, 0.026, 0.104, 0.02, 0.004, 0.004); }
+  }
+  // wear: old units are missing a skin panel or two, the chrome shows through
+  if (v.wear >= 1) ell("faceL", "D", AC.chrome2, -0.062, 0.0, 0.08, 0.016, 0.022, 0.008, 0.2, -0.55, 0);
+  if (v.wear >= 2) ell("head", "D", AC.chrome2, 0.07, 0.06, 0.06, 0.02, 0.016, 0.012, 0, 0.8, 0);
+  // ===== arms =====
+  for (const s of [-1, 1]) {
+    const ua = s < 0 ? "uaL" : "uaR", fa = s < 0 ? "faL" : "faR";
+    const bareFore = type === "brawler", sleeveTop = type === "brawler" ? pal.top2 : pal.top;
+    ell(ua, "U", sleeveTop, -s * 0.018, -0.03, 0, 0.074 * big, 0.085, 0.074 * big); // deltoid
+    put(ua, "H", aLimb(0.068, 0.062, 0.052, 0.3), sk, 0, 0, 0, 0, 0, 0, big, 1, big);
+    if (type === "brawler") { put(ua, "U", aLimb(0.08, 0.075, 0.07, 0.13), pal.top2, 0, 0, 0, 0, 0, 0, big, 1, big); put(ua, "S", aLimb(0.07, 0.066, 0.056, 0.3), sk, 0, 0, 0, 0, 0, 0, big, 1, big); ell(ua, "D", AC.chrome2, 0, -0.005, 0, 0.05, 0.05, 0.05); }
+    else put(ua, "U", aLimb(0.075, 0.068, 0.06, 0.31), sleeveTop, 0, 0, 0, 0, 0, 0, big, 1, big);
+    ell(ua, bareFore ? "S" : "U", bareFore ? sk : sleeveTop, 0, -0.3, 0, 0.056 * big, 0.056, 0.056 * big); // elbow cap
+    if (type === "shield") { put(ua, "U", aSlice(0, Math.PI * 2, 0, Math.PI * 0.45), pal.top2, -s * 0.005, 0.02, 0, 0, 0, s * 0.35, 0.11, 0.1, 0.11); }
+    if (type === "gunman" && s < 0) box(ua, "D", pal.acc, -0.075, -0.06, 0.0, 0.006, 0.05, 0.04); // shoulder flash
+    // forearm: sleeve or bare synthetic skin with its pistons showing
+    if (bareFore) {
+      put(fa, "S", aLimb(0.062, 0.058, 0.04, 0.27), sk, 0, 0, 0, 0, 0, 0, big, 1, big);
+      for (const k of [-1, 1]) { cyl(fa, "D", AC.chrome, s * 0.045 * big, -0.12, k * 0.022, 0.009, 0.2, 0, 0, 0, true); cyl(fa, "D", AC.graph, s * 0.045 * big, -0.06, k * 0.022, 0.014, 0.08, 0, 0, 0, true); }
+      put(fa, "D", aTorus(0.05, 0.004, Math.PI * 2, 4, 14), AC.seam, 0, -0.03, 0, Math.PI / 2, 0, 0);
+    } else {
+      put(fa, "H", aLimb(0.058, 0.052, 0.038, 0.27), sk);
+      put(fa, "U", aLimb(0.062, 0.057, 0.05, 0.25), type === "worker" && v.coat ? pal.top2 : sleeveTop, 0, 0, 0, 0, 0, 0, big, 1, big);
+      put(fa, "U", aTorus(0.048, 0.008, Math.PI * 2, 5, 14), pal.top2, 0, -0.235, 0, Math.PI / 2, 0, 0, big, big, 1);
+      cyl(fa, "S", sk, 0, -0.262, 0, 0.034, 0.05);
+    }
+    put(fa, "D", aTorus(0.035, 0.003, Math.PI * 2, 4, 14), AC.seam, 0, -0.272, 0, Math.PI / 2, 0, 0); // the wrist seam
+    // the hand: palm faces the body (-s x), fingers down; a curl per hand
+    const grip = type === "gunman" ? (s > 0 ? 0.9 : 0.75) : type === "brawler" ? (s > 0 ? 0.95 : 1) : type === "shield" ? 0.95 : 0.35;
+    const hs = type === "brawler" ? 1.15 : 1;
+    box(fa, "S", sk, 0, -0.33, 0, 0.032 * hs, 0.085 * hs, 0.078 * hs, 0, 0, 0, 0.35);
+    for (let f = 0; f < 3; f++) {
+      const fz = (-0.025 + f * 0.025) * hs, fy = -0.37 * (1 + (hs - 1) * 0.6);
+      const a1 = grip * 1.35, a2 = grip * 1.55;
+      // segment 1 hinges at the knuckle toward the palm side
+      const l1 = 0.034 * hs, l2 = 0.03 * hs;
+      const c1 = new THREE.Vector3(-s * Math.sin(a1) * l1 * 0.5, fy - Math.cos(a1) * l1 * 0.5, fz);
+      put(fa, "S", rbox(0.017 * hs, l1, 0.018 * hs, 0.45, 0.01), sk, c1.x, c1.y, c1.z, 0, 0, s * a1);
+      const k2 = new THREE.Vector3(-s * Math.sin(a1) * l1, fy - Math.cos(a1) * l1, fz);
+      put(fa, "S", rbox(0.015 * hs, l2, 0.016 * hs, 0.45, 0.01), sk, k2.x - s * Math.sin(a1 + a2) * l2 * 0.5, k2.y - Math.cos(a1 + a2) * l2 * 0.5, fz, 0, 0, s * (a1 + a2));
+      box(fa, "D", AC.chrome2, s * 0.004, fy + 0.004, fz, 0.022 * hs, 0.012, 0.02 * hs, 0, 0, 0, 0.4); // knuckle cap
+      box(fa, "D", AC.rubber, k2.x - s * Math.sin(a1 + a2) * l2 * 0.85, k2.y - Math.cos(a1 + a2) * l2 * 0.85, fz, 0.012 * hs, 0.012 * hs, 0.012 * hs, 0, 0, s * (a1 + a2), 0.45); // finger pad
+    }
+    const ta = 0.5 + grip * 0.6; // the thumb opposes from the front of the palm
+    put(fa, "S", rbox(0.018 * hs, 0.04 * hs, 0.018 * hs, 0.45, 0.01), sk, -s * 0.018, -0.338, 0.045 * hs, ta, 0, s * 0.35);
+    put(fa, "S", rbox(0.016 * hs, 0.032 * hs, 0.016 * hs, 0.45, 0.01), sk, -s * 0.028, -0.362, 0.064 * hs, ta + 0.5, 0, s * 0.55);
+    // E: the bones of the arm
+    ell(ua, "E", AC.chrome2, 0, 0, 0, 0.045, 0.045, 0.045); cyl(ua, "E", AC.chrome, 0, -0.15, 0, 0.022, 0.27);
+    for (const [dx, dz, c] of [[0.03, 0.02, AC.red], [-0.025, 0.028, AC.blue], [0.0, -0.032, AC.graph]]) cyl(ua, "E", c, dx, -0.15, dz, 0.007, 0.26, 0, 0, 0, true);
+    cyl(ua, "E", AC.graph, s * 0.035, -0.15, -0.01, 0.012, 0.16, 0, 0, 0, true);
+    ell(fa, "E", AC.chrome2, 0, 0, 0, 0.036, 0.036, 0.036); cyl(fa, "E", AC.chrome, 0.012, -0.13, 0.012, 0.014, 0.25); cyl(fa, "E", AC.chrome, -0.012, -0.13, -0.012, 0.011, 0.25);
+    cyl(fa, "E", AC.graph, s * 0.03, -0.12, 0, 0.01, 0.18, 0, 0, 0, true);
+    box(fa, "E", AC.chrome2, 0, -0.32, 0, 0.018, 0.06, 0.06);
+    for (let f = 0; f < 3; f++) box(fa, "E", AC.chrome, -s * 0.01, -0.38, -0.022 + f * 0.022, 0.008, 0.06, 0.008, 0, 0, s * 0.6);
+  }
+  // ===== legs =====
+  for (const s of [-1, 1]) {
+    const th = s < 0 ? "thL" : "thR", sh = s < 0 ? "shL" : "shR", ft = s < 0 ? "ftL" : "ftR";
+    put(th, "H", aLimb(0.098, 0.086, 0.062, 0.4), sk, 0, 0, 0, 0, 0, 0, big * slim, 1, big * slim);
+    put(th, "U", aLimb(0.108, 0.096, 0.072, 0.41), pal.pants, 0, 0, 0, 0, 0, 0, big * slim, 1, big * slim);
+    ell(th, "U", pal.pants, 0, -0.4, 0.005, 0.066 * big, 0.066, 0.066 * big); // knee
+    box(th, "D", AC.graph, 0, -0.39, 0.06 * big, 0.06, 0.05, 0.02, -0.1, 0, 0, 0.45); // the knee cap plate
+    if (type === "brawler" || type === "shield") box(th, "U", pal.top2, s * 0.095 * big, -0.2, 0.01, 0.03, 0.12, 0.1); // cargo pocket or thigh pad
+    if (type === "gunman" && s > 0) { box(th, "U", AC.rubber, 0.105, -0.12, 0.0, 0.045, 0.16, 0.08); box(th, "D", AC.graph, 0.115, -0.05, 0.0, 0.03, 0.05, 0.06); } // holster
+    put(sh, "H", aLimb(0.064, 0.058, 0.044, 0.31), sk, 0, 0, 0, 0, 0, 0, big * slim, 1, big * slim);
+    put(sh, "U", aLimb(0.072, 0.064, 0.054, 0.26), pal.pants, 0, 0, 0, 0, 0, 0, big * slim, 1, big * slim);
+    const bootH = type === "worker" ? 0.06 : 0.12;
+    cyl(sh, "U", pal.boot, 0, -0.33 + bootH / 2, 0, 0.058 * big, bootH);
+    // the foot (origin at the ankle, sole at -0.07)
+    box(ft, "U", pal.boot, 0, -0.035, 0.045, 0.1 * big, 0.075, 0.25, 0, 0, 0, 0.35);
+    box(ft, "U", AC.rubber, 0, -0.064, 0.045, 0.104 * big, 0.016, 0.254, 0, 0, 0, 0.3);
+    ell(ft, "U", pal.boot, 0, -0.01, 0.0, 0.055 * big, 0.04, 0.06);
+    // E: leg bones, calf piston, ankle
+    ell(th, "E", AC.chrome2, 0, 0, 0, 0.055, 0.055, 0.055); cyl(th, "E", AC.chrome, 0, -0.2, 0, 0.028, 0.36);
+    for (const [dx, dz, c] of [[0.04, 0.02, AC.red], [-0.035, 0.03, AC.blue], [0.01, -0.04, AC.graph]]) cyl(th, "E", c, dx, -0.2, dz, 0.008, 0.36, 0, 0, 0, true);
+    ell(sh, "E", AC.chrome2, 0, 0, 0, 0.045, 0.045, 0.045); cyl(sh, "E", AC.chrome, 0, -0.16, 0.01, 0.022, 0.3); cyl(sh, "E", AC.chrome, 0.02, -0.16, -0.02, 0.011, 0.28);
+    cyl(sh, "E", AC.graph, 0, -0.12, -0.04, 0.016, 0.16, 0, 0, 0, true); cyl(sh, "E", AC.chrome, 0, -0.23, -0.04, 0.008, 0.14, 0, 0, 0, true);
+    box(ft, "E", AC.chrome2, 0, -0.045, 0.05, 0.08, 0.03, 0.2); ell(ft, "E", AC.chrome2, 0, 0, 0, 0.035, 0.035, 0.035);
+  }
+  // ===== uniform details per type =====
+  if (type === "gunman") {
+    box("chest", "U", pal.top2, 0, 0.06, 0.16, 0.02, 0.36, 0.012, 0, 0, 0, 0.5); // the zip placket
+    for (const s of [-1, 1]) box("chest", "U", pal.top2, s * 0.12, 0.16, 0.152, 0.1, 0.075, 0.03, -0.12, 0, 0, 0.35); // chest pockets
+    box("chest", "D", AC.gold, -0.12, 0.215, 0.168, 0.04, 0.012, 0.005); // name bar
+    box("chest", "D", AC.rubber, 0.2, 0.28, 0.08, 0.05, 0.07, 0.035, 0, 0, -0.3); // shoulder radio
+    put("chest", "D", AG.cylL, pal.acc, 0.03, 0.22, 0.163, -0.1, 0, 0.32, 0.004, 0.26, 0.004); put("chest", "D", AG.cylL, pal.acc, -0.03, 0.22, 0.163, -0.1, 0, -0.32, 0.004, 0.26, 0.004);
+    box("chest", "D", 0xe8ecf2, 0, 0.07, 0.175, 0.055, 0.075, 0.006); box("chest", "D", pal.acc, 0, 0.095, 0.179, 0.055, 0.016, 0.002);
+    box("pelvis", "U", AC.rubber, -0.17, -0.03, 0.08, 0.06, 0.07, 0.05); // mag pouch
+  } else if (type === "brawler") {
+    put("chest", "U", aBody(chestProf(1.06).slice(1, 6).map(([r, y]) => [r, y])), pal.top, 0, 0, 0, 0, 0, 0, big, 1, zs * 1.08); // the vest over the shirt
+    for (const x of [-0.12, 0, 0.12]) box("chest", "U", 0x30343c, x, -0.02, 0.17, 0.09, 0.12, 0.05, 0, 0, 0, 0.3); // pouches
+    for (const s of [-1, 1]) box("chest", "D", AC.graph, s * 0.2, 0.33, 0.0, 0.07, 0.025, 0.16, 0, 0, 0, 0.4); // vest straps
+    box("chest", "D", pal.acc, 0.13, 0.2, 0.18, 0.06, 0.025, 0.005);
+    box("pelvis", "U", AC.rubber, 0.18, -0.06, 0.06, 0.05, 0.12, 0.06); // baton loop and pouches
+  } else if (type === "shield") {
+    box("chest", "U", pal.top2, 0, 0.12, 0.155, 0.36, 0.34, 0.06, -0.05, 0, 0, 0.25); // chest plate
+    box("chest", "U", pal.top2, 0, -0.07, 0.15, 0.3, 0.1, 0.05, 0.1, 0, 0, 0.3);
+    box("chest", "D", pal.acc, 0, 0.24, 0.19, 0.14, 0.03, 0.006); // MERIDIAN band
+    box("chest", "U", pal.top2, 0, 0.1, -0.15, 0.36, 0.36, 0.05, 0.05, 0, 0, 0.25); // back plate
+    box("pelvis", "U", pal.top2, 0, -0.1, 0.12, 0.26, 0.14, 0.04, -0.1, 0, 0, 0.3); // groin guard
+    for (const s of [-1, 1]) { box("shL", "U", pal.top2, 0, -0.14, 0.055, 0.09, 0.18, 0.035, 0, 0, 0, 0.35); box("shR", "U", pal.top2, 0, -0.14, 0.055, 0.09, 0.18, 0.035, 0, 0, 0, 0.35); break; } // shin guards
+  } else if (type === "worker") {
+    box("chest", "U", pal.top2, 0, 0.06, 0.162, 0.016, 0.38, 0.008, 0, 0, 0, 0.5); // the button line
+    for (let i = 0; i < 4; i++) ell("chest", "D", 0xf2f2f2, 0, 0.27 - i * 0.1, 0.166, 0.006, 0.006, 0.003, 0, 0, 0, true);
+    if (v.tie && !v.coat) { box("chest", "U", 0x8a2a3a, 0, 0.1, 0.168, 0.045, 0.32, 0.01, 0, 0, 0, 0.5); box("chest", "U", 0x8a2a3a, 0, 0.3, 0.165, 0.035, 0.035, 0.02); }
+    if (v.coat) { for (const s of [-1, 1]) box("chest", "U", pal.top2, s * 0.09, 0.08, 0.155, 0.14, 0.42, 0.03, 0, 0, s * 0.05, 0.3); }
+    put("chest", "D", AG.cylL, pal.acc, 0.035, 0.22, 0.168, -0.1, 0, 0.3, 0.004, 0.25, 0.004); put("chest", "D", AG.cylL, pal.acc, -0.035, 0.22, 0.168, -0.1, 0, -0.3, 0.004, 0.25, 0.004);
+    box("chest", "D", 0xf4f4f6, 0, 0.075, 0.178, 0.05, 0.07, 0.005); box("chest", "D", pal.acc, 0, 0.098, 0.181, 0.05, 0.014, 0.002);
+  }
+  return S;
+}
+// ---------- merging ----------
+const AND_MODES = { game: { S: 1, U: 1, D: 1 }, skin: { S: 1, H: 1, D: 1 }, endo: { E: 1 } };
+function andMergeList(list, skin) {
+  const geo = lvMerge(list.map((x) => [x[0], x[1]]));
+  const n = geo.attributes.position.count, col = new Float32Array(n * 3), si = skin ? new Uint16Array(n * 4) : null, sw = skin ? new Float32Array(n * 4) : null;
+  const c = new THREE.Color(); let o = 0;
+  for (const x of list) { c.setHex(x[2]); const b = x[3], own = x[0].attributes.color; for (let i = 0; i < x[0].attributes.position.count; i++, o++) { if (own) { col[o * 3] = own.getX(i); col[o * 3 + 1] = own.getY(i); col[o * 3 + 2] = own.getZ(i); } else { col[o * 3] = c.r; col[o * 3 + 1] = c.g; col[o * 3 + 2] = c.b; } if (skin) { si[o * 4] = b; sw[o * 4] = 1; } } }
+  geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  if (skin) { geo.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(si, 4)); geo.setAttribute("skinWeight", new THREE.Float32BufferAttribute(sw, 4)); }
+  geo.computeBoundingSphere(); geo.userData.cached = true; geo.userData.rounded = true; geo.userData.min = 0.11;
+  return geo;
+}
+function andPlanFor(type, vi) { const key = type + vi; let p = AND.geo.get("plan" + key); if (!p) { p = andPlan(type, andVariant(type, vi)); AND.geo.set("plan" + key, p); } return p; }
+// the whole body for one skinned mesh: every segment moved to its bone's rest position
+function andGeoRig(type, vi, mode = "game") {
+  const key = `rig:${type}:${vi}:${mode}`; let g = AND.geo.get(key); if (g) return g;
+  const S = andPlanFor(type, vi), M2 = AND_MODES[mode], list = [];
+  for (const seg in AND_SEG) { const b = AND_SEG[seg], w = AND_BW[b]; const T = new THREE.Matrix4().makeTranslation(w[0], w[1], w[2]); for (const x of S[seg]) if (M2[x[3]]) list.push([x[0], T.clone().multiply(x[1]), x[2], b]); }
+  g = andMergeList(list, true); AND.geo.set(key, g); return g;
+}
+// one segment on its own (for ragdoll parts and halves), shifted by (ox, oy, oz)
+function andGeoSeg(type, vi, segs, mode = "game", oy = 0) {
+  const key = `seg:${type}:${vi}:${segs}:${mode}:${oy}`; let g = AND.geo.get(key); if (g) return g;
+  const S = andPlanFor(type, vi), M2 = AND_MODES[mode], list = [], T = new THREE.Matrix4().makeTranslation(0, oy, 0);
+  for (const seg of segs.split("+")) for (const x of S[seg]) if (M2[x[3]]) list.push([x[0], T.clone().multiply(x[1]), x[2], 0]);
+  g = andMergeList(list, false); AND.geo.set(key, g); return g;
+}
+function andMat(type) {
+  return (AND.mat[type] ||= toon(0xffffff, { vertexColors: true }));
+}
+AND.endoMat = metal(0xffffff, 0.3, { vertexColors: true, metalness: 0.85 });
+AND.gunMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.45, envMap: envTex, envMapIntensity: 0.8 });
+
+// ---------- weapons in their hands ----------
+function andRifleGeo() {
+  if (AND.rifle) return AND.rifle; const L = [];
+  const p = (geo, col, x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) => L.push([geo, _r7am4.compose(_r7av.set(x, y, z), _r7aq.setFromEuler(_r7ae.set(rx, ry, rz)), _r7as.set(sx, sy, sz)).clone(), col, 0]);
+  p(rbox(0.05, 0.07, 0.3, 0.3, 0.012), 0x4a4b57, 0, 0.05, 0.07); p(rbox(0.046, 0.05, 0.19, 0.3, 0.01), 0x5b5d6a, 0, 0.048, 0.29);
+  p(AG.cyl, 0x34353d, 0, 0.062, 0.45, Math.PI / 2, 0, 0, 0.012, 0.16, 0.012); p(AG.cyl, 0x2a2b31, 0, 0.062, 0.535, Math.PI / 2, 0, 0, 0.017, 0.035, 0.017);
+  p(rbox(0.034, 0.12, 0.05, 0.3, 0.01), 0x41424c, 0, -0.035, 0.12, 0.22, 0, 0); p(rbox(0.03, 0.085, 0.04, 0.35, 0.01), 0x2a2b31, 0, -0.03, -0.005, -0.28, 0, 0);
+  p(rbox(0.038, 0.06, 0.17, 0.3, 0.01), 0x41424c, 0, 0.038, -0.15); p(rbox(0.042, 0.075, 0.03, 0.3, 0.01), 0x2a2b31, 0, 0.03, -0.235);
+  p(rbox(0.026, 0.03, 0.07, 0.3, 0.008), 0x2a2b31, 0, 0.1, 0.09); p(AG.cylL, 0xff3048, 0, 0.1, 0.126, Math.PI / 2, 0, 0, 0.007, 0.004, 0.007);
+  p(rbox(0.02, 0.05, 0.03, 0.3, 0.008), 0x2a2b31, 0, 0.0, 0.3); // foregrip
+  AND.rifle = andMergeList(L, false); return AND.rifle;
+}
+function andBatonGeo() {
+  if (AND.baton) return AND.baton; const L = [];
+  const p = (geo, col, x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) => L.push([geo, _r7am4.compose(_r7av.set(x, y, z), _r7aq.setFromEuler(_r7ae.set(rx, ry, rz)), _r7as.set(sx, sy, sz)).clone(), col, 0]);
+  p(AG.cyl, 0x17181c, 0, 0, 0, 0, 0, 0, 0.018, 0.16, 0.018); p(AG.cyl, 0x2c2e36, 0, -0.22, 0, 0, 0, 0, 0.016, 0.3, 0.016);
+  for (let i = 0; i < 3; i++) p(AG.cylL, 0xffd24a, 0, -0.3 - i * 0.04, 0, 0, 0, 0, 0.018, 0.008, 0.018);
+  p(AG.cyl, 0x9aa2ae, 0, -0.39, 0, 0, 0, 0, 0.012, 0.03, 0.012);
+  AND.baton = andMergeList(L, false); return AND.baton;
+}
+// the visor: two rings of light round the eye glass and a seam across the brow (one small mesh, its own colour)
+function andVisorGeo(type) {
+  const key = "visor" + (type === "shield" ? "S" : "F"); let g = AND.geo.get(key); if (g) return g; const L = [];
+  const p = (geo, x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) => L.push([geo, _r7am4.compose(_r7av.set(x, y, z), _r7aq.setFromEuler(_r7ae.set(rx, ry, rz)), _r7as.set(sx, sy, sz)).clone(), 0xffffff, 0]);
+  if (type === "shield") { p(rbox(0.13, 0.018, 0.01, 0.4, 0.006), 0, 0.03, 0.142, 0, 0, 0); }
+  else { for (const s of [-1, 1]) p(aTorus(0.0125, 0.0028, Math.PI * 2, 4, 14), s * 0.036, 0.022, 0.093, 0, 0, 0); p(rbox(0.12, 0.0035, 0.004, 0.4, 0.002), 0, 0.064, 0.096, 0, 0, 0); }
+  g = andMergeList(L, false); AND.geo.set(key, g); return g;
+}
+const AND_VIS = { idle: new THREE.Color(0x9fb4c8), sus: new THREE.Color(0xffa63a), red: new THREE.Color(0xff2e48), hot: new THREE.Color(0xffd0d4), stun: new THREE.Color(0xffffff), buff: new THREE.Color(0xff8a20), broke: new THREE.Color(0x4aa8ff), civ: new THREE.Color(0x6fd8ff), off: new THREE.Color(0x07080a) };
+
+// ---------- the live rig ----------
+function andBuild(type) {
+  const vi = AND.n++ % 6, v = andVariant(type, vi);
+  const g = new THREE.Group(); const geo = andGeoRig(type, vi);
+  const body = new THREE.SkinnedMesh(geo, andMat(type)); body.castShadow = true; body.receiveShadow = false;
+  const bones = AND_BONES.map(([name]) => { const b = new THREE.Bone(); b.name = name; return b; });
+  AND_BONES.forEach(([, par, x, y, z], i) => { bones[i].position.set(x, y, z); if (par >= 0) bones[par].add(bones[i]); });
+  // children[0] of each of the old six joints marks the centre of that part, where the ragdoll body goes
+  const centre = { torso: 0, head: 0, armL: -0.32, armR: -0.32, legL: -0.4, legR: -0.4 };
+  const J = {}; AND_BONES.forEach(([name], i) => (J[name] = bones[i]));
+  for (const k in centre) { const m = new THREE.Object3D(); m.position.y = centre[k]; J[k].add(m); J[k].children.unshift(J[k].children.pop()); }
+  body.add(bones[0]); g.add(body); body.updateMatrixWorld(true); body.bind(new THREE.Skeleton(bones));
+  body.frustumCulled = true; body.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.95, 0), 1.35); body.computeBoundingSphere = () => {};
+  const hull = new THREE.SkinnedMesh(geo, hullMat(0.0075)); hull.bind(body.skeleton, body.bindMatrix); hull.raycast = () => {}; hull.castShadow = false;
+  hull.frustumCulled = true; hull.boundingSphere = body.boundingSphere; hull.computeBoundingSphere = () => {}; g.add(hull);
+  const vmat = new THREE.MeshBasicMaterial({ color: AND_VIS.idle.clone() });
+  const visor = new THREE.Mesh(andVisorGeo(type), vmat); J.head.add(visor);
+  const meshes = { torso: J.torso, head: J.head, armL: J.armL, armR: J.armR, legL: J.legL, legR: J.legR, visor };
+  const glow = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), M.red); glow.visible = false; meshes.glow = glow;
+  let gun = null;
+  if (type === "gunman") {
+    // the rifle rides the body, not the hand: it is shouldered and both hands reach for it
+    gun = new THREE.Mesh(andRifleGeo(), AND.gunMat); gun.castShadow = true; ink(gun); J.root.add(gun); glow.position.set(0, 0.062, 0.56); gun.add(glow);
+  } else if (type === "brawler" || type === "shield") {
+    gun = new THREE.Mesh(andBatonGeo(), AND.gunMat); ink(gun); gun.position.set(-0.005, -0.352, 0.02); gun.rotation.set(1.35, 0, 0); J.elbowR.add(gun); glow.position.set(0, -0.36, 0); gun.add(glow);
+  } else J.elbowR.add(glow);
+  g.scale.setScalar(v.h);
+  const A = { type, vi, v, body, hull, J, vmat, gun, hand: gun, sp: {}, face: 0, faceT: 0, headT: 0, headY: 0, headX: 0, look: 0, born: performance.now() };
+  return { group: g, meshes, and: A };
+}
+// a spring per joint: snappy, with a small overshoot that settles, like a servo
+function andSpring(A, k, target, dt, w = 34, z = 0.55) {
+  const s = (A.sp[k] ||= { x: target, v: 0 });
+  const f = -w * w * (s.x - target) - 2 * z * w * s.v; s.v += f * dt; s.x += s.v * dt; return s.x;
+}
+
+// ---------- ragdoll parts and halves ----------
+const AND_RAG = { torso: ["chest", 0, [["pelvis", 0, -0.13, 0]]], head: ["head+faceL+faceR", 0, []], armL: ["uaL", 0.32, [["faL", 0, 0.02, 0, "elbowL"]]], armR: ["uaR", 0.32, [["faR", 0, 0.02, 0, "elbowR"]]],
+  legL: ["thL", 0.4, [["shL", 0, 0, 0, "kneeL", [["ftL", 0, -0.33, 0, "ankleL"]]]]], legR: ["thR", 0.4, [["shR", 0, 0, 0, "kneeR", [["ftR", 0, -0.33, 0, "ankleR"]]]]] };
+function andSegMesh(A, segs, oy, kids, jointsOut) {
+  const m = new THREE.Mesh(andGeoSeg(A.type, A.vi, segs, "game", oy), andMat(A.type)); m.castShadow = segs !== "pelvis"; ink(m); m.userData.andSeg = segs; m.userData.andA = A;
+  for (const [seg, x, y, z, jn, sub] of kids || []) {
+    const j = new THREE.Group(); j.position.set(x, y, z); m.add(j);
+    if (jn && A.J[jn]) { j.rotation.copy(A.J[jn].rotation); jointsOut.push({ j, name: jn, x0: j.rotation.x, z0: j.rotation.z }); }
+    const c = andSegMesh(A, seg, 0, sub, jointsOut); j.add(c);
+  }
+  return m;
+}
+function andRagMesh(e, name) {
+  const A = e.and; if (!A || !AND_RAG[name]) return null; const [segs, oy, kids] = AND_RAG[name]; const joints = [];
+  const m = andSegMesh(A, segs, oy, kids, joints);
+  if (name === "head") { const vm = new THREE.MeshBasicMaterial({ color: 0xffffff }); const vz = new THREE.Mesh(andVisorGeo(A.type), vm); m.add(vz); m.userData.visor = vm; }
+  if (name === "armR" && A.gun && A.type !== "gunman") { const gg = A.gun.clone(); gg.children.length = 0; ink(gg); const el = joints.find((j) => j.name === "elbowR"); if (el) el.j.add(gg); }
+  m.userData.joints = joints; return m;
+}
+// a cut in half: the top keeps the chest, head and arms; the bottom keeps the hips and legs
+function andHalf(e, upper, g) {
+  const A = e.and; const add = (m, x, y, z, rot) => { m.position.set(x, y, z); if (rot) m.rotation.copy(rot); g.add(m); return m; };
+  const cy = 1.05; const J = [];
+  if (upper) {
+    add(andSegMesh(A, "chest", 0, [], J), 0, 1.15 - cy, 0, A.J.torso.rotation);
+    const h = add(andSegMesh(A, "head+faceL+faceR", 0, [], J), 0, 1.69 - cy, 0); const vz = new THREE.Mesh(andVisorGeo(A.type), new THREE.MeshBasicMaterial({ color: 0xffffff })); h.add(vz); h.userData.visor = vz.material;
+    for (const s of ["L", "R"]) { const piv = new THREE.Group(); piv.position.set(s === "L" ? -0.41 : 0.41, 1.46 - cy, 0); piv.rotation.copy(A.J["arm" + s].rotation); g.add(piv); const m = andSegMesh(A, "ua" + s, 0, [["fa" + s, 0, -0.3, 0, "elbow" + s]], J); piv.add(m); }
+  } else {
+    add(andSegMesh(A, "pelvis", 0, [], J), 0, 1.02 - cy, 0);
+    for (const s of ["L", "R"]) { const piv = new THREE.Group(); piv.position.set(s === "L" ? -0.15 : 0.15, 0.8 - cy, 0); piv.rotation.copy(A.J["leg" + s].rotation); g.add(piv); const m = andSegMesh(A, "th" + s, 0, [["sh" + s, 0, -0.4, 0, "knee" + s, [["ft" + s, 0, -0.33, 0, "ankle" + s]]]], J); piv.add(m); }
+  }
+  g.userData.joints = J; return g;
+}
+// the chrome skeleton for a torn segment (and its sub-segments), sized to the same body
+function andEndoFor(m) {
+  const A = m.userData.andA, segs = m.userData.andSeg; if (!A) return null;
+  const oy = segs === "uaL" || segs === "uaR" ? 0.32 : segs === "thL" || segs === "thR" ? 0.4 : 0;
+  const e = new THREE.Mesh(andGeoSeg(A.type, A.vi, segs, "endo", oy), AND.endoMat); e.userData.endo = true; e.scale.setScalar(0.985); return e;
+}
+// frozen corpses become one mesh: everything that is still plain skin and cloth is baked in place
+function andBake(rd) {
+  const list = [], drop = [], A = rd.andA;
+  for (const p of rd.parts) {
+    if (!p.mesh) continue; p.mesh.updateMatrixWorld(true);
+    p.mesh.traverse((o) => { if (o.isMesh && !o.isSkinnedMesh && o.geometry?.attributes?.color && (o.material === andMat(A.type) || o.material === AND.gunMat)) list.push([o.geometry, o.matrixWorld.clone(), o]); });
+  }
+  if (list.length < 3) return;
+  // merge with the colours each part already carries
+  const geo = lvMerge(list.map(([g, m]) => [g, m])); const n = geo.attributes.position.count, col = new Float32Array(n * 3); let o = 0;
+  for (const [g] of list) { const c = g.attributes.color.array; col.set(c.subarray(0, g.attributes.position.count * 3), o * 3); o += g.attributes.position.count; }
+  geo.setAttribute("color", new THREE.BufferAttribute(col, 3)); geo.userData.rounded = true; geo.userData.min = 0.11; geo.computeBoundingSphere();
+  const baked = new THREE.Mesh(geo, andMat(A.type)); baked.castShadow = true; ink(baked); levelGroup.add(baked);
+  // the parts stay in the tree (torn children, the skeleton underneath) but draw nothing themselves
+  AND.inv = AND.inv || new THREE.MeshBasicMaterial({ visible: false });
+  for (const [, , m] of list) { m.material = AND.inv; for (const c of m.children) if (c.material?.side === THREE.BackSide) c.visible = false; }
+  rd.baked = baked;
+}
+
+// ================= Round 7 · how the androids move =================
+// After the shared enemy update has swung the hips and shoulders, this pass does what a body does with them: knees fold
+// on the leg that swings, the foot that carries weight stays flat, the hips drop as the stride opens, elbows snap into
+// place on stiff springs and settle with a small wobble. A gunman aims with his shoulder and elbow and his other hand
+// stays on the foregrip; a brawler keeps his guard up and winds the baton back before a swing. Idle, they stand dead
+// still and the head moves in small steps, like a camera. The visor carries the state colour.
+const _r7ap = new THREE.Vector3(), _r7ad = new THREE.Vector3(), _r7ah = new THREE.Vector3(), _r7au = new THREE.Vector3(), _r7ax = new THREE.Vector3(), _r7ap2 = new THREE.Vector3();
+const _r7aq1 = new THREE.Quaternion(), _r7aq2 = new THREE.Quaternion(), _r7aY = new THREE.Vector3(0, 1, 0), _r7am1 = new THREE.Matrix4(), _r7am2 = new THREE.Matrix4();
+const AND_UA = 0.3, AND_FA = 0.335;
+// world point -> the body's own space (feet at 0, facing +z)
+function andToRig(e, w, out) { out.copy(w).sub(e.group.position).applyAxisAngle(_r7aY, -e.group.rotation.y).divideScalar(e.group.scale.x || 1); return out; }
+function andFromRig(e, r, out) { out.copy(r).multiplyScalar(e.group.scale.x || 1).applyAxisAngle(_r7aY, e.group.rotation.y).add(e.group.position); return out; }
+// twist q about axis so that q*v0 lands as close as it can to the direction `want`
+function andTwist(q, v0, axis, want) {
+  _r7au.copy(v0).applyQuaternion(q); _r7au.addScaledVector(axis, -_r7au.dot(axis)); _r7ax.copy(want).addScaledVector(axis, -want.dot(axis));
+  if (_r7au.lengthSq() < 1e-6 || _r7ax.lengthSq() < 1e-6) return q; _r7au.normalize(); _r7ax.normalize();
+  let a = Math.acos(THREE.MathUtils.clamp(_r7au.dot(_r7ax), -1, 1)); if (_r7ap2.copy(_r7au).cross(_r7ax).dot(axis) < 0) a = -a;
+  return q.premultiply(_r7aq2.setFromAxisAngle(axis, a));
+}
+// two-bone arm IK in rig space: the palm reaches `target`, the elbow points toward `pole`
+function andArmIK(A, side, target, pole, k, dt) {
+  const J = A.J, arm = side > 0 ? J.armR : J.armL, el = side > 0 ? J.elbowR : J.elbowL, sh = AND_BW[side > 0 ? 8 : 6];
+  _r7ad.set(target.x - sh[0], target.y - sh[1], target.z - sh[2]); const L = THREE.MathUtils.clamp(_r7ad.length(), 0.14, AND_UA + AND_FA - 0.004);
+  const cosE = (AND_UA * AND_UA + AND_FA * AND_FA - L * L) / (2 * AND_UA * AND_FA); const bend = Math.PI - Math.acos(THREE.MathUtils.clamp(cosE, -1, 1));
+  _r7ah.set(0, -AND_UA - AND_FA * Math.cos(bend), AND_FA * Math.sin(bend)).normalize(); _r7ad.normalize();
+  _r7aq1.setFromUnitVectors(_r7ah, _r7ad); andTwist(_r7aq1, _r7ap.set(0, -1, 0), _r7ad, pole);
+  if (k >= 1) arm.quaternion.copy(_r7aq1); else arm.quaternion.slerp(_r7aq1, k);
+  el.rotation.set(-andSpring(A, "el" + side, bend, dt, 40, 0.78), 0, 0);
+}
+// aim the right arm so the rifle's barrel points along `dir` (rig space), elbow at a fixed bend
+function andAimArm(A, dir, eb, k, dt) {
+  const J = A.J, gb = 1.8 - eb;
+  _r7ah.set(0, -Math.sin(gb), Math.cos(gb)); _r7aq1.setFromUnitVectors(_r7ah, dir);
+  andTwist(_r7aq1, _r7ap.set(0, Math.cos(gb), Math.sin(gb)), dir, _r7aY);
+  J.armR.quaternion.slerp(_r7aq1, k); J.elbowR.rotation.set(-andSpring(A, "elR", eb, dt, 40, 0.78), 0, 0);
+}
+// where a point on the rifle is in rig space right now (the rifle hangs off the root bone)
+function andGunPoint(A, local, out) { A.gun.updateMatrix(); return out.copy(local).applyMatrix4(A.gun.matrix); }
+// set the rifle: its butt at `butt`, the barrel along `dir`, kept upright
+const _r7mx = new THREE.Matrix4(), _r7bx = new THREE.Vector3(), _r7by = new THREE.Vector3(), AND_BUTT = new THREE.Vector3(0, 0.035, -0.25);
+function andPlaceGun(A, butt, dir, k) {
+  _r7bx.crossVectors(_r7aY, dir); if (_r7bx.lengthSq() < 1e-5) _r7bx.set(1, 0, 0); _r7bx.normalize(); _r7by.crossVectors(dir, _r7bx);
+  _r7mx.makeBasis(_r7bx, _r7by, dir); _r7aq1.setFromRotationMatrix(_r7mx);
+  if (k >= 1) A.gun.quaternion.copy(_r7aq1); else A.gun.quaternion.slerp(_r7aq1, k);
+  A.gun.position.copy(butt).sub(_r7au.copy(AND_BUTT).applyQuaternion(A.gun.quaternion));
+}
+const AND_GRIP = new THREE.Vector3(0.012, -0.045, 0.0), AND_SHPOCKET = new THREE.Vector3(0.3, 1.38, 0.07);
+// a rifle in both hands: shouldered and aimed (dir), or at low ready across the body
+function andRifle(A, aiming, dir, k, dt) {
+  if (aiming) andPlaceGun(A, AND_SHPOCKET, dir, k);
+  else { _r7ap2.set(0.2, 1.08, 0.02); andPlaceGun(A, _r7ap2, dir, k); }
+  andGunPoint(A, AND_GRIP, _r7ap); andArmIK(A, 1, _r7ap, AND_POLE_R, 1, dt);
+  andGunPoint(A, AND_FOREGRIP, _r7ap); _r7ap.x -= 0.012; andArmIK(A, -1, _r7ap, AND_POLE_L, 1, dt);
+}
+const AND_FOREGRIP = new THREE.Vector3(0.0, 0.0, 0.3), AND_POLE_L = new THREE.Vector3(-0.7, -0.6, -0.25), AND_POLE_R = new THREE.Vector3(0.7, -0.6, -0.3);
+function andStep(dt) {
+  if (dt <= 0) return;
+  for (const e of enemies) if (e.and && !e.dead) { try { andPose(e, dt); } catch (err) { if (!AND.warned) { AND.warned = 1; console.warn(err); } } }
+  andCorpses(dt); andLeaks(dt);
+}
+function andPose(e, dt) {
+  const A = e.and, J = A.J, m = e.meshes, T = state.time;
+  // ---- the visor ----
+  let col = AND_VIS.idle, k = 0.5 + 0.7 * Math.pow(Math.max(0, Math.sin((T + A.vi * 0.7) * (Math.PI * 2 / 3))), 12);
+  if (e.T.civ) { col = e.alert ? AND_VIS.sus : AND_VIS.civ; k = e.alert ? 0.7 : 0.22; }
+  else if (e.stun > 0 || e.flinch > 0) { const on = Math.random() < 0.6; col = on ? AND_VIS.stun : AND_VIS.off; k = on ? 1.5 : 1; }
+  else if (e.yielded) { col = AND_VIS.broke; k = 0.8; }
+  else if (e.tele > 0) { col = AND_VIS.red; k = 1.6 + 1.4 * (1 - e.tele / 0.55); }
+  else if (e.alert) { col = AND_VIS.red; k = 1.4; }
+  else if ((e.sus || 0) > 0.35) { col = AND_VIS.sus; k = 0.9 + 0.5 * Math.sin(T * 9); }
+  A.vmat.color.copy(col).multiplyScalar(k);
+  // ---- the mask splits the first time it sees you (riot units wear a helmet instead) ----
+  const wantFace = e.alert && !e.T.civ && A.type !== "shield" && !e.dummy ? 1 : 0;
+  if (wantFace && !A.faceOpened) { A.faceOpened = true; if (playerPos().distanceTo(e.group.position) < 18) { tone("square", 1200, 500, 0.06, 0.012); noise(0.12, "bandpass", 2600, 0.05, 3, 900); } }
+  A.face += (wantFace - A.face) * Math.min(1, dt * (wantFace ? 7 : 3));
+  J.faceL.position.set(-0.012 * A.face, 0, -0.006 * A.face); J.faceL.rotation.y = -0.22 * A.face;
+  J.faceR.position.set(0.012 * A.face, 0, -0.006 * A.face); J.faceR.rotation.y = 0.22 * A.face;
+  const held = e.mf || e.posed || e.finishing || (state.fin && state.fin.e === e);
+  if (held) {
+    for (const [k2, j] of [["kL", J.kneeL], ["kR", J.kneeR]]) j.rotation.x = andSpring(A, k2, 0.15, dt, 20, 0.9);
+    for (const [k2, j] of [["eL", J.elbowL], ["eR", J.elbowR]]) j.rotation.x = -andSpring(A, k2, 0.35, dt, 20, 0.9);
+    J.ankleL.rotation.x = J.ankleR.rotation.x = 0; return;
+  }
+  // ---- legs: knees, ankles, the hips dropping as the stride opens ----
+  const sp = e.vel.length(), amp = Math.min(1, sp / 3), run = THREE.MathUtils.clamp((sp - 4.2) / 1.5, 0, 1);
+  const c = Math.cos(e.walk), hL = m.legL.rotation.x, hR = m.legR.rotation.x;
+  let kL = 0.05 + amp * (0.1 + (1.0 + 0.6 * run) * Math.max(0, -c)), kR = 0.05 + amp * (0.1 + (1.0 + 0.6 * run) * Math.max(0, c));
+  // crouched (a cowering worker): thighs forward, knees fold the shins back under
+  if (hL < -0.45 && amp < 0.3) kL = Math.min(2.3, -hL * 2.0); if (hR < -0.45 && amp < 0.3) kR = Math.min(2.3, -hR * 2.0);
+  const wL = THREE.MathUtils.clamp(0.5 + c * 2, 0, 1), wR = 1 - wL;
+  J.kneeL.rotation.x = kL; J.kneeR.rotation.x = kR;
+  J.ankleL.rotation.x = -(hL + kL) * (0.5 + 0.5 * (amp < 0.1 ? 1 : wL)); J.ankleR.rotation.x = -(hR + kR) * (0.5 + 0.5 * (amp < 0.1 ? 1 : wR));
+  const legH = (h, kk) => 0.4 * Math.cos(h) + 0.33 * Math.cos(h + kk) + 0.07;
+  const drop = Math.max(0, 0.8 - Math.max(legH(hL, kL), legH(hR, kR))) * (e.group.scale.x || 1);
+  if (e.rCur && !e.T.flying) { e.rCur.y = e.floorY - drop; e.group.position.y = Math.min(e.group.position.y, e.rCur.y + 0.001); }
+  if (e.blob) e.blob.position.y = 0.025 + drop;
+  // ---- arms ----
+  const swing = Math.sin(e.walk) * amp;
+  const relaxEl = (side, x) => { const want = 0.18 + amp * 0.25 + run * 1.0 + Math.max(0, -x) * 0.5; (side > 0 ? J.elbowR : J.elbowL).rotation.x = -andSpring(A, side > 0 ? "elR" : "elL", want, dt, 32, 0.75); };
+  if (A.type === "gunman" && A.gun) {
+    // aim (alert) or low ready (patrol, stunned), the left hand glued to the foregrip
+    const aiming = e.alert && !(e.stun > 0) && !e.dummy;
+    if (aiming) { andToRig(e, _r7ap.copy(playerPos()).add(_r7ah.set(0, P.eye - 0.1, 0)), _r7ad); _r7ad.sub(AND_SHPOCKET); _r7ad.normalize(); if (e.flinch > 0) _r7ad.y += 0.9 * Math.min(1, e.flinch * 4); }
+    else _r7ad.set(-0.3, -0.5 + 0.03 * swing, 0.81);
+    _r7ad.normalize(); A.aim ||= _r7ad.clone(); A.aim.lerp(_r7ad, 1 - Math.exp(-dt * (aiming ? 14 : 6))).normalize();
+    andRifle(A, aiming, A.aim, 1, dt);
+  } else if (A.type === "brawler" || A.type === "shield") {
+    const guard = e.alert && !(e.stun > 0);
+    if (A.type === "brawler") { m.armL.rotation.z = -0.12; if (guard) { J.elbowL.rotation.x = -andSpring(A, "elL", 1.55, dt, 34, 0.72); } else relaxEl(-1, m.armL.rotation.x); }
+    else { const up = e.shUp ?? 1; J.elbowL.rotation.x = -andSpring(A, "elL", 0.35 + 1.25 * up, dt, 30, 0.8); }
+    m.armR.rotation.z = 0.12;
+    let eb; if (e.tele > 0) eb = 0.4 + 1.6 * (e.tele / 0.55); else if (guard) eb = 0.95; else eb = 0.18 + amp * 0.3 + run;
+    J.elbowR.rotation.x = -andSpring(A, "elR", eb, dt, e.tele > 0 ? 46 : 34, 0.72);
+  } else {
+    // workers: loose arms; cowering, the hands come up over the head
+    const cower = m.armL.rotation.x < -2;
+    m.armL.rotation.z = -0.06; m.armR.rotation.z = 0.06;
+    if (cower) { J.elbowL.rotation.x = -andSpring(A, "elL", 2.1, dt, 26, 0.8); J.elbowR.rotation.x = -andSpring(A, "elR", 2.1, dt, 26, 0.8); }
+    else { relaxEl(-1, m.armL.rotation.x); relaxEl(1, m.armR.rotation.x); }
+  }
+  // ---- the head: still, then a small step, then still again ----
+  if (!e.alert && amp < 0.2 && !e.T.civ) {
+    if ((A.headT -= dt) <= 0) { A.headT = 0.6 + Math.random() * 1.2; A.headY = Math.round((Math.random() - 0.5) * 1.1 * 10) / 10; A.headX = Math.round((Math.random() - 0.5) * 0.3 * 10) / 10; if (Math.random() < 0.3) A.headY = 0; }
+  } else { A.headY = 0; A.headX = 0; }
+  m.head.rotation.y = andSpring(A, "hy", A.headY, dt, 46, 0.86);
+  if (!(e.flinch > 0)) m.head.rotation.x += (A.headX - m.head.rotation.x) * Math.min(1, dt * 10);
+}
+
+// ================= Round 7 · violence without blood =================
+// Androids bleed coolant (milky blue-white, in pressurised spurts that weaken with each pump) and hydraulic oil (black,
+// slow, from the joints). Every hit lands on several channels at once: sparks sized to the damage, a puff of steam from
+// the chest, bolts and plates that stay on the floor; a kill adds a white flash at the screen edges, a low thump, smoke
+// out of the neck, and the visor going white then dead. Corpses keep twitching, sparking and leaking for a while.
+// Settings > Violence: Gore (Full, Sparks only, Off) and the coolant colour (blue, white, off).
+const AND_COOL = { blue: 0xa8ecff, white: 0xf2f6ff };
+function andGore() { return SET.gore || "full"; }
+function andCoolCol() { return SET.coolant === "off" || andGore() !== "full" ? 0 : AND_COOL[SET.coolant] || AND_COOL.blue; }
+const AND_PART_GEO = (() => { const c = (g) => { g.userData.cached = true; return g; };
+  return { bolt: c(new THREE.CylinderGeometry(0.008, 0.008, 0.035, 6)), plate: c(new RoundedBoxGeometry(0.07, 0.008, 0.05, 1, 0.003)), shard: c(new THREE.TetrahedronGeometry(0.018)), chip: c(new THREE.BoxGeometry(0.03, 0.012, 0.02)) }; })();
+const AND_PART_MAT = { bolt: null, plate: null, shard: null };
+function andDebris(at, dir, n, kind) {
+  if (andGore() === "off") return;
+  AND_PART_MAT.bolt ||= metal(0x9aa2ae, 0.35); AND_PART_MAT.plate ||= toon(0x5d6470); AND_PART_MAT.shard ||= new THREE.MeshBasicMaterial({ color: 0xff3d5a });
+  for (let i = 0; i < n; i++) {
+    const k = kind || (Math.random() < 0.6 ? "bolt" : "plate");
+    const m = new THREE.Mesh(AND_PART_GEO[k] || AND_PART_GEO.chip, AND_PART_MAT[k] || AND_PART_MAT.bolt); m.castShadow = false;
+    const v = new THREE.Vector3((Math.random() - 0.5) * 3, 1.5 + Math.random() * 2.5, (Math.random() - 0.5) * 3).addScaledVector(dir, 2 + Math.random() * 2);
+    addDebris(m, at.clone(), v, 14 + Math.random() * 8, true);
+  }
+}
+// where on the body a hit landed, from its height and offset in the body's own space
+function andRegion(e, at) { const r = andToRig(e, at, _r7ap); return r.y > 1.5 ? "head" : r.y > 0.8 ? (Math.abs(r.x) > 0.34 ? "arm" : "torso") : "leg"; }
+const AND_HEAVY = { kick: 1, heavy: 1, breacher: 1, rail: 1, explosion: 1, gauntlet: 1, lance: 1, thrust: 1, breach: 1 };
+function andHit(e, dmg, at, dir, kind) {
+  if (!e.and || !at) return; const g = andGore(), heavy = !!AND_HEAVY[kind] || dmg >= 1.5;
+  const d = (dir || _r7ad.set(0, 0, 1)).clone().setY(0); if (d.lengthSq() < 1e-4) d.set(0, 0, 1); d.normalize();
+  // sparks sized to the hit: a headshot bursts out of the back of the head
+  const reg = andRegion(e, at);
+  emitWorldSparks(at, d.clone().negate().add(_r7ah.set(0, 0.4, 0)).normalize(), Math.round(6 + Math.min(3, dmg) * 8), 0, 5 + Math.min(3, dmg) * 2);
+  if (reg === "head") emitWorldSparks(at.clone().addScaledVector(d, 0.14), d, 10 + Math.round(dmg * 6), 0, 8);
+  if (g === "off") return;
+  if (heavy) andDebris(at, d.clone().negate(), 1 + (Math.random() < 0.5 ? 1 : 0));
+  if (g !== "full") return;
+  const col = andCoolCol();
+  if (col) { // coolant: a spurt now and a few weaker pumps after, from the same spot on the body
+    const lp = andToRig(e, at, new THREE.Vector3()); const out = d.clone().negate();
+    (e.leaks ||= []).push({ lp, out: out.applyAxisAngle(_r7aY, -e.group.rotation.y), n: heavy ? 5 : 3, t: 0.4, k: heavy ? 1.3 : 1, col });
+    if (e.leaks.length > 4) e.leaks.shift();
+    andSpurt(e, at, d.clone().negate(), heavy ? 1.3 : 1, col);
+  }
+  if (reg === "torso" && Math.random() < 0.7) worldSmoke(at, 2, 0.12, 0xe8eef4, 0.28, 0.32, _r7ah.set(0, 1, 0).addScaledVector(d, -0.6));
+  if ((reg === "arm" || reg === "leg") && (heavy || Math.random() < 0.4)) (e.oil ||= []).push({ lp: andToRig(e, at, new THREE.Vector3()), n: 10, t: 0.2 });
+}
+function andSpurt(e, at, dir, k, col) {
+  const fy = e.floorY ?? at.y - 1;
+  e.pud ||= p5Puddle(at, fy, col, 0.45, 0.6);
+  p5Burst(at, Math.round(6 * k), col, dir.clone().add(_r7ah.set(0, 0.35, 0)), 2.6 * k, 0.55, fy, e.pud, 1.1);
+}
+// pumps from open wounds on the living, and oil from damaged joints
+function andLeaks(dt) {
+  for (const e of enemies) {
+    if (e.dead || !e.and) continue;
+    if (e.leaks) for (let i = e.leaks.length - 1; i >= 0; i--) {
+      const L = e.leaks[i]; if ((L.t -= dt) > 0) continue; L.t = 0.4; L.n--; L.k *= 0.68;
+      if (L.n <= 0) { e.leaks.splice(i, 1); continue; }
+      andFromRig(e, L.lp, _r7ap); const dir = L.out.clone().applyAxisAngle(_r7aY, e.group.rotation.y); andSpurt(e, _r7ap, dir, L.k, L.col);
+    }
+    if (e.oil) for (let i = e.oil.length - 1; i >= 0; i--) {
+      const O = e.oil[i]; if ((O.t -= dt) > 0) continue; O.t = 0.25 + Math.random() * 0.3; if (--O.n <= 0) { e.oil.splice(i, 1); continue; }
+      andFromRig(e, O.lp, _r7ap); p5Drop(_r7ap, _r7ah.set((Math.random() - 0.5) * 0.2, -0.3, (Math.random() - 0.5) * 0.2), 0x0b0b0e, e.floorY ?? _r7ap.y - 1, 1.3, null);
+    }
+  }
+}
+// ---------- the kill ----------
+function andKillFx(e, at, dir, finisher) {
+  const g = andGore(), rd = e.rd; const head = rd && rd.parts.find((p) => p.mesh?.userData?.visor);
+  const d = (dir || _r7ad.set(0, 0, 1)).clone(); d.y = 0; if (d.lengthSq() < 1e-4) d.set(0, 0, 1); d.normalize();
+  if (rd) { rd.andA = e.and; rd.tw = { until: state.time + 10 + Math.random() * 10, next: 0.45 + Math.random() * 0.5 }; rd.andDie = state.time; rd.leakN = andCoolCol() ? 8 : 0; rd.leakCol = andCoolCol(); rd.floorY = e.floorY; }
+  // a gunman's rifle clatters to the floor
+  if (e.and.type === "gunman" && e.and.gun) try { e.group.updateMatrixWorld(true); const gp = e.and.gun.getWorldPosition(new THREE.Vector3()); const gm = new THREE.Mesh(e.and.gun.geometry, AND.gunMat); ink(gm); gm.quaternion.copy(e.and.gun.getWorldQuaternion(new THREE.Quaternion())); addDebris(gm, gp, d.clone().multiplyScalar(1.5).add(_r7ah.set(0, 1.5, 0)), 40, true); } catch {}
+  const hp = head ? head.body.translation() : null;
+  const headKill = at && hp && at.y > hp.y - 0.25;
+  if (headKill && g !== "off") { const p = new THREE.Vector3(hp.x, hp.y - 0.1, hp.z); worldSmoke(p, 4, 0.18, 0x5e626b, 0.38, 0.5, _r7ah.set(0, 1, 0)); andDebris(p, d, 3, "shard"); }
+  if (g !== "off") andDebris(at || e.group.position.clone().setY(e.floorY + 1.1), d, 2 + (finisher ? 3 : 0));
+  // the confirmation is the body: a white flash at the edges and a thump under everything
+  andEdgeFlash(finisher ? 1 : 0.55); tone("sine", 74, 38, finisher ? 0.32 : 0.2, finisher ? 0.34 : 0.22); noise(0.18, "lowpass", 380, 0.25, 1, 90);
+  tone("sawtooth", 520, 90, 0.28, 0.03, 0.05); // the power-down whine
+  if (hitstopT < 0.066) hitstop(0.066);
+  if (finisher) andSilence();
+}
+// after a finisher's final hit, 0.2 s of near silence before the sound comes back
+function andSilence() {
+  if (!actx || !master) return; const g = master.gain, t = actx.currentTime, v = SET.vol;
+  try { g.cancelScheduledValues(t); g.setValueAtTime(v, t); g.setValueAtTime(v, t + 0.14); g.linearRampToValueAtTime(v * 0.05, t + 0.17); g.setValueAtTime(v * 0.05, t + 0.37); g.linearRampToValueAtTime(v, t + 0.75); } catch {}
+  if (hitstopT < 0.16) hitstop(0.16);
+}
+function andEdgeFlash(k) {
+  let el = $("andkill");
+  if (!el) {
+    el = document.createElement("div"); el.id = "andkill"; document.body.appendChild(el);
+    const st = document.createElement("style"); st.textContent = `#andkill{position:fixed;inset:0;pointer-events:none;z-index:9;opacity:0;background:radial-gradient(ellipse at center,rgba(255,255,255,0) 52%,rgba(255,250,240,.55) 100%);transition:opacity .35s ease-out}#andkill.on{transition:none}`;
+    document.head.appendChild(st);
+  }
+  el.classList.add("on"); el.style.opacity = String(Math.min(1, k)); requestAnimationFrame(() => requestAnimationFrame(() => { el.classList.remove("on"); el.style.opacity = "0"; }));
+}
+// ---------- corpses: twitch, spark, leak; the visor whites out then dies ----------
+function andCorpses(dt) {
+  for (const rd of ragdolls) {
+    if (!rd.andA) continue; const age = state.time - (rd.andDie ?? rd.born);
+    // limp joints: held for a beat (the powered fall), then they let go
+    for (const p of rd.parts) {
+      const J = p.mesh?.userData?.joints; if (!J) continue;
+      if (age > 0.35) for (const j of J) {
+        const tgt = j.name.startsWith("elbow") ? -0.55 : j.name.startsWith("knee") ? 0.35 : 0.2; j.j.rotation.x += (tgt - j.j.rotation.x) * Math.min(1, dt * 2.4); j.j.rotation.z *= 1 - Math.min(1, dt * 2);
+      }
+      const vm = p.mesh.userData.visor;
+      if (vm) { const f = age < 0.06 ? 2.2 : age < 0.3 ? 2.2 * (1 - (age - 0.06) / 0.24) : age < 1.6 && Math.random() < 0.08 ? 0.8 : 0; vm.color.setRGB(f, f * 0.96, f * 0.92); }
+    }
+    const tw = rd.tw; if (!tw || state.time > tw.until || andGore() === "off") continue;
+    if ((tw.next -= dt) > 0) continue; tw.next = 0.6 + Math.random() * 1.5 + age * 0.05;
+    const p = rd.parts[(Math.random() * rd.parts.length) | 0]; if (!p?.body) continue;
+    let t; try { t = p.body.translation(); } catch { continue; }
+    const at = new THREE.Vector3(t.x, t.y, t.z), m = p.body.mass();
+    try { p.body.applyImpulse({ x: (Math.random() - 0.5) * 0.8 * m, y: (0.6 + Math.random() * 0.8) * m, z: (Math.random() - 0.5) * 0.8 * m }, true); } catch {}
+    const J = p.mesh?.userData?.joints; if (J && J.length) { const j = J[(Math.random() * J.length) | 0]; j.j.rotation.x += (Math.random() - 0.5) * 1.2; }
+    emitWorldSparks(at, _r7ah.set(0, 1, 0), 8, 0, 4); if (playerPos().distanceTo(at) < 14) { noise(0.06, "bandpass", 3200, 0.06, 4, 1800); tone("square", 180 + Math.random() * 120, 60, 0.07, 0.015); }
+    if (rd.leakN > 0 && andGore() === "full") { rd.leakN--; const tp = rd.torso.translation(); p5Burst(new THREE.Vector3(tp.x, tp.y + 0.1, tp.z), 3, rd.leakCol, _r7ah.set(0, 0.6, 0), 1.2, 0.8, rd.floorY ?? tp.y - 0.3, null, 1); }
+  }
+}
+// shooting a corpse makes it jolt and spark
+function andCorpseHit(rd, at, d) {
+  if (!rd?.andA || andGore() === "off") return; emitWorldSparks(at, d.clone().negate(), 12, 0, 6);
+  const p = rd.parts.find((q) => q.mesh?.userData?.joints?.length); const J = p?.mesh?.userData?.joints; if (J) J[(Math.random() * J.length) | 0].j.rotation.x += (Math.random() - 0.5) * 1.5;
+  if (andGore() === "full" && rd.leakCol) p5Burst(at, 4, rd.leakCol, d.clone().negate(), 1.6, 0.5, rd.floorY ?? at.y - 1, null, 1);
+}
+
+// ================= Round 7 · testing ground: the robot viewer =================
+// Four turntables in the east of the grid: gunman, brawler, riot shield, worker. Cycle the layers (uniform, skin under
+// the clothes, the bare endoskeleton), and pose them: rest, a walk cycle, an aim, or a sweep of every joint to its limit.
+const AVIEW = { list: [], layer: "game", pose: "rest", lim: 0.5, spin: true, at: new THREE.Vector3(48, 0, 40) };
+const AVIEW_TYPES = [["gunman", "Security gunman"], ["brawler", "Security brawler"], ["shield", "Riot shield"], ["worker", "Night-shift worker"]];
+function andViewRig(type, vi) {
+  const g = new THREE.Group();
+  const bones = AND_BONES.map(([name]) => { const b = new THREE.Bone(); b.name = name; return b; });
+  AND_BONES.forEach(([, par, x, y, z], i) => { bones[i].position.set(x, y, z); if (par >= 0) bones[par].add(bones[i]); });
+  const J = {}; AND_BONES.forEach(([name], i) => (J[name] = bones[i]));
+  const layers = {}; let skel = null, bindM = null;
+  for (const mode of ["game", "skin", "endo"]) {
+    const m = new THREE.SkinnedMesh(andGeoRig(type, vi, mode), mode === "endo" ? AND.endoMat : andMat(type)); m.castShadow = true;
+    if (!skel) { m.add(bones[0]); g.add(m); m.updateMatrixWorld(true); skel = new THREE.Skeleton(bones); m.bind(skel); bindM = m.bindMatrix; } else { g.add(m); m.bind(skel, bindM); }
+    m.frustumCulled = false; layers[mode] = m;
+    if (mode !== "endo") { const h = new THREE.SkinnedMesh(m.geometry, hullMat(0.0075)); h.bind(skel, bindM); h.frustumCulled = false; m.userData.hull = h; g.add(h); }
+  }
+  const vmat = new THREE.MeshBasicMaterial({ color: (type === "worker" ? AND_VIS.civ.clone().multiplyScalar(0.3) : AND_VIS.red.clone().multiplyScalar(1.4)) }); const visor = new THREE.Mesh(andVisorGeo(type), vmat); J.head.add(visor);
+  let gun = null;
+  if (type === "gunman") { gun = new THREE.Mesh(andRifleGeo(), AND.gunMat); ink(gun); J.root.add(gun); }
+  else if (type !== "worker") { gun = new THREE.Mesh(andBatonGeo(), AND.gunMat); ink(gun); gun.position.set(-0.005, -0.352, 0.02); gun.rotation.set(1.35, 0, 0); J.elbowR.add(gun); }
+  return { g, J, layers, visor, gun, A: { type, vi, J, sp: {}, gun } };
+}
+// a name card floating over each turntable
+function andViewLabel(text, x, y, z) {
+  const c = document.createElement("canvas"); c.width = 512; c.height = 96; const g = c.getContext("2d");
+  g.font = "600 40px 'Chakra Petch', sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "rgba(10,11,15,0.75)"; g.fillRect(0, 14, 512, 68);
+  g.fillStyle = "#ffb070"; g.fillText(text.toUpperCase(), 256, 50);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.45), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false })); m.position.set(x, y, z); m.rotation.y = Math.PI; return m;
+}
+function andViewBuild() {
+  AVIEW.list.length = 0; const c = AVIEW.at;
+  // the stage: a dark plinth with a ring of light, one per model, and a back wall to read silhouettes against
+  fixedBox(c.x, 0.04, c.z + 0.2, 17, 0.08, 6, M.roboDark, { shadow: false });
+  fixedBox(c.x, 2.2, c.z + 3.4, 17, 4.4, 0.3, M.concrete);
+  fixedBox(c.x, 4.45, c.z + 3.2, 17, 0.08, 0.3, M.amber, { noCollide: true, shadow: false, ink: false });
+  // one warm key light over the stage (testing ground only)
+  const key = new THREE.PointLight(0xfff0e0, 26, 15, 1.4); key.position.set(c.x, 4.2, c.z - 3.2); levelGroup.add(key);
+  const rim = new THREE.PointLight(0x6fd8ff, 12, 10, 1.6); rim.position.set(c.x, 3.2, c.z + 2.6); levelGroup.add(rim);
+  AVIEW_TYPES.forEach(([type, name], i) => {
+    const x = c.x + 6 - i * 4;
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.05, 0.08, 32), M.gun); disc.position.set(x, 0.12, c.z); levelGroup.add(disc);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.03, 0.012, 4, 48), M.cyan); ring.rotation.x = Math.PI / 2; ring.position.set(x, 0.165, c.z); levelGroup.add(ring);
+    const R = andViewRig(type, i + 1); R.g.position.set(x, 0.16, c.z); levelGroup.add(R.g);
+    levelGroup.add(andViewLabel(name, x, 2.6, c.z));
+    AVIEW.list.push({ ...R, x, disc, ring, yaw: Math.PI + Math.PI * 0.15 * (i - 1.5) });
+  });
+  andViewApply();
+}
+function andViewApply() { for (const R of AVIEW.list) for (const k in R.layers) { const on = k === AVIEW.layer; R.layers[k].visible = on; if (R.layers[k].userData.hull) R.layers[k].userData.hull.visible = on && k === "game"; } for (const R of AVIEW.list) { R.visor.visible = AVIEW.layer !== "endo"; if (R.gun) R.gun.visible = AVIEW.layer !== "endo"; } }
+function andViewStep(dt) {
+  if (!AVIEW.list.length || state.mode !== "test") return; const t = state.time;
+  if (playerPos().distanceTo(AVIEW.at) > 40) return;
+  for (const R of AVIEW.list) {
+    const J = R.J, A = R.A; if (AVIEW.spin) R.yaw += dt * 0.35; R.g.rotation.y = R.yaw; R.disc.rotation.y = R.yaw;
+    for (const b of Object.values(J)) if (b.name !== "root") b.quaternion.identity();
+    J.faceL.position.set(0, 0, 0); J.faceR.position.set(0, 0, 0);
+    if (AVIEW.pose === "walk") {
+      const w = t * 5.2, sw = Math.sin(w) * 0.55, c = Math.cos(w);
+      J.legL.rotation.x = sw; J.legR.rotation.x = -sw; const kL = 0.08 + 1.05 * Math.max(0, -c), kR = 0.08 + 1.05 * Math.max(0, c);
+      J.kneeL.rotation.x = kL; J.kneeR.rotation.x = kR; J.ankleL.rotation.x = -(sw + kL) * 0.8; J.ankleR.rotation.x = -(-sw + kR) * 0.8;
+      J.armL.rotation.x = -sw * 0.6; J.armR.rotation.x = sw * 0.6; J.elbowL.rotation.x = -0.3 - Math.max(0, sw) * 0.4; J.elbowR.rotation.x = -0.3 - Math.max(0, -sw) * 0.4;
+      R.g.position.y = 0.16 - Math.max(0, 0.8 - (0.4 * Math.cos(Math.abs(sw)) + 0.33 * Math.cos(Math.abs(sw)) + 0.07)) * 0.85;
+    } else if (AVIEW.pose === "aim") {
+      R.g.position.y = 0.16; J.faceL.position.set(-0.012, 0, -0.006); J.faceR.position.set(0.012, 0, -0.006); J.faceL.rotation.y = -0.22; J.faceR.rotation.y = 0.22;
+      if (A.type === "gunman") andRifle(A, true, _r7ad.set(0, 0, 1), 1, dt);
+      else { J.armL.rotation.set(-1.2, 0, -0.12); J.elbowL.rotation.x = -1.55; J.armR.rotation.set(-2.5, 0, 0.12); J.elbowR.rotation.x = -1.8; }
+      J.kneeL.rotation.x = 0.2; J.kneeR.rotation.x = 0.1; J.legL.rotation.x = -0.12; J.legR.rotation.x = 0.1; J.ankleL.rotation.x = -0.08; J.ankleR.rotation.x = -0.2;
+    } else if (AVIEW.pose === "limits") {
+      const p = AVIEW.lim; R.g.position.y = 0.16;
+      J.elbowL.rotation.x = J.elbowR.rotation.x = -p * 2.53; J.kneeL.rotation.x = J.kneeR.rotation.x = p * 2.62; J.ankleL.rotation.x = J.ankleR.rotation.x = (p - 0.5) * 1.4;
+      J.head.rotation.y = (p - 0.5) * 2.8; J.torso.rotation.y = (p - 0.5) * 2.1; J.torso.rotation.x = p * 0.7 - 0.17; J.armL.rotation.x = J.armR.rotation.x = -p * 2.4; J.legL.rotation.x = J.legR.rotation.x = -p * 1.6;
+      const f = Math.max(0, p - 0.5) * 2; J.faceL.position.set(-0.012 * f, 0, -0.006 * f); J.faceR.position.set(0.012 * f, 0, -0.006 * f); J.faceL.rotation.y = -0.22 * f; J.faceR.rotation.y = 0.22 * f;
+    } else { R.g.position.y = 0.16; if (A.type === "gunman") { andRifle(A, false, _r7ad.set(-0.3, -0.5, 0.81).normalize(), 1, dt); continue; } J.elbowL.rotation.x = J.elbowR.rotation.x = -0.15; J.kneeL.rotation.x = J.kneeR.rotation.x = 0.04; J.ankleL.rotation.x = J.ankleR.rotation.x = -0.04; J.armL.rotation.z = -0.05; J.armR.rotation.z = 0.05; }
+  }
+}
+function andViewMenu(sec, btns, row, seg) {
+  const s = sec("Robot models");
+  row(s, "Layer", seg([["game", "Uniform"], ["skin", "Skin"], ["endo", "Skeleton"]], AVIEW.layer, (v) => { AVIEW.layer = v; andViewApply(); }), "What the disguise hides");
+  row(s, "Pose", seg([["rest", "Rest"], ["walk", "Walk"], ["aim", "Combat"], ["limits", "Joint limits"]], AVIEW.pose, (v) => (AVIEW.pose = v)));
+  const r = document.createElement("input"); r.type = "range"; r.min = "0"; r.max = "1"; r.step = "0.01"; r.value = String(AVIEW.lim); r.className = "set-range"; r.addEventListener("input", () => { AVIEW.lim = +r.value; AVIEW.pose = "limits"; });
+  row(s, "Joint sweep", [r], "Elbows 0-145°, knees 0-150°, neck ±80°, waist ±60°");
+  row(s, "Turntables", seg([[true, "Spin"], [false, "Still"]], AVIEW.spin, (v) => (AVIEW.spin = v)));
+  btns(s, [["Go to the robot viewer", () => tgmDo(() => { const at = { x: AVIEW.at.x, y: 1.3, z: AVIEW.at.z - 7 }; player.body.setTranslation(at, true); player.body.setLinvel({ x: 0, y: 0, z: 0 }, true); player.prev = new THREE.Vector3(at.x, at.y, at.z); yaw = Math.PI; pitch = -0.08; }, "Robot viewer")]]);
+}
+
 // ---------- loop ----------
 let acc = 0, last = performance.now();
 function simStep() {
@@ -13691,7 +14496,7 @@ function simStep() {
   stepPlayer(DT);
   pressed.clear();
   if (player.dead) return;
-  updateEnemies(DT * ts); enStep(DT * ts); bossStep(DT * ts);
+  updateEnemies(DT * ts); enStep(DT * ts); bossStep(DT * ts); andStep(DT * ts); andViewStep(DT * ts);
   updateBolts(DT * ts);
   stepWorldMoves(DT * ts); arsWorldStep(DT * ts); propsStep(DT * ts); goreStep(DT * ts); r6Watch();
   for (const rd of ragdolls) {
@@ -13802,7 +14607,7 @@ setVoice(VOICE.on); renderBook();
 document.querySelector("#mnav button").focus({ preventScroll: true });
 state.pendingRestart = true; state.pendingFresh = true;
 // test hooks
-window.__res = { R6, GORE, MIR, TGM, ONEH, R6I, goreBurst, goreKill, goreWire, propMirror, tgmOpen, tgmClose, oneHandPose, idleProps, grappleRay, fireGrapple, PROPS, propHitH, propsBlast, propChair, propPainting, propCoffee, propCooler, propPlant, propCabinet, propVending, propExt, explosion, BOOM5, get barrels() { return barrels; }, MF, MFA, SLING, SCOPE, mfStart, meleeTarget, meleeStrike, mfCan, pistolSpin, scopeUpdate, comboLanded, COMBOS, CARX, CARRY, IDLE, carxForce, carxOffer, carryPick, carryDrop, pressed, get panes() { return panes; }, idleStart, get ragdolls2() { return ragdolls; }, BOSSES, BOSS_KINDS, bossPenSpawn, bossPenSkip, bossPenClear, scene, renderer, LV, FLOORS, damageEnemy, killEnemy, buildFloor, lvCleared, get CITYR() { return CITYR; }, get finRig() { return finRig; }, applyFinPose, pose2, P2, FIN_POSES, rigIK, rigHandAim, rigPalm, FIN2, get U7M() { return globalThis.U7M_; },
+window.__res = { THREE, spawnEnemy, get enemies() { return enemies; }, AND, AVIEW, andBuild, andStep, andViewApply, andHit, andGore, freezeRagdoll, R6, GORE, MIR, TGM, ONEH, R6I, goreBurst, goreKill, goreWire, propMirror, tgmOpen, tgmClose, oneHandPose, idleProps, grappleRay, fireGrapple, PROPS, propHitH, propsBlast, propChair, propPainting, propCoffee, propCooler, propPlant, propCabinet, propVending, propExt, explosion, BOOM5, get barrels() { return barrels; }, MF, MFA, SLING, SCOPE, mfStart, meleeTarget, meleeStrike, mfCan, pistolSpin, scopeUpdate, comboLanded, COMBOS, CARX, CARRY, IDLE, carxForce, carxOffer, carryPick, carryDrop, pressed, get panes() { return panes; }, idleStart, get ragdolls2() { return ragdolls; }, BOSSES, BOSS_KINDS, bossPenSpawn, bossPenSkip, bossPenClear, scene, renderer, LV, FLOORS, damageEnemy, killEnemy, buildFloor, lvCleared, get CITYR() { return CITYR; }, get finRig() { return finRig; }, applyFinPose, pose2, P2, FIN_POSES, rigIK, rigHandAim, rigPalm, FIN2, get U7M() { return globalThis.U7M_; },
   view(pos, at, fov = 40) { const cam = new THREE.PerspectiveCamera(fov, innerWidth / innerHeight, 0.05, 400); cam.position.set(...pos); cam.lookAt(new THREE.Vector3(...at)); scene.updateMatrixWorld(true); renderer.setRenderTarget(null); renderer.render(scene, cam); return renderer.domElement.toDataURL("image/png"); },
   FX2, FPROPS, DOORWAYS, ARS, WDEF, arsCancel, solveArmIK, armL, armR, cur, rig, get vmCam() { return vmCamera; }, SET, openSettings, applySet, bootFloor,
   get player() { return player; }, get enemies() { return enemies; }, get panes() { return panes; }, get bolts() { return bolts; }, state, keys, mouse, pressed,
