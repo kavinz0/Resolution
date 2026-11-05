@@ -820,8 +820,8 @@ const hullMats = new Map();
 function hullMat(th) {
   const key = th.toFixed(4); let m = hullMats.get(key); if (m) return m;
   m = new THREE.MeshBasicMaterial({ color: 0x0b0612, side: THREE.BackSide });
-  m.onBeforeCompile = (sh) => { sh.vertexShader = sh.vertexShader.replace("#include <begin_vertex>", `#include <begin_vertex>\n transformed += normal * ${th.toFixed(4)};`); };
-  m.customProgramCacheKey = () => "hull" + key;
+  m.onBeforeCompile = (sh) => { sh.uniforms.uHullTh = { value: th }; sh.vertexShader = "uniform float uHullTh;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\n transformed += normal * uHullTh;"); };
+  m.customProgramCacheKey = () => "hullU";
   hullMats.set(key, m); return m;
 }
 function ink(mesh, mat = INK) {
@@ -1779,8 +1779,23 @@ function spawnRagdoll(e, hitPoint, dir, force) {
   while (ragdolls.length > 7) freezeRagdoll(ragdolls.find((r) => r !== rd && !r.fin && !r.mfHeld && !(state.fin && r === state.fin.rd)) || ragdolls[0]);
 }
 // keep the body where it lies but drop its physics, so corpses cost nothing
+function physSafe(w) {
+  const rmB = w.removeRigidBody.bind(w), rmC = w.removeCollider.bind(w), rmJ = w.removeImpulseJoint.bind(w), step = w.step.bind(w);
+  const qB = [], qC = [], qJ = [];
+  // until it goes, a queued body or collider touches nothing and no ray finds it
+  const mute = (c) => { try { c.setCollisionGroups(0); c.setSolverGroups(0); } catch {} };
+  w.removeRigidBody = (b) => { if (b && !qB.includes(b)) { qB.push(b); try { for (let i = 0; i < b.numColliders(); i++) mute(b.collider(i)); } catch {} } };
+  w.removeCollider = (c, wake) => { if (c && !qC.includes(c)) { qC.push(c); mute(c); } };
+  w.removeImpulseJoint = (j, wake) => { if (j && !qJ.includes(j)) qJ.push(j); };
+  w.flushRemovals = () => {
+    for (const j of qJ.splice(0)) try { if (w.getImpulseJoint(j.handle)) rmJ(j, true); } catch (err) { console.warn(err); }
+    for (const c of qC.splice(0)) try { if (w.getCollider(c.handle)) rmC(c, true); } catch (err) { console.warn(err); }
+    for (const b of qB.splice(0)) try { if (w.getRigidBody(b.handle)) rmB(b); } catch (err) { console.warn(err); }
+  };
+  w.step = (...a) => { const r = step(...a); w.flushRemovals(); return r; };
+}
 function freezeRagdoll(rd) {
-  if (rd.andA && !rd.baked) try { andBake(rd); } catch (err) { console.warn(err); }
+  if (rd.andA && !rd.baked) AND_BAKEQ.push([rd, 4, state.gen]);
   for (const p of rd.parts) { ragByHandle.delete(p.col.handle); world.removeRigidBody(p.body); }
   ragdolls.splice(ragdolls.indexOf(rd), 1);
 }
@@ -3891,10 +3906,10 @@ function restart(fromScratch) {
   barrels = []; breakables = []; booms = []; pendingBooms = []; if (typeof boomLight !== "undefined") boomLight.intensity = 0; barrelByHandle.clear(); breakByHandle.clear();
   glassByHandle.clear(); enemyByHandle.clear(); ragByHandle.clear(); resetMoves(); resetCombos(); resetArsenal();
   if (state.mode !== "tut") { sun.position.copy(TUT.sunHome); sun.target.position.set(0, 0, 0); TUT.rooms = []; }
-  world = new RAPIER.World({ x: 0, y: -9.81 * 2.2, z: 0 });
+  world = new RAPIER.World({ x: 0, y: -9.81 * 2.2, z: 0 }); physSafe(world);
   world.timestep = DT; propsReset(); goreReset(); mirReset(); tgmReset();
   if (state.mode === "test") buildTestLevel(); else if (state.mode === "tut") buildTutLevel(); else if (state.mode === "floor" && (state.floor || 1) > 1) buildFloor(state.floor); else buildLevel();
-  { try { finProps(); finDisc.visible = true; } catch {} const vis = [finRig.root, worldSparks.lines, tracers[0].m, ...moveWarm()]; for (const o of vis) o.visible = true; try { renderer.compile(scene, camera); } catch {} for (const o of vis) o.visible = false; if (finDisc) finDisc.visible = false; }
+  { try { finProps(); finDisc.visible = true; } catch {} const vis = [finRig.root, worldSparks.lines, tracers[0].m, ...moveWarm()]; for (const o of vis) o.visible = true; warmHidden(); WARMT.pending = 2; for (const o of vis) o.visible = false; if (finDisc) finDisc.visible = false; }
   Object.assign(state, { over: false, time: 0, runStart: 0 });
   setTime("normal", 0); hitstopT = 0; hookFx.state = "idle"; VM.attack = null; GL.spike = 0;
   clearHints(); $("steps").innerHTML = ""; $("objl").textContent = "Objective"; $("legend").hidden = true; if ($("tghint")) $("tghint").hidden = state.mode !== "test"; $("targets").hidden = false; $("speed").hidden = state.mode !== "test";
@@ -3932,6 +3947,33 @@ function showScreen(eyebrow, title, directive, sub, button, isRestart, fresh = f
   $("go").textContent = button;
   state.pendingRestart = isRestart; state.pendingFresh = fresh;
 }
+// three only compiles what is visible, so show every hidden mesh for one compile pass (lights stay as they are,
+// since the light count is part of every lit shader), then put it all back
+// the warm-up set (sparks, gore, android parts...) is kept and compiled again with each level, because a level's
+// own lights change the light count every lit shader is built for
+let WARM_G = null;
+function warmHidden() {
+  const hid = []; if (WARM_G) scene.add(WARM_G);
+  // a group that carries a .material of its own (some do, as a handle) makes three's compile() throw and give up on
+  // everything after it, so lift those off for the pass
+  const odd = [];
+  for (const sc of [scene, vmScene]) sc.traverse((o) => { if (!o.visible && !o.isLight) { hid.push(o); o.visible = true; } if (o.material && !o.geometry?.attributes) odd.push([o, o.material]); });
+  for (const [o] of odd) o.material = undefined;
+  // compile into the frame's own render target: the game draws to rt (no tone mapping at that stage), and a shader
+  // compiled for the screen is a different program that the first real frame would have to build again
+  const prevRT = renderer.getRenderTarget(); renderer.setRenderTarget(rt);
+  try { renderer.compile(scene, camera); renderer.compile(vmScene, vmCamera); } catch (err) { console.warn(err); }
+  renderer.setRenderTarget(prevRT);
+  for (const [o, m] of odd) o.material = m;
+  for (const o of hid) o.visible = false; if (WARM_G) scene.remove(WARM_G);
+}
+const WARMT = { pending: 0, t: 0, sig: "" };
+function warmSig() { let a = 0, b = 0, c = 0, d = 0; scene.traverseVisible((o) => { if (o.isPointLight) a++; else if (o.isSpotLight) b++; else if (o.isDirectionalLight) c += o.castShadow ? 100 : 1; else if (o.isHemisphereLight) d++; }); return a + "/" + b + "/" + c + "/" + d; }
+function warmTick(dt) {
+  if (WARMT.pending > 0 && --WARMT.pending === 0) { warmHidden(); WARMT.sig = warmSig(); return; }
+  if ((WARMT.t -= dt) > 0) return; WARMT.t = 0.5;
+  const s = warmSig(); if (WARMT.sig && s !== WARMT.sig) warmHidden(); WARMT.sig = s;
+}
 function warmup() {
   const g = new THREE.Group(); g.position.set(0, -150, 0);
   const add = (o) => { g.add(o); return o; };
@@ -3944,7 +3986,7 @@ function warmup() {
   scene.add(g);
   add(new THREE.Mesh(DECAL_GEO, M.crack)); add(new THREE.Mesh(UNIT_BOX, M.stimHi)); add(new THREE.Mesh(UNIT_BOX, M.charred)); add(new THREE.Mesh(UNIT_BOX, M.medBox)); add(buildInjector(1)); try { r6Warm(add); } catch {}
   const vis = [gunG, muzzleFlash, steamPuffs[0].s, tracers[0].m, worldSparks.lines, ...moveWarm(), ...arsWarm()]; for (const o of vis) o.visible = true;
-  try { renderer.compile(scene, camera); renderer.compile(vmScene, vmCamera); } catch {}
+  warmHidden(); WARM_G = g;
   for (const o of vis) o.visible = false; setViewModel();
   scene.remove(g);
 }
@@ -6087,9 +6129,9 @@ function handFrame(fingers, palm) {
 function poseLerp(a, b, k) { const o = clonePose(a); lerpPose(o, b, k); return o; }
 
 // ---------- shared effects: muzzle light, travelling tracers, smoke, shells, sparks ----------
-const arsLight = new THREE.PointLight(0xffb060, 0, 14, 2); scene.add(arsLight); arsLight.visible = false; // only switched on while it is lit, so it costs nothing the rest of the time
-const vmFlashL = new THREE.PointLight(0xffb060, 0, 2.5, 2); vmCamera.add(vmFlashL); vmFlashL.visible = false;
-function arsFlash(color, power, at) { arsLight.visible = true; vmFlashL.visible = true; arsLight.color.setHex(color); arsLight.intensity = power; arsLight.position.copy(at); vmFlashL.color.setHex(color); vmFlashL.intensity = power * 0.12; ARS.flashT = 0.07; }
+const arsLight = new THREE.PointLight(0xffb060, 0, 14, 2); scene.add(arsLight); // always in the light count (intensity 0 when dark), so flashing it never recompiles a shader
+const vmFlashL = new THREE.PointLight(0xffb060, 0, 2.5, 2); vmCamera.add(vmFlashL);
+function arsFlash(color, power, at) { arsLight.color.setHex(color); arsLight.intensity = power; arsLight.position.copy(at); vmFlashL.color.setHex(color); vmFlashL.intensity = power * 0.12; ARS.flashT = 0.07; }
 const TRACER_N = 40;
 const arsTracers = Array.from({ length: TRACER_N }, () => {
   const m = new THREE.Mesh(UNIT_BOX, new THREE.MeshBasicMaterial({ color: 0xffd28a, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
@@ -6479,7 +6521,7 @@ function buildLance(world = false) {
 }
 const vmLance = buildLance(); arsG.add(vmLance); vmLance.position.copy(GUN_GRIP); vmLance.visible = false;
 const worldLance = buildLance(true); worldLance.visible = false; scene.add(worldLance);
-const lanceLight = new THREE.PointLight(0x4ff0ff, 0, 9, 2); worldLance.add(lanceLight); lanceLight.position.y = 0.55;
+const lanceLight = new THREE.PointLight(0x4ff0ff, 0, 9, 2); scene.add(lanceLight); lanceLight.position.set(0, -50, 0);
 ARS.W.lance = { state: "held", wind: 0, pos: new THREE.Vector3(), vel: new THREE.Vector3(), carry: null, carried: 0, stuckN: null, t: 0, throwT: -9, catchT: -9, charge: 0 };
 // placements (rig space): carry, wind-up beside the head, the throw, the follow-through
 const LNG = {
@@ -6732,7 +6774,7 @@ function lanceInspectFx(dt, k, ch) {
     if (Math.random() < dt * 40 * ch) emitGunSparks(arsPoint(vmLance, _ap.set((Math.random() - 0.5) * 0.02, -0.3 + Math.random() * 0.9, 0)), 1, 0.6 + ch);
     if (Math.random() < dt * 12 * ch) emitGunSparks(arsPoint(vmLance, _ap.set(0, 0.55, 0)), 3, 1.5 * ch);
     if (Math.random() < dt * 8 * ch) tone("square", 1800 + Math.random() * 2400, 600, 0.04, 0.02 * ch);
-    if (Math.random() < dt * 10 * ch) { vmFlashL.color.setHex(0xa8f6ff); vmFlashL.intensity = 6 * ch; vmFlashL.visible = true; ARS.flashT = 0.05; }
+    if (Math.random() < dt * 10 * ch) { vmFlashL.color.setHex(0xa8f6ff); vmFlashL.intensity = 6 * ch; ARS.flashT = 0.05; }
   }
   cue("flip", 0.58, () => { sfx.servo(); noise(0.2, "bandpass", 900, 0.4, 1, 2400); });
   cue("stab", 0.655, () => {
@@ -7155,7 +7197,7 @@ function gauntletFx(dt) {
   if (W.held && ragdolls.includes(W.held.rd)) {
     const tr = W.held.rd.torso.translation(); const k = Math.min(1, W.held.t / 0.25);
     F.rings.forEach((m, i) => { m.visible = true; m.position.set(tr.x, tr.y, tr.z); m.rotation.set(state.time * (1.3 + i * 0.4), state.time * (0.9 - i * 0.5), i); m.scale.setScalar(k * (1 + 0.06 * Math.sin(state.time * 6 + i))); });
-    if (!(ARS.flashT > 0)) { F.light.color.setHex(0xb06bff); F.light.position.set(tr.x, tr.y, tr.z); F.light.intensity = 6 + Math.random() * 3; F.light.visible = true; F.lit = true; }
+    if (!(ARS.flashT > 0)) { F.light.color.setHex(0xb06bff); F.light.position.set(tr.x, tr.y, tr.z); F.light.intensity = 6 + Math.random() * 3; F.lit = true; }
     if (Math.random() < dt * 25) emitWorldSparks(_gp.set(tr.x + (Math.random() - 0.5) * 1.2, tr.y + (Math.random() - 0.5) * 1.2, tr.z + (Math.random() - 0.5) * 1.2), _Y, 1, 3, 2);
   } else { for (const m of F.rings) m.visible = false; if (F.lit) { F.lit = false; if (!(ARS.flashT > 0)) F.light.intensity = 0; } }
   for (const w of F.wave) {
@@ -7439,7 +7481,7 @@ function updateArsenalFx(dt) {
   updateTracersAll(dt); updateSmoke(dt); updateVmFree(dt);
   if (ARS.flashT > 0) { ARS.flashT -= dt; const k = Math.max(0, ARS.flashT / 0.07); arsLight.intensity *= k > 0 ? 0.7 : 0; vmFlashL.intensity *= 0.7; if (ARS.flashT <= 0) { arsLight.intensity = 0; vmFlashL.intensity = 0; } }
   for (const id in WDEF) WDEF[id].fx?.(dt);
-  arsLight.visible = arsLight.intensity > 0.01; vmFlashL.visible = vmFlashL.intensity > 0.01;
+  if (worldLance.visible) worldLance.localToWorld(lanceLight.position.set(0, 0.55, 0));
 }
 function resetArsenal() {
   ARS.owned.clear(); arsCancel(); ARS.ikW = 0; ARS.post = null; ARS.fovPull = 0;
@@ -12528,8 +12570,8 @@ function p5TestKeys() {
 // hanging off the ring. Bulwark goes brutalist: hazard plate, a furnace behind its chest, two smokestacks and horns.
 function r5Hull(color, th) {
   const m = new THREE.MeshBasicMaterial({ color, side: THREE.BackSide });
-  m.onBeforeCompile = (sh) => { sh.vertexShader = sh.vertexShader.replace("#include <begin_vertex>", `#include <begin_vertex>\n transformed += normal * ${th.toFixed(4)};`); };
-  m.customProgramCacheKey = () => "r5hull" + th.toFixed(4) + color; return m;
+  m.onBeforeCompile = (sh) => { sh.uniforms.uHullTh = { value: th }; sh.vertexShader = "uniform float uHullTh;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\n transformed += normal * uHullTh;"); };
+  m.customProgramCacheKey = () => "hullU"; return m;
 }
 function r5Glow(color, op = 0.8) { return new THREE.MeshBasicMaterial({ color, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false }); }
 const R5B = { mats: null };
@@ -13228,6 +13270,22 @@ function r6Watch() {
 function goreHalf(h) { try { const p = h.rd.parts[0]; goreTear(p, null, 2); const t = p.body.translation(); for (let i = 0; i < 6; i++) goreWire(new THREE.Vector3(t.x, t.y, t.z), new THREE.Vector3((Math.random() - 0.5) * 4, (Math.random() - 0.3) * 4, (Math.random() - 0.5) * 4), { body: p.body, rd: h.rd }); GORE.track.includes(h.rd) || GORE.track.push(h.rd); h.rd.goreT = state.time; } catch {} }
 // shader warm-up for the new materials, so the first tear or mirror does not hitch
 function r6Warm(add) {
+  try {
+    // android parts after death (plain meshes), torn skin at both levels, the chrome skeleton, dropped rifles, debris
+    const am = andMat("gunman"); add(new THREE.Mesh(UNIT_RBOX, am)); add(new THREE.Mesh(UNIT_RBOX, goreMat(am, 1))); add(new THREE.Mesh(UNIT_RBOX, goreMat(am, 2)));
+    add(new THREE.Mesh(UNIT_BOX, AND.endoMat)); add(new THREE.Mesh(UNIT_BOX, AND.gunMat)); add(new THREE.Mesh(UNIT_BOX, GORE_CHROME));
+    AND_PART_MAT.bolt ||= metal(0x9aa2ae, 0.35); AND_PART_MAT.plate ||= toon(0x5d6470); AND_PART_MAT.shard ||= new THREE.MeshBasicMaterial({ color: 0xff3d5a });
+    for (const k in AND_PART_MAT) add(new THREE.Mesh(UNIT_BOX, AND_PART_MAT[k]));
+    add(new THREE.Mesh(UNIT_BOX, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide })));
+    const lg = new THREE.BufferGeometry(); lg.setAttribute("position", new THREE.Float32BufferAttribute([0, 0, 0, 0, 1, 0], 3)); lg.setAttribute("color", new THREE.Float32BufferAttribute([1, 1, 1, 1, 1, 1], 3));
+    add(new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })));
+    add(new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })));
+    add(new THREE.Sprite(new THREE.SpriteMaterial({ map: puffTex, transparent: true, depthWrite: false, fog: true })));
+    add(new THREE.Sprite(_flashMat));
+    add(new THREE.Mesh(PUD_GEO, new THREE.MeshStandardMaterial({ color: 0xa8ecff, map: PUD_TEX, transparent: true, opacity: 0.8, roughness: 0.05, metalness: 0.2, envMap: envTex, envMapIntensity: 1.5, depthWrite: false })));
+    // the hit flash lands on a skinned android for 70 ms
+    { const r = andBuild("brawler"); r.group.traverse((o) => { if (o.isSkinnedMesh && o.material?.isMeshToonMaterial) o.material = M.hitFlash; }); add(r.group); }
+  } catch (err) { console.warn(err); }
   try { for (const t of ["gunman", "worker"]) { const r = andBuild(t); add(r.group); } } catch (err) { console.warn(err); }
   for (const m of [M.skin, M.pants, M.bot]) if (m) add(new THREE.Mesh(UNIT_RBOX, goreMat(m, 1)));
   add(goreEndoMesh("torso")); add(goreWireMesh()); add(new THREE.Mesh(UNIT_BOX, MIR.fbMat ||= new THREE.MeshStandardMaterial({ color: 0x9aa2aa, metalness: 1, roughness: 0.08, envMap: envTex, envMapIntensity: 0.9 })));
@@ -14196,7 +14254,9 @@ function andRifle(A, aiming, dir, k, dt) {
   andGunPoint(A, AND_FOREGRIP, _r7ap); _r7ap.x -= 0.012; andArmIK(A, -1, _r7ap, AND_POLE_L, 1, dt);
 }
 const AND_FOREGRIP = new THREE.Vector3(0.0, 0.0, 0.3), AND_POLE_L = new THREE.Vector3(-0.7, -0.6, -0.25), AND_POLE_R = new THREE.Vector3(0.7, -0.6, -0.3);
+const AND_BAKEQ = [];
 function andStep(dt) {
+  if (AND_BAKEQ.length && --AND_BAKEQ[0][1] <= 0) { const [rd, , gen] = AND_BAKEQ.shift(); if (!rd.baked && gen === state.gen && rd.parts[0]?.mesh?.parent === levelGroup) try { andBake(rd); } catch (err) { console.warn(err); } }
   if (dt <= 0) return;
   for (const e of enemies) if (e.and && !e.dead) { try { andPose(e, dt); } catch (err) { if (!AND.warned) { AND.warned = 1; console.warn(err); } } }
   andCorpses(dt); andLeaks(dt);
@@ -14573,6 +14633,7 @@ function frame(now) {
   sky.position.copy(camera.position);
   for (const a of alarmLights) a.l.intensity = a.base * (0.45 + 0.55 * Math.pow(0.5 + 0.5 * Math.sin(now * 0.0021 + a.ph), 2));
   updateFlicker(dt); updateCity(now / 1000, dt); lvFrame(dt);
+  if (running || booting) warmTick(dt);
   renderer.setRenderTarget(rt);
   renderer.clear();
   renderer.render(scene, camera);
@@ -14607,7 +14668,7 @@ setVoice(VOICE.on); renderBook();
 document.querySelector("#mnav button").focus({ preventScroll: true });
 state.pendingRestart = true; state.pendingFresh = true;
 // test hooks
-window.__res = { THREE, spawnEnemy, get enemies() { return enemies; }, AND, AVIEW, andBuild, andStep, andViewApply, andHit, andGore, freezeRagdoll, R6, GORE, MIR, TGM, ONEH, R6I, goreBurst, goreKill, goreWire, propMirror, tgmOpen, tgmClose, oneHandPose, idleProps, grappleRay, fireGrapple, PROPS, propHitH, propsBlast, propChair, propPainting, propCoffee, propCooler, propPlant, propCabinet, propVending, propExt, explosion, BOOM5, get barrels() { return barrels; }, MF, MFA, SLING, SCOPE, mfStart, meleeTarget, meleeStrike, mfCan, pistolSpin, scopeUpdate, comboLanded, COMBOS, CARX, CARRY, IDLE, carxForce, carxOffer, carryPick, carryDrop, pressed, get panes() { return panes; }, idleStart, get ragdolls2() { return ragdolls; }, BOSSES, BOSS_KINDS, bossPenSpawn, bossPenSkip, bossPenClear, scene, renderer, LV, FLOORS, damageEnemy, killEnemy, buildFloor, lvCleared, get CITYR() { return CITYR; }, get finRig() { return finRig; }, applyFinPose, pose2, P2, FIN_POSES, rigIK, rigHandAim, rigPalm, FIN2, get U7M() { return globalThis.U7M_; },
+window.__res = { M, AND_PART_MAT, get GORE_CHROME() { return GORE_CHROME; }, get world() { return world; }, RAPIER, warmHidden, get WARM_G() { return WARM_G; }, THREE, spawnEnemy, get enemies() { return enemies; }, AND, AVIEW, andBuild, andStep, andViewApply, andHit, andGore, freezeRagdoll, R6, GORE, MIR, TGM, ONEH, R6I, goreBurst, goreKill, goreWire, propMirror, tgmOpen, tgmClose, oneHandPose, idleProps, grappleRay, fireGrapple, PROPS, propHitH, propsBlast, propChair, propPainting, propCoffee, propCooler, propPlant, propCabinet, propVending, propExt, explosion, BOOM5, get barrels() { return barrels; }, MF, MFA, SLING, SCOPE, mfStart, meleeTarget, meleeStrike, mfCan, pistolSpin, scopeUpdate, comboLanded, COMBOS, CARX, CARRY, IDLE, carxForce, carxOffer, carryPick, carryDrop, pressed, get panes() { return panes; }, idleStart, get ragdolls2() { return ragdolls; }, BOSSES, BOSS_KINDS, bossPenSpawn, bossPenSkip, bossPenClear, scene, renderer, LV, FLOORS, damageEnemy, killEnemy, buildFloor, lvCleared, get CITYR() { return CITYR; }, get finRig() { return finRig; }, applyFinPose, pose2, P2, FIN_POSES, rigIK, rigHandAim, rigPalm, FIN2, get U7M() { return globalThis.U7M_; },
   view(pos, at, fov = 40) { const cam = new THREE.PerspectiveCamera(fov, innerWidth / innerHeight, 0.05, 400); cam.position.set(...pos); cam.lookAt(new THREE.Vector3(...at)); scene.updateMatrixWorld(true); renderer.setRenderTarget(null); renderer.render(scene, cam); return renderer.domElement.toDataURL("image/png"); },
   FX2, FPROPS, DOORWAYS, ARS, WDEF, arsCancel, solveArmIK, armL, armR, cur, rig, get vmCam() { return vmCamera; }, SET, openSettings, applySet, bootFloor,
   get player() { return player; }, get enemies() { return enemies; }, get panes() { return panes; }, get bolts() { return bolts; }, state, keys, mouse, pressed,
