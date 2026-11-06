@@ -1013,7 +1013,7 @@ addEventListener("mousemove", (e) => {
 });
 document.addEventListener("pointerlockchange", () => {
   locked = document.pointerLockElement === renderer.domElement;
-  if (!locked && state.started && !state.over) showScreen("Paused", "PAUSED", "UNIT-7 suspended.", "Click to resume.", "Resume", false);
+  if (!locked && state.started && !state.over) showScreen("Paused", "PAUSED", "UNIT-7 suspended.", "Click to resume.", "Resume", false), rmPauseNote();
 });
 function requestLock() {
   initAudio(); actx?.resume?.();
@@ -1540,7 +1540,7 @@ function updateEnemies(dt) {
     if (e.T.boss || e.T.part) { if (e.T.boss) bossThink(e, dt); continue; }
     const t = e.body.translation();
     const toP = new THREE.Vector3(pp.x - t.x, 0, pp.z - t.z); const dist = toP.length();
-    const sees = !e.dummy && dist < 40 && Math.abs(pp.y - t.y) < (e.T.vsee || 6) && canSee(e, head);
+    const sees = !e.dummy && !e.rmPrimed && dist < 40 && Math.abs(pp.y - t.y) < (e.T.vsee || 6) && canSee(e, head);
     if (sees && dist < 26 && !e.alert) { e.alert = true; alertNear(e.group.position, 12); }
     const desired = new THREE.Vector3();
     let face = null;
@@ -1557,6 +1557,8 @@ function updateEnemies(dt) {
       e.group.rotation.x = -Math.min(0.35, e.stun * 0.5);
     } else if (e.dummy) {
       e.group.rotation.x = 0; e.alert = false; face = toP.clone();
+    } else if (e.rmGoal) {
+      face = rmWitnessMove(e, t, desired);
     } else if (e.T.civ) {
       if (sees && dist < 20) e.alert = true; face = civMove(e, toP, dist, desired, dt);
     } else if (!e.alert) {
@@ -2404,7 +2406,7 @@ function buildTestLevel() {
   door = { mesh: new THREE.Object3D(), opening: false, y: 0 }; sword = new THREE.Group();
   const tl = new THREE.PointLight(0x4ff0ff, 0, 9, 1.8); tl.position.set(0, -50, 0); levelGroup.add(tl); sword.userData.light = tl; // borrowed by the finisher
   TEST.respawn = []; TEST.spots = [];
-  lvTestYard();
+  lvTestYard(); rmSimBuild();
   buildCity();
 }
 const DUMMY_SPOTS = [["brawler", -12, -24], ["brawler", -8, -24], ["gunman", -4, -24], ["gunman", 0, -24], ["bot", 4, -24], ["bot", 9, -24],
@@ -2904,7 +2906,7 @@ function applyFinPose(J, p) {
   if (J.fR) u7Hands(J, p);
 }
 function canFinish(e, kind) {
-  return state.mode === "floor" && (state.phase === 1 || state.phase === 2) && !state.fin && !player.dead && kind !== "finisher" && alive().length === 1 && alive()[0] === e && !e.T.noFin && !lvPending();
+  return rmFinMode() && (state.phase === 1 || state.phase === 2) && !state.fin && !player.dead && kind !== "finisher" && rmLastOne(e) && !e.T.noFin && !lvPending();
 }
 function startFinisher(e) {
   if (fin2Start(e)) return;
@@ -3907,7 +3909,7 @@ function restart(fromScratch) {
   glassByHandle.clear(); enemyByHandle.clear(); ragByHandle.clear(); resetMoves(); resetCombos(); resetArsenal();
   if (state.mode !== "tut") { sun.position.copy(TUT.sunHome); sun.target.position.set(0, 0, 0); TUT.rooms = []; }
   world = new RAPIER.World({ x: 0, y: -9.81 * 2.2, z: 0 }); physSafe(world);
-  world.timestep = DT; propsReset(); goreReset(); mirReset(); tgmReset();
+  world.timestep = DT; propsReset(); goreReset(); mirReset(); tgmReset(); rmReset();
   if (state.mode === "test") buildTestLevel(); else if (state.mode === "tut") buildTutLevel(); else if (state.mode === "floor" && (state.floor || 1) > 1) buildFloor(state.floor); else buildLevel();
   { try { finProps(); finDisc.visible = true; } catch {} const vis = [finRig.root, worldSparks.lines, tracers[0].m, ...moveWarm()]; for (const o of vis) o.visible = true; warmHidden(); WARMT.pending = 2; for (const o of vis) o.visible = false; if (finDisc) finDisc.visible = false; }
   Object.assign(state, { over: false, time: 0, runStart: 0 });
@@ -5086,6 +5088,7 @@ function ev(name, d = {}) {
   d.t = state.time;
   if (state.mode === "tut") tutEvent(name, d);
   comboEvent(name, d);
+  rmEvent(name, d);
 }
 function weaponOf(kind) {
   if (player.sling) return "sling";
@@ -13721,6 +13724,7 @@ function tgmRender() {
   btns(s3, [["Car on the nearest body", () => tgmDo(() => carxForce())], ["Idle · phone", () => tgmDo(() => { idleCancel(); IDLE.cur = null; idleStart("phone"); })], ["Idle · banana", () => tgmDo(() => { idleCancel(); IDLE.cur = null; idleStart("banana"); })],
     ["Sword finisher on the nearest", () => tgmDo(() => pressed.add("KeyN"))], ["Combo book", () => { tgmClose(); setTimeout(() => { document.exitPointerLock?.(); setTimeout(openBook, 60); }, 80); }, false]]);
   andViewMenu(sec, btns, row, seg);
+  rmSimMenu(sec, btns, row);
   // places
   const s4 = sec("Go to");
   btns(s4, TGM_TP.map(([name, at, yw]) => [name, () => tgmDo(() => { if (!at) { pressed.add("KeyB"); return; } player.body.setTranslation(at, true); player.body.setLinvel({ x: 0, y: 0, z: 0 }, true); player.prev = new THREE.Vector3(at.x, at.y, at.z); yaw = yw; }, name)]));
@@ -14544,6 +14548,520 @@ function andViewMenu(sec, btns, row, seg) {
   btns(s, [["Go to the robot viewer", () => tgmDo(() => { const at = { x: AVIEW.at.x, y: 1.3, z: AVIEW.at.z - 7 }; player.body.setTranslation(at, true); player.body.setLinvel({ x: 0, y: 0, z: 0 }, true); player.prev = new THREE.Vector3(at.x, at.y, at.z); yaw = Math.PI; pitch = -0.08; }, "Robot viewer")]]);
 }
 
+// ================= Round 8 · rooms: a floor is a chain of designed rooms, each with a seal, a clear rule and three quiet challenges =================
+// A room is data (ROOM_DEFS, doc 12.1). States: dormant (geometry only), primed (cast spawned, idle, no perception),
+// live (full AI, the entry door shuts behind you), resolved (the seal opens, the end card slides in). Only the Live room
+// and its neighbours have bodies, so a long floor never has more than about three rooms of enemies awake.
+// Results are never shown during play: only the end card (top right, 2.5 s, never pauses) and the pause screen.
+const ROOM_DEFS = {};
+const RM = { rooms: new Map(), order: [], live: null, focus: null, scope: null, sim: null, best: new Map(), scanT: 0, cardT: 0, gen: -1 };
+const RM_CH = {
+  time: (c) => `Under ${c.par} s`, noFloor: () => "Never touch the floor", allFinish: () => "Every kill a finisher", noDamage: () => "No damage",
+  oneWeapon: () => "One weapon only", gyre3: () => "3 kills in one Gyre", silence: () => "Silence the spotter unseen", showoff: () => "Showoff entry",
+};
+// twists: one thing that changes mid-room. Lights never switch off (that recompiles shaders), they only dim.
+const RM_TWIST = {
+  lightsOut(R, on = true) { for (const l of [sun, ...(typeof LV_LIGHTS !== "undefined" ? LV_LIGHTS : [])]) if (l && l.isLight) { l.userData.rmBase ??= l.intensity; l.intensity = on ? l.userData.rmBase * 0.12 : l.userData.rmBase; } R.dim = on; },
+};
+const _rmv = new THREE.Vector3(), _rmw = new THREE.Vector3();
+function rmFeet() { return playerPos().y - (P.half + P.radius); }
+function rmW(def) { // the room's box in world metres
+  const b = def.box; const y0 = b.y || 0;
+  return { x0: LVX(b.x), x1: LVX(b.x + b.w), z0: LVZ(b.z), z1: LVZ(b.z + b.d), y0, y1: y0 + (b.h || 8) };
+}
+function rmAt(R, a, dy = 0) { return a.length >= 3 ? new THREE.Vector3(LVX(a[0]), a[1] + dy, LVZ(a[2])) : new THREE.Vector3(LVX(a[0]), (R.def.box.y || 0) + dy, LVZ(a[1])); }
+function rmInside(R, p, pad = 0) { const B = R.B, f = p.y - (P.half + P.radius); return p.x > B.x0 - pad && p.x < B.x1 + pad && p.z > B.z0 - pad && p.z < B.z1 + pad && f > B.y0 - 1.2 && f < B.y1 + 1; }
+function rmDist(R, p) { const B = R.B; const dx = Math.max(B.x0 - p.x, 0, p.x - B.x1), dz = Math.max(B.z0 - p.z, 0, p.z - B.z1); const f = p.y - 0.9; const dy = Math.max(B.y0 - f, 0, f - B.y1); return Math.hypot(dx, dz, dy); }
+function rmDoor(R, kind) { const id = `${kind}:${R.def.doors || R.id}`; return LV.shutters.find((S) => S.id === id) || null; }
+function rmShut(S, open) { if (!S) return; lvSetShutter(S.id, open); }
+// a status lamp over a door: red shut, green open, amber while a lockdown runs out
+function rmLamp(S) {
+  if (!S || S.rmLamp) return S?.rmLamp;
+  const m = new THREE.Mesh(new THREE.BoxGeometry(S.alongX ? Math.min(S.L, 6) : 0.3, 0.16, S.alongX ? 0.3 : Math.min(S.L, 6)), S.want ? M.rackLed : M.red);
+  m.position.set(S.X, S.y0 + S.h + 0.35, S.Z); levelGroup.add(m); S.rmLamp = m; return m;
+}
+function rmLampSet(S, mat, k = 1) { const m = S && rmLamp(S); if (!m) return; if (m.material !== mat) m.material = mat; const s = Math.max(0.02, k); if (S.alongX) m.scale.x = s; else m.scale.z = s; }
+// geometry a room's rules need (built with the level, never mid-fight, so warm-up compiles it): missing doors, the core,
+// the lift platform, the live-floor strips, the witness terminal
+function rmProps(def, id) {
+  if (def._gen === state.gen) return def._p; def._gen = state.gen; const p = def._p = {};
+  const R0 = { def, id, B: rmW(def) }; const did = def.doors || id; const C = def.clear || {};
+  const mk = (kind, d, closed) => { if (!d || LV.shutters.some((S) => S.id === `${kind}:${did}`)) return; const w = d.w || 4, h = d.h || 4.5; const [x, z] = d.at; const y = d.at.length >= 3 ? d.at[1] : (def.box.y || 0); const zz = d.at.length >= 3 ? d.at[2] : z;
+    const S = d.axis === "z" ? lvShutter(x, zz - w / 2, x, zz + w / 2, y, h, `${kind}:${did}`, closed) : lvShutter(x - w / 2, zz, x + w / 2, zz, y, h, `${kind}:${did}`, closed); S.rmBuild = closed ? 0 : 1; };
+  mk("seal", def.seal, true); mk("reinf", C.door, true); for (const en of def.entries || []) if (en.door && en.doorAt) mk("entry", { at: en.doorAt, axis: en.axis, w: en.w, h: en.h }, false);
+  for (const k of ["seal", "entry", "reinf"]) { const S = rmDoor(R0, k); if (S) { S.rmBuild ??= S.want; rmLamp(S); } }
+  if (C.type === "core" && C.at) {
+    const at = rmAt(R0, C.at); const g = new THREE.Group(); g.position.copy(at); levelGroup.add(g);
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.85, 1, 16), M.mullion); base.position.y = -0.7; g.add(base);
+    const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.42, 0), M.cyan); g.add(core);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.05, 6, 24), M.amber); ring.rotation.x = Math.PI / 2; g.add(ring);
+    const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(at.x, at.y - 0.7, at.z)); world.createCollider(RAPIER.ColliderDesc.cylinder(0.5, 0.8).setCollisionGroups(GROUPS.env), body);
+    p.core = { g, core, ring, at };
+  }
+  if (C.type === "lift" && C.lift) {
+    const L = C.lift; const w = L.w || 10, d = L.d || 8; const X = LVX(L.at[0]), Z = LVZ(L.at[1]);
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, 0.4, d), LV_FLOORMAT.steel()); mesh.receiveShadow = true; levelGroup.add(mesh); ink(mesh);
+    for (const [sx, sz, px, pz] of [[w, 0.12, 0, -d / 2], [w, 0.12, 0, d / 2], [0.12, d, -w / 2, 0], [0.12, d, w / 2, 0]]) { const r = new THREE.Mesh(new THREE.BoxGeometry(sx, 0.06, sz), M.amber); r.position.set(px, 0.23, pz); mesh.add(r); }
+    const body = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(X, L.y0 - 0.2, Z));
+    world.createCollider(RAPIER.ColliderDesc.cuboid(w / 2, 0.2, d / 2).setCollisionGroups(GROUPS.env), body);
+    p.lift = { mesh, body, X, Z, w, d }; mesh.position.set(X, L.y0 - 0.2, Z);
+  }
+  if (C.type === "live") {
+    const B = R0.B, y = (C.y ?? B.y0) + 0.025; const g = new THREE.Group(); levelGroup.add(g); g.visible = false;
+    for (let x = B.x0 + 2; x < B.x1; x += 4) { const s = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, B.z1 - B.z0 - 0.6), M.cyan); s.position.set(x, y, (B.z0 + B.z1) / 2); g.add(s); }
+    p.live = g;
+  }
+  if (C.type === "witness" && C.terminal) {
+    const at = rmAt(R0, C.terminal); const t = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.3, 0.5), M.mullion); t.position.set(at.x, at.y + 0.65, at.z); levelGroup.add(t);
+    const scr = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, 0.02), M.screen); scr.position.set(0, 0.35, 0.26); t.add(scr);
+    const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(at.x, at.y + 0.65, at.z)); world.createCollider(RAPIER.ColliderDesc.cuboid(0.45, 0.65, 0.25).setCollisionGroups(GROUPS.env), body);
+    p.term = { mesh: t, scr, at };
+  }
+  return p;
+}
+// ---- set-up: roomsInit(floor) after a floor builds; the testing ground's sim passes its own list
+function rmReset() { RM.rooms = new Map(); RM.order = []; RM.live = null; RM.focus = null; RM.sim = null; RM.reload = null; rmCardHide(true); }
+function rmClearAll() {
+  if (RM.gen === state.gen) for (const R of RM.rooms.values()) { for (const e of R.cast) rmDespawn(e); if (R.dim) RM_TWIST.lightsOut(R, false); }
+  RM.rooms = new Map(); RM.order = []; RM.live = null; RM.focus = null; rmCardHide(true);
+}
+function roomsInit(scope, ids) {
+  rmClearAll(); RM.scope = scope; RM.gen = state.gen;
+  const list = ids ? ids.map((id) => [id, ROOM_DEFS[id]]).filter(([, d]) => d) : Object.entries(ROOM_DEFS).filter(([, d]) => d.floor === scope);
+  for (const [id, def] of list) {
+    def.clear ||= { type: "purge" };
+    const p = rmProps(def, id);
+    const R = { id, def, p, B: rmW(def), state: "dormant", t: 0, wt: 0, cast: [], killed: new Set(), dmg: 0, fin: 0, kills: 0, nonFin: false, weapons: new Set(), touched: false,
+      entry: null, showoff: false, hurt: false, gyreN: 0, gyreMax: 0, inGyre: false, alarm: null, reinf: null, silenced: false, seen: false, lock: null, coreOut: false, witness: null, twistDone: false, hpLast: 0, liveAcc: 0, shutT: 0, timeline: 0, entryShut: false };
+    if (p.lift) { const L = def.clear.lift; R.lift = { y: L.y0, y0: L.y0, y1: L.y1, speed: (L.y1 - L.y0) / (L.time || 24), t: 0, wait: L.wait ?? 1.5, dropLeft: 0, dropV: 0, drop(m, secs = 0.6) { this.dropLeft = m; this.dropV = m / Math.max(0.05, secs); } }; rmLiftPose(R); }
+    if (p.core) { p.core.g.visible = true; p.core.core.visible = true; }
+    if (p.live) p.live.visible = false;
+    for (const k of ["seal", "entry", "reinf"]) { const S = rmDoor(R, k); if (S) { S.want = S.open = S.rmBuild ?? S.want; lvShutterPose(S); rmLampSet(S, S.want ? M.rackLed : M.red); } }
+    RM.rooms.set(id, R); RM.order.push(R);
+  }
+  // chain by next (the first room is the one nothing points at)
+  for (const R of RM.order) { const n = R.def.next && RM.rooms.get(R.def.next); if (n) { R.next = n; n.prev = R; } }
+  for (const R of RM.order) if (R.def.clear.type === "lockdown") { const S = rmDoor(R, "seal"); if (S) { S.want = S.open = 1; lvShutterPose(S); rmLampSet(S, M.amber); } }
+  return RM.order.length;
+}
+function roomsSkipTo(id) {
+  const target = RM.rooms.get(id); if (!target) return false;
+  for (let R = target.prev; R; R = R.prev) { R.state = "resolved"; R.skipped = true; rmShut(rmDoor(R, "seal"), true); rmLampSet(rmDoor(R, "seal"), M.rackLed); }
+  RM.focus = target.prev || null; if (target.state === "dormant") rmPrime(target); return true;
+}
+function roomResolve(id) { const R = RM.rooms.get(id); if (R && R.state !== "resolved") { if (R.state === "dormant") rmPrime(R); if (R.state === "primed") rmLive(R); rmResolve(R); } }
+// ---- the cast
+function roomSpawn(R, c, alert = false) {
+  const at = rmAt(R, c.at); let type = c.t;
+  if (type === "boss") { lvBoss(c.id, at.x + LV.ox, at.z + LV.oz, at.y); lvTrig("boss"); R.boss = true; return null; }
+  if (type === "spotter" && !TYPES.spotter) type = "gunman"; if (!TYPES[type]) type = "gunman";
+  spawnEnemy(type, at.x, at.y, at.z); const e = enemies[enemies.length - 1];
+  e.rm = R; e.rmC = c; e.group.rotation.y = c.yaw ?? 0;
+  if (at.y > 0.5 && !e.T.flying && !e.T.fixed) { const B = R.B; const z = lvZoneAt((B.x0 + B.x1) / 2, (B.z0 + B.z1) / 2, at.y) || lvZoneAt(at.x, at.z, at.y); if (z) e.zone = z; }
+  if (/^(idle|desk|guard|sleep)$/.test(c.start || "idle")) { e.wander.set(at.x, at.y, at.z); e.wanderT = 1e9; }
+  if (c.t === "spotter" || c.spotter) { e.rmSpotter = true; if (!TYPES.spotter) { const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.5, 4), M.mullion); mast.position.set(0.12, 2.05, -0.05); const tip = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), M.red); tip.position.y = 0.27; mast.add(tip); e.group.add(mast); e.rmTip = tip; } }
+  if (c.witness) e.rmWitness = true;
+  if (alert) { e.alert = true; e.cool = 0.6 + Math.random(); e.rmPrimed = false; } else e.rmPrimed = R.state !== "live";
+  if (R.state === "live" && !alert && c.alert) { e.alert = true; e.cool = 0.6 + Math.random(); }
+  R.cast.push(e); updateCount(); return e;
+}
+function rmDespawn(e) {
+  if (!e || e.dead) return; e.dead = true; e.rmGone = true;
+  enemyByHandle.delete(e.col.handle); try { world.removeCharacterController(e.ctrl); } catch {} world.removeRigidBody(e.body); levelGroup.remove(e.group);
+  for (const b of bolts) if (b.owner === e) b.owner = null;
+}
+function rmCastList(R) { return (typeof replayCast === "function" ? replayCast(R.def) : null) || R.def.cast || []; }
+function rmPrime(R) {
+  R.state = "primed"; R.cast = R.cast.filter((e) => !e.dead || !e.rmGone);
+  rmCastList(R).forEach((c, i) => { if (R.killed.has(i) || R.cast.some((e) => e.rmI === i && !e.dead)) return; const e = roomSpawn(R, c); if (e) e.rmI = i; });
+  R.def.onPrime?.(R); updateCount();
+}
+function rmInBox(R, x, z) { return x > R.B.x0 && x < R.B.x1 && z > R.B.z0 && z < R.B.z1; }
+function rmSleep(R) { // back to geometry only: the living cast goes, the dead stay dead
+  for (const e of R.cast) if (!e.dead) rmDespawn(e); else if (!e.rmGone && e.rmI != null) R.killed.add(e.rmI);
+  if (R.state !== "resolved") R.state = "dormant"; updateCount();
+}
+// ---- going live
+function rmLive(R) {
+  const pp = playerPos();
+  if (RM.live && RM.live !== R && RM.live.state === "live") RM.live.state = "primed";
+  R.state = "live"; RM.live = R; RM.focus = R; R.t = 0; R.wt = 0; R.hpLast = player.hp; R.liveAt = state.time;
+  // which way you came in: the nearest entry within 6 m
+  let best = null, bd = 6; for (const en of R.def.entries || []) { const a = rmAt(R, en.at); const d = Math.hypot(a.x - pp.x, a.z - pp.z) + Math.abs(a.y - rmFeet()) * 0.5; if (d < bd) { bd = d; best = en; } }
+  R.entry = best; R.showoff = !!best?.show;
+  for (const e of R.cast) if (!e.dead) { e.rmPrimed = false; if (e.rmC?.alert) { e.alert = true; e.cool = 0.6 + Math.random(); } }
+  const C = R.def.clear;
+  if (C.type === "lockdown") R.lock = { time: C.time || 18, left: C.time || 18, through: false, failed: false };
+  if (C.type === "witness") for (const e of R.cast) if (e.rmWitness && !e.dead && C.terminal) e.rmGoal = rmAt(R, C.terminal);
+  if (R.p.live) R.p.live.visible = true;
+  if (R.def.twist && (R.def.twist.at === "live" || R.def.twist.at == null)) rmTwist(R);
+  if (typeof TRV !== "undefined" && TRV.roomReset) try { TRV.roomReset(); } catch (err) { console.warn(err); }
+  R.def.onLive?.(R);
+  ev("roomLive", { id: R.id, floor: R.def.floor, name: R.def.name });
+}
+function rmTwist(R) { if (R.twistDone) return; R.twistDone = true; const d = R.def.twist.do; try { if (typeof d === "function") d(R); else RM_TWIST[d]?.(R, true); } catch (err) { console.warn(err); } }
+// ---- per step (rdt: real time, wdt: world time, slowed by focus and finishers)
+function rmPre() {
+  if (!RM.rooms.size || !player || player.dead) return;
+  if (RM.sim && state.mode === "test" && pressed.has("KeyL")) { pressed.delete("KeyL"); RM.reload = RM.sim; }
+  if (RM.reload) { const id = RM.reload; RM.reload = null; rmSimLoad(id, true); return; }
+  const R = RM.live; const core = R?.p.core;
+  if (core && !R.coreOut && pressed.has("KeyF") && playerPos().distanceTo(core.at) < 2.4) { pressed.delete("KeyF"); keys.delete("KeyF"); rmCorePull(R.id); }
+}
+function rmCorePull(id) {
+  const R = RM.rooms.get(id); if (!R || R.coreOut || !R.p.core) return false;
+  if (R.state !== "live") { if (R.state === "dormant") rmPrime(R); rmLive(R); }
+  R.coreOut = true; R.p.core.core.visible = false; sfx.unlock(); sfx.servo(); glitch(0.5); shake = Math.max(shake, 0.3); impactFrame(30);
+  for (const e of R.cast) if (!e.dead && !e.T.civ) { e.alert = true; e.cool = Math.min(e.cool, 0.8); }
+  ev("corePull", { id }); rmResolve(R); return true;
+}
+function rmStep(rdt, wdt) {
+  if (!RM.rooms.size || !player || player.dead || RM.gen !== state.gen) return;
+  const pp = playerPos(), feet = rmFeet();
+  // streaming, four times a second
+  if ((RM.scanT -= rdt) <= 0) {
+    RM.scanT = 0.25; const F = RM.live || RM.focus;
+    for (const R of RM.order) {
+      const near = rmDist(R, pp) < 30 || R === F || (F && (R === F.next || R === F.prev)) || rmInside(R, pp, 0);
+      if (R.state === "dormant" && near) rmPrime(R);
+      else if ((R.state === "primed" || R.state === "resolved") && !near && R.cast.some((e) => !e.dead)) rmSleep(R);
+      else if (R.state === "primed" && !near) R.state = "dormant";
+    }
+  }
+  // primed rooms: go live when you cross in, when anyone in the cast is alerted, or when one of them sees you
+  for (const R of RM.order) {
+    if (R.state !== "primed") continue;
+    let go = rmInside(R, pp, -0.2) && "inside";
+    // an alert from the room next door (alertNear) doesn't count: only this room's own eyes, or a hit
+    const busy = RM.live && RM.live !== R && RM.live.state === "live";
+    if (!go) for (const e of R.cast) if (!e.dead && e.alert && !e.T.civ) { if (busy && !e.rmSaw && !(e.hp < e.T.hp)) { e.alert = false; continue; } go = "alert:" + e.type; break; }
+    if (!go && (R.seeT = (R.seeT || 0) - rdt) <= 0) {
+      R.seeT = 0.3; const head = pp.clone(); head.y += P.eye;
+      for (const e of R.cast) { if (e.dead || e.T.civ) continue; const t = e.body.translation(); const dx = pp.x - t.x, dz = pp.z - t.z, d = Math.hypot(dx, dz); if (d > 26) continue;
+        const fy = e.group.rotation.y; if ((Math.sin(fy) * dx + Math.cos(fy) * dz) / Math.max(0.01, d) < 0) continue; // only what is in front of them
+        if (canSee(e, head)) { e.rmPrimed = false; e.rmSaw = true; e.alert = true; alertNear(e.group.position, 12); go = "seen:" + e.type; break; } }
+    }
+    if (go) { R.why = go; rmLive(R); }
+  }
+  const R = RM.live; if (!R) { rmCardStep(rdt); return; }
+  if (R.state === "live") rmStepLive(R, rdt, wdt, pp, feet);
+  rmCardStep(rdt);
+}
+function rmStepLive(R, rdt, wdt, pp, feet) {
+  const C = R.def.clear; R.t += rdt; R.wt += wdt;
+  // damage taken: the drop in health, step to step (stims raise it, they don't count)
+  if (player.hp < R.hpLast) R.dmg += R.hpLast - player.hp; R.hpLast = player.hp;
+  const inside = rmInside(R, pp, 0); const onFloor = player.grounded && inside && feet - (C.y ?? R.B.y0) < 0.35;
+  if (onFloor && R.t > 0.5) R.touched = true;
+  // the entry door shuts once you're clear of it
+  const ent = rmDoor(R, "entry"); if (ent && !R.entryShut && ent.want === 1) { const d = Math.hypot(pp.x - ent.X, pp.z - ent.Z); if (d > 2.6 && inside) { R.entryShut = true; rmShut(ent, false); rmLampSet(ent, M.red); } }
+  // floor is live: you take damage standing on it
+  if (C.type === "live") {
+    if (onFloor) { R.liveOn = (R.liveOn || 0) + wdt; if (R.liveOn > (C.grace ?? 0.35)) { R.liveAcc += (C.dps || 15) * wdt; if (R.liveAcc >= 1) { const n = Math.floor(R.liveAcc); R.liveAcc -= n; damagePlayer(n, { T: { label: "Live floor" } }); } if (Math.random() < wdt * 12) spark(new THREE.Vector3(pp.x + (Math.random() - 0.5), feet + 0.05, pp.z + (Math.random() - 0.5)), 0x4ff0ff); } }
+    else R.liveOn = 0;
+  }
+  // silence: the spotter raises the alarm a few seconds after it is alerted, unless it goes down first
+  if (C.type === "silence") rmStepAlarm(R, wdt);
+  for (const e of R.cast) if (!e.dead && !e.T.civ && e.alert && !e.rmSpotter) R.seen = true;
+  // witness: the worker heads for the terminal; stopping them (stun or kill) is your call
+  if (C.type === "witness" && !R.witness) for (const e of R.cast) if (e.rmWitness && e.rmGoal) {
+    if (e.dead || e.stun > 0) { R.witness = "stopped"; e.rmGoal = null; ev("witness", { id: R.id, sent: false }); }
+    else if (Math.hypot(e.group.position.x - e.rmGoal.x, e.group.position.z - e.rmGoal.z) < 1.3) { R.witness = "sent"; e.rmGoal = null; e.alert = true; sfx.radio?.(); if (R.p.term) R.p.term.scr.material = M.red; log("A witness got the evidence out.", "tip"); ev("witness", { id: R.id, sent: true }); }
+  }
+  // the lift: ride it, the timeline brings the balconies' cast
+  if (R.lift) rmStepLift(R, wdt, pp, feet);
+  // twist at a time, or at half the cast down
+  const tw = R.def.twist;
+  if (tw && !R.twistDone) { if (typeof tw.at === "number" && R.wt >= tw.at) rmTwist(R); else if (tw.at === "half") { const all = R.cast.filter((e) => !e.T.civ); if (all.length && all.filter((e) => e.dead).length * 2 >= all.length) rmTwist(R); } }
+  R.def.tick?.(R, wdt);
+  if (R.state !== "live") return;
+  // clear rules
+  if (C.type === "lockdown") {
+    const L = R.lock, S = rmDoor(R, "seal");
+    if (!L.failed) {
+      L.left -= wdt; const k = THREE.MathUtils.clamp(L.left / L.time, 0, 1);
+      if (S) { S.want = S.open = k; lvShutterPose(S); rmLampSet(S, M.amber, k); }
+      const sx = S ? S.X : (R.B.x0 + R.B.x1) / 2, sz = S ? S.Z : (R.B.z0 + R.B.z1) / 2;
+      if (!inside && Math.hypot(pp.x - sx, pp.z - sz) < 9 && rmDist(R, pp) > 0.4) { L.through = true; rmResolve(R); return; }
+      if (L.left <= 0) { L.failed = true; if (S) { S.want = S.open = 0; lvShutterPose(S); rmLampSet(S, M.red); } sfx.clunk(); shake = Math.max(shake, 0.3); flash("Locked down · clear the room to override", "var(--threat)"); }
+    } else if (rmPurged(R)) rmResolve(R);
+    return;
+  }
+  if (C.type === "lift") { if (R.lift.done) rmResolve(R); return; }
+  if (C.type === "core" || C.type === "script") return;
+  if (rmPurged(R)) rmResolve(R);
+}
+function rmPurged(R) {
+  if (R.alarm && !R.alarm.done && !R.alarm.off) return false;
+  if (R.reinf && !R.reinf.spawned) return false;
+  if (R.boss && (enemies.some((e) => !e.dead && e.T.boss) || LV.spawns.some((s) => s.boss && !s.done))) return false;
+  return R.cast.every((e) => e.dead || e.T.civ);
+}
+function rmStepAlarm(R, wdt) {
+  const C = R.def.clear; const sp = R.cast.find((e) => e.rmSpotter);
+  if (!R.alarm) R.alarm = { left: C.delay ?? 6, on: false, done: false, off: false, blink: 0 };
+  const A = R.alarm;
+  if (A.done || A.off) { if (R.reinf && !R.reinf.spawned) rmStepReinf(R, wdt); return; }
+  if (!sp || sp.dead) { A.off = true; if (sp?.rmTip) sp.rmTip.material = M.red; return; }
+  if (sp.alert) {
+    if (!A.on) { A.on = true; sfx.radio?.(); }
+    A.left -= wdt; A.blink += wdt; if (sp.rmTip) sp.rmTip.material = Math.floor(A.blink * 5) % 2 ? M.amber : M.red;
+    if (A.left <= 0) { A.done = true; R.reinf = { t: 2, spawned: false }; alarm(2.5); ev("roomAlarm", { id: R.id }); const S = rmDoor(R, "reinf"); if (S) rmLampSet(S, M.red); flash("Alarm", "var(--threat)"); }
+  }
+}
+function rmStepReinf(R, wdt) {
+  const F = R.reinf, S = rmDoor(R, "reinf");
+  F.t -= wdt; if (S?.rmLamp) S.rmLamp.visible = Math.floor(F.t * 6) % 2 === 0;
+  if (F.t > 0) return;
+  F.spawned = true; if (S) { S.rmLamp.visible = true; rmShut(S, true); rmLampSet(S, M.rackLed); }
+  for (const c of R.def.clear.reinf || []) roomSpawn(R, c, true);
+}
+function rmLiftPose(R) { const L = R.lift, p = R.p.lift; p.body.setNextKinematicTranslation({ x: p.X, y: L.y - 0.2, z: p.Z }); p.mesh.position.set(p.X, L.y - 0.2, p.Z); }
+function rmStepLift(R, wdt, pp, feet) {
+  const L = R.lift, p = R.p.lift, C = R.def.clear;
+  L.t += wdt; let v = 0;
+  if (L.dropLeft > 0) { const d = Math.min(L.dropLeft, L.dropV * wdt); L.dropLeft -= d; L.y -= d; v = -L.dropV; }
+  else if (L.t > L.wait && L.y < L.y1) { L.y = Math.min(L.y1, L.y + L.speed * wdt); v = L.speed; if (L.y >= L.y1 && !L.done) { L.done = true; sfx.clunk(); shake = Math.max(shake, 0.2); } }
+  rmLiftPose(R);
+  // stand on it and you go with it
+  if (Math.abs(pp.x - p.X) < p.w / 2 && Math.abs(pp.z - p.Z) < p.d / 2 && feet > L.y - 0.6 && feet < L.y + 1.4) { const lv = player.body.linvel(); if (v > 0 && lv.y < v) player.body.setLinvel({ x: lv.x, y: v, z: lv.z }, true); }
+  const tl = C.timeline || [];
+  while (R.timeline < tl.length && L.t >= tl[R.timeline].t) { for (const c of tl[R.timeline].cast || []) roomSpawn(R, c, true); R.timeline++; }
+}
+// ---- resolved
+function rmResolve(R) {
+  if (R.state === "resolved") return;
+  const wasLive = R.state === "live"; R.state = "resolved"; if (RM.live === R) RM.live = null; RM.focus = R;
+  const S = rmDoor(R, "seal"); if (S) { rmShut(S, true); rmLampSet(S, M.rackLed); }
+  sfx.clunk(); sfx.unlock(); shake = Math.max(shake, 0.18);
+  if (R.p.live) R.p.live.visible = false;
+  if (R.dim) RM_TWIST.lightsOut(R, false);
+  for (const e of R.cast) e.rmGoal = null;
+  // the room's last kill plays slow (a finisher already does its own)
+  if (wasLive && !state.fin && !MF.cur && state.tsMode === "normal" && R.kills && state.time - (R.lastKillT || -9) < 0.2) { setTime("slow", 0.7); sfx.slow(); }
+  R.def.onClear?.(R);
+  if (!wasLive) return;
+  const res = rmChallenges(R);
+  for (const c of res) if (c.ok) ev("challenge", { id: R.id, k: c.k });
+  ev("roomClear", { id: R.id, secs: +R.t.toFixed(2), dmg: Math.round(R.dmg), fin: R.fin });
+  rmCardShow(R, res);
+}
+function rmChallenges(R) {
+  return (R.def.challenges || []).slice(0, 3).map((c) => {
+    let ok = false;
+    switch (c.k) {
+      case "time": ok = R.t <= (c.par || 30); break;
+      case "noFloor": ok = !R.touched; break;
+      case "allFinish": ok = R.kills > 0 && !R.nonFin; break;
+      case "noDamage": ok = !R.hurt && R.dmg < 0.5; break;
+      case "oneWeapon": ok = R.kills > 0 && R.weapons.size <= 1; break;
+      case "gyre3": ok = R.gyreMax >= 3; break;
+      case "silence": ok = R.silenced; break;
+      case "showoff": ok = R.showoff; break;
+      default: ok = !!c.check?.(R);
+    }
+    return { k: c.k, ok, label: c.label || (RM_CH[c.k] ? RM_CH[c.k](c) : c.k) };
+  });
+}
+// ---- events from the moves bus
+function rmEvent(name, d) {
+  if (!RM.rooms.size) return;
+  if (name === "kill" && d.e?.rm) {
+    const e = d.e, R = e.rm; if (R.killed && e.rmI != null) R.killed.add(e.rmI);
+    const fin = !!(state.fin || MF.cur || e.finishing || e.mf || d.kind === "finisher");
+    if (fin) e.rmFin = true;
+    if (e.T.civ) return;
+    R.kills++; R.lastKillT = state.time; if (fin) R.fin++; else R.nonFin = true; if (d.w) R.weapons.add(d.w);
+    if (e.rmSpotter && !R.seen && !(R.alarm && R.alarm.done)) R.silenced = true;
+    if (R.inGyre) { R.gyreN++; }
+    return;
+  }
+  const R = RM.live; if (!R) return;
+  if (name === "hurt") R.hurt = true;
+  else if (name === "gyre") { R.inGyre = true; R.gyreN = 0; }
+  else if (name === "gyreKill") { R.gyreN = Math.max(R.gyreN, (d.n ?? 0)); R.gyreMax = Math.max(R.gyreMax, R.gyreN); }
+  else if (name === "gyreEnd") { R.gyreMax = Math.max(R.gyreMax, R.gyreN); R.inGyre = false; }
+  if (R.inGyre) R.gyreMax = Math.max(R.gyreMax, R.gyreN);
+}
+// a primed enemy's hook in the shared AI: the witness walks to the terminal instead of fleeing
+function rmWitnessMove(e, t, desired) {
+  const g = e.rmGoal; const w = new THREE.Vector3(g.x - t.x, 0, g.z - t.z); if (w.length() < 0.6) return null;
+  e.group.rotation.x = 0; desired.copy(w.normalize().multiplyScalar(Math.min(e.T.speed, 3.4))); return w;
+}
+// the room's last enemy gets the floor's finisher; on a plain floor this is the old "last one alive" rule
+function rmLastOne(e) {
+  const R = RM.live;
+  if (!R) return alive().length === 1 && alive()[0] === e;
+  if (e.rm !== R || !/^(purge|silence|live|witness|boss)$/.test(R.def.clear.type)) return false;
+  if (R.alarm && !R.alarm.done && !R.alarm.off && !e.rmSpotter) return false;
+  if (R.reinf && !R.reinf.spawned) return false;
+  const a = R.cast.filter((x) => !x.dead && !x.T.civ); return a.length === 1 && a[0] === e;
+}
+function rmFinMode() { return state.mode === "floor" || (state.mode === "test" && !!RM.sim && !!RM.live); }
+// ---- the end card: top right, 2.5 s, never pauses
+(() => {
+  const st = document.createElement("style");
+  st.textContent = `#rmcard{position:fixed;top:calc(78px + env(safe-area-inset-top,0px));right:max(18px,env(safe-area-inset-right,0px));z-index:6;width:min(260px,calc(100vw - 36px));padding:12px 14px 11px;border:1px solid rgba(217,226,234,.22);border-left:2px solid var(--amber);background:rgba(7,9,13,.78);color:var(--ink);font:12px/1.35 var(--mono,monospace);pointer-events:none;transform:translateX(calc(100% + 40px));opacity:0;transition:transform .32s cubic-bezier(.2,.9,.25,1),opacity .2s}
+#rmcard.on{transform:none;opacity:1}#rmcard .rc-h{display:flex;justify-content:space-between;gap:8px;align-items:baseline;margin-bottom:7px}#rmcard .rc-h b{font:600 15px var(--display,sans-serif);letter-spacing:.04em;text-transform:uppercase}
+#rmcard .rc-h span{font-size:10px;letter-spacing:.2em;color:var(--amber);text-transform:uppercase}#rmcard .rc-s{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:8px}
+#rmcard .rc-s div{display:grid;gap:1px}#rmcard .rc-s small{font-size:9px;letter-spacing:.18em;color:var(--dim);text-transform:uppercase}#rmcard .rc-s em{font-style:normal;font-size:14px}
+#rmcard ul{list-style:none;margin:0;padding:0;display:grid;gap:3px}#rmcard li{display:flex;gap:7px;color:var(--dim)}#rmcard li i{font-style:normal;width:12px;height:12px;border:1px solid currentColor;flex:none;margin-top:2px;display:grid;place-items:center;font-size:9px;line-height:1}
+#rmcard li.ok{color:var(--ink)}#rmcard li.ok i{color:var(--cyan);background:rgba(79,240,255,.15)}#rmcard .rc-x{margin-top:7px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--amber)}#rmcard .rc-x:empty{display:none}
+@media (prefers-reduced-motion:reduce){#rmcard{transition:opacity .2s}}`;
+  document.head.appendChild(st);
+  const c = document.createElement("div"); c.id = "rmcard"; c.setAttribute("role", "status"); c.setAttribute("aria-live", "polite"); document.body.appendChild(c); RM.card = c;
+})();
+function rmCardShow(R, res) {
+  const c = RM.card; if (!c) return;
+  const prev = RM.best.get(R.id); const newBest = prev == null || R.t < prev; if (newBest) RM.best.set(R.id, R.t);
+  let extra = typeof replayCardLine === "function" ? (replayCardLine(R.id) || "") : (newBest && prev != null ? "New best" : prev != null ? `Best ${prev.toFixed(1)} s` : "");
+  if (R.witness) extra = (extra ? extra + " · " : "") + (R.witness === "sent" ? "Witness got away" : "Witness stopped");
+  const esc = (s) => String(s).replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+  c.innerHTML = `<div class="rc-h"><b>${esc(R.def.name || R.id)}</b><span>Resolved</span></div><div class="rc-s"><div><small>Time</small><em>${R.t.toFixed(1)} s</em></div><div><small>Damage</small><em>${Math.round(R.dmg)}</em></div><div><small>Finishers</small><em>${R.fin}</em></div></div><ul>${res.map((x) => `<li class="${x.ok ? "ok" : ""}"><i>${x.ok ? "✓" : ""}</i>${esc(x.label)}</li>`).join("")}</ul><div class="rc-x">${esc(extra)}</div>`;
+  c.classList.add("on"); RM.cardT = 2.5;
+  if (/new best/i.test(extra) || (newBest && prev != null)) for (const [f, d] of [[1320, 0], [1760, 0.09], [2640, 0.18]]) tone("sine", f, f, 0.35, 0.05, d);
+}
+function rmCardStep(rdt) { if (RM.cardT > 0 && (RM.cardT -= rdt) <= 0) RM.card?.classList.remove("on"); }
+function rmCardHide(now) { RM.cardT = 0; RM.card?.classList.remove("on"); }
+// the pause screen lists the room's challenges (never shown during play)
+function rmPauseNote() {
+  const R = RM.live || (RM.focus && RM.focus.state !== "resolved" ? RM.focus : null) || RM.focus?.next; if (!R || !R.def.challenges?.length) return;
+  const sub = $("sub"); sub.textContent = `${sub.textContent} Room: ${R.def.name}. Challenges: ${R.def.challenges.slice(0, 3).map((c) => c.label || RM_CH[c.k]?.(c) || c.k).join(" · ")}.`;
+}
+
+// ================= Round 8 · testing ground: the room sim, a chain of three rooms in the sky over the grid =================
+// Desk Farm (purge) -> Server Aisle (silence) -> a Lockdown run, plus the Desk Farm with the other clear rules and a
+// Freight Lift. Load any room by name from the Tab menu; L restarts it.
+const RM_Y = 70;
+const RM_SIM = {
+  desk_farm: ["desk_farm", "server_aisle", "lockdown_run"], server_aisle: ["desk_farm", "server_aisle", "lockdown_run"], lockdown_run: ["desk_farm", "server_aisle", "lockdown_run"],
+  df_core: ["df_core", "server_aisle", "lockdown_run"], df_live: ["df_live", "server_aisle", "lockdown_run"], df_witness: ["df_witness", "server_aisle", "lockdown_run"],
+  freight_lift: ["freight_lift"],
+};
+(() => {
+  const Y = RM_Y;
+  const df = {
+    floor: "sim", name: "Desk Farm", kind: "arena", box: { x: 0, z: 0, w: 40, d: 32, h: 7, y: Y },
+    entries: [{ id: "main", at: [20, Y, 33], door: true }, { id: "vent", at: [-0.5, Y, 8] }, { id: "show", at: [34, Y + 4.5, 32.5], show: true }],
+    clear: { type: "purge" },
+    cast: [
+      { t: "gunman", at: [10, Y, 9.2], yaw: Math.PI, start: "desk" }, { t: "gunman", at: [26, Y, 9.2], yaw: Math.PI, start: "desk" },
+      { t: "gunman", at: [14, Y, 21.2], yaw: Math.PI * 0.85, start: "desk" }, { t: "gunman", at: [30, Y, 21.2], yaw: Math.PI, start: "desk" },
+      { t: "gunman", at: [36, Y, 3], yaw: -Math.PI / 2, start: "guard" }, { t: "brawler", at: [20, Y, 16], yaw: Math.PI, start: "patrol" },
+    ],
+    lines: { anchors: [[10, Y + 6.5, 16], [30, Y + 6.5, 16]] },
+    challenges: [{ k: "time", par: 25 }, { k: "noFloor" }, { k: "allFinish" }],
+    next: "server_aisle", sim: { start: [20, Y + 1.2, 40, 0] },
+  };
+  ROOM_DEFS.desk_farm = df;
+  ROOM_DEFS.df_core = { ...df, name: "Desk Farm · core pull", doors: "desk_farm", clear: { type: "core", at: [20, Y + 1.3, 16] }, challenges: [{ k: "time", par: 12 }, { k: "noDamage" }, { k: "showoff" }],
+    cast: df.cast.filter((c) => c.t !== "brawler") };
+  ROOM_DEFS.df_live = { ...df, name: "Desk Farm · floor is live", doors: "desk_farm", clear: { type: "live", dps: 18 }, challenges: [{ k: "noFloor" }, { k: "noDamage" }, { k: "oneWeapon" }] };
+  ROOM_DEFS.df_witness = { ...df, name: "Desk Farm · witness", doors: "desk_farm", clear: { type: "witness", terminal: [3, Y, 30] },
+    cast: [...df.cast.slice(0, 4), { t: "worker", at: [3, Y, 3], yaw: 0, start: "desk", witness: true }], challenges: [{ k: "time", par: 22 }, { k: "allFinish" }, { k: "noDamage" }] };
+  ROOM_DEFS.server_aisle = {
+    floor: "sim", name: "Server Aisle", kind: "aisle", box: { x: -10, z: -18, w: 60, d: 14, h: 7, y: Y },
+    entries: [{ id: "main", at: [20, Y, -3.5], door: true }],
+    clear: { type: "silence", delay: 6, door: { at: [-10, Y, -11], axis: "z", w: 4, h: 4.5 }, reinf: [{ t: "brawler", at: [-11, Y, -12] }, { t: "gunman", at: [-11.5, Y, -10] }] },
+    cast: [
+      { t: "bot", at: [8, Y, -6], yaw: Math.PI / 2, start: "guard" }, { t: "bot", at: [34, Y, -16], yaw: Math.PI / 2, start: "guard" },
+      { t: "gunman", at: [2, Y, -11], yaw: -Math.PI / 2, start: "patrol" }, { t: "gunman", at: [24, Y, -11.2], yaw: Math.PI / 2, start: "idle" },
+      { t: "gunman", at: [40, Y, -6.2], yaw: Math.PI / 2, start: "idle" }, { t: "spotter", at: [47, Y, -11], yaw: -Math.PI / 2, start: "guard" },
+    ],
+    challenges: [{ k: "silence" }, { k: "time", par: 30 }, { k: "noDamage" }],
+    next: "lockdown_run", sim: { start: [20, Y + 1.2, -1.5, 0] },
+  };
+  ROOM_DEFS.lockdown_run = {
+    floor: "sim", name: "Lockdown Run", kind: "run", box: { x: 54, z: -16, w: 40, d: 10, h: 7, y: Y },
+    entries: [{ id: "main", at: [53.5, Y, -11], door: true }],
+    clear: { type: "lockdown", time: 14 },
+    cast: [{ t: "gunman", at: [90, Y + 2.6, -15], yaw: -Math.PI / 2, start: "guard" }, { t: "gunman", at: [90, Y + 2.6, -7], yaw: -Math.PI / 2, start: "guard" }],
+    challenges: [{ k: "time", par: 9 }, { k: "noDamage" }, { k: "noFloor" }],
+    sim: { start: [52, Y + 1.2, -11, -Math.PI / 2] },
+  };
+  ROOM_DEFS.freight_lift = {
+    floor: "sim", name: "Freight Lift", kind: "set piece", box: { x: -50, z: 10, w: 10, d: 8, h: 40, y: Y },
+    entries: [{ id: "main", at: [-45, Y, 19] }],
+    clear: { type: "lift", lift: { at: [-45, 14], w: 10, d: 8, y0: Y, y1: Y + 33, time: 26, wait: 1.5 },
+      timeline: [{ t: 5, cast: [{ t: "gunman", at: [-52.5, Y + 10, 12.5], yaw: Math.PI / 2 }, { t: "gunman", at: [-52.5, Y + 10, 15.5], yaw: Math.PI / 2 }] },
+        { t: 11, cast: [{ t: "bot", at: [-37.5, Y + 20, 14], yaw: -Math.PI / 2 }, { t: "gunman", at: [-37.5, Y + 20, 16], yaw: -Math.PI / 2 }] },
+        { t: 18, cast: [{ t: "gunman", at: [-46.5, Y + 30, 20.5], yaw: Math.PI }, { t: "brawler", at: [-43.5, Y + 30, 20.5], yaw: Math.PI }, { t: "drone", at: [-45, Y + 33, 24], yaw: Math.PI }] }] },
+    cast: [], challenges: [{ k: "noDamage" }, { k: "oneWeapon" }, { k: "allFinish" }],
+    sim: { start: [-45, Y + 1.2, 14, 0] },
+  };
+})();
+// the shells (world metres; the testing ground has LV.ox = oz = 0)
+function rmSimBuild() {
+  const Y = RM_Y, st = LV_FLOORMAT.stone(), pan = LV_FLOORMAT.panel(), dark = LV_FLOORMAT.panelDark(), steel = LV_FLOORMAT.steel(), carpet = LV_FLOORMAT.carpet();
+  const W = (x1, z1, x2, z2, y0 = 0, y1 = 7, m = pan) => lvWall(x1, z1, x2, z2, Y + y0, Y + y1, m);
+  // lobby and the walkway round to the vent
+  lvSlab(-6, 32, 40, 46, Y, st, 0.5); lvSlab(-6, 2, 0, 32, Y, st, 0.5);
+  W(-6, 46, 40, 46, 0, 1.2, dark); W(40, 32, 40, 46, 0, 1.2, dark); W(-6, 2, -6, 46, 0, 1.2, dark); W(-6, 2, 0, 2, 0, 1.2, dark);
+  for (const [x, z, h] of [[35, 38.4, 1.4], [35, 36, 2.8], [35, 33.6, 4.2]]) lvBox(x, Y + h / 2, z, 2.4, h, 2.4, dark); // steps up to the showoff window
+  lvAnchor(30, 40, Y + 9);
+  // Desk Farm 40 x 32
+  lvSlab(0, 0, 40, 32, Y, carpet, 0.5);
+  W(0, 32, 18, 32); W(22, 32, 32, 32); W(18, 32, 22, 32, 4.5, 7); W(32, 32, 36, 32, 0, 4.5); W(36, 32, 40, 32);
+  W(0, 0, 18, 0); W(22, 0, 40, 0); W(18, 0, 22, 0, 4.5, 7);
+  W(0, 0, 0, 6); W(0, 10, 0, 32); W(0, 6, 0, 10, 3, 7); W(40, 0, 40, 32);
+  lvShutter(18, 32, 22, 32, Y, 4.5, "entry:desk_farm", false); lvShutter(18, 0, 22, 0, Y, 4.5, "seal:desk_farm", true);
+  for (const z of [8, 20]) for (const x of [6, 10, 14, 26, 30]) { lvDesk(x, z, Y, 0, { chair: x % 8 === 6 }); lvDesk(x, z + 2.4, Y, Math.PI, {}); }
+  lvGlass(32, 6, 40, 6, Y, Y + 3); lvGlass(32, 0.2, 32, 6, Y, Y + 3); lvBox(36, Y + 3.1, 3, 8, 0.2, 6, steel);
+  for (const [x, y, z] of [[10, Y + 6.5, 16], [30, Y + 6.5, 16]]) lvAnchor(x, z, y);
+  lvCrate(20, 26, Y, 1.2); lvCrate(8, 15, Y, 1);
+  // connector and Server Aisle 60 x 14
+  lvSlab(18, -4, 22, 0, Y, st, 0.5); W(18, -4, 18, 0, 0, 4.5, dark); W(22, -4, 22, 0, 0, 4.5, dark);
+  lvSlab(-10, -18, 50, -4, Y, LV_FLOORMAT.darkstone(), 0.5);
+  W(-10, -4, 18, -4); W(22, -4, 50, -4); W(18, -4, 22, -4, 4.5, 7); W(-10, -18, 50, -18);
+  W(-10, -18, -10, -13); W(-10, -9, -10, -4); W(-10, -13, -10, -9, 4.5, 7);
+  W(50, -18, 50, -13); W(50, -9, 50, -4); W(50, -13, 50, -9, 4.5, 7);
+  lvShutter(18, -4, 22, -4, Y, 4.5, "entry:server_aisle", false); lvShutter(50, -13, 50, -9, Y, 4.5, "seal:server_aisle", true);
+  // the closet the reinforcements come from
+  lvSlab(-15, -14, -10, -8, Y, st, 0.5); W(-15, -14, -10, -14, 0, 5, dark); W(-15, -8, -10, -8, 0, 5, dark); W(-15, -14, -15, -8, 0, 5, dark);
+  for (const z of [-8.6, -13.4]) for (const x of [-4, 6, 16, 26, 36]) lvRack(x, z, Y, 7.4, 1.2, 3.2);
+  lvSlab(-10, -18, 44, -16.2, Y + 4, steel, 0.25); lvRail(-10, -16.2, 44, -16.2, Y + 4);
+  for (const x of [0, 20, 40]) lvAnchor(x, -10, Y + 6.4);
+  // connector and the Lockdown Run 40 x 10
+  lvSlab(50, -13, 54, -9, Y, st, 0.5); W(50, -13, 54, -13, 0, 4.5, dark); W(50, -9, 54, -9, 0, 4.5, dark);
+  lvSlab(54, -16, 94, -6, Y, LV_FLOORMAT.concrete(), 0.5);
+  W(54, -16, 94, -16); W(54, -6, 94, -6); W(54, -16, 54, -13); W(54, -9, 54, -6); W(54, -13, 54, -9, 4.5, 7);
+  W(94, -16, 94, -13); W(94, -9, 94, -6); W(94, -13, 94, -9, 4.5, 7);
+  lvShutter(54, -13, 54, -9, Y, 4.5, "entry:lockdown_run", false); lvShutter(94, -13, 94, -9, Y, 4.5, "seal:lockdown_run", true, { speed: 2 });
+  lvBox(62, Y + 0.5, -11, 1, 1, 10, dark); lvBox(70, Y + 3.5, -14, 1, 7, 4, dark); lvBox(70, Y + 3.5, -8, 1, 7, 4, dark); // a hurdle, then a 2 m gap
+  lvBox(78, Y + 0.6, -14, 3, 1.2, 4, dark); lvBox(78, Y + 0.6, -8, 3, 1.2, 4, dark); lvCrate(84, -11, Y, 1.4);
+  lvSlab(88, -16, 94, -13.4, Y + 2.6, steel, 0.25); lvSlab(88, -8.6, 94, -6, Y + 2.6, steel, 0.25);
+  lvAnchor(66, -11, Y + 6.4); lvAnchor(82, -11, Y + 6.4);
+  lvSlab(94, -13, 104, -9, Y, st, 0.5); W(94, -13, 104, -13, 0, 3, dark); W(94, -9, 104, -9, 0, 3, dark); W(104, -13, 104, -9, 0, 3, dark);
+  // the Freight Lift: an open shaft with three balconies on the way up
+  lvSlab(-56, 8, -34, 26, Y - 0.6, LV_FLOORMAT.concrete(), 0.5); W(-56, 8, -34, 8, -0.6, 1.2, dark); W(-56, 26, -34, 26, -0.6, 1.2, dark); W(-56, 8, -56, 26, -0.6, 1.2, dark); W(-34, 8, -34, 26, -0.6, 1.2, dark);
+  for (const [x, z] of [[-50.3, 9.7], [-39.7, 9.7], [-50.3, 18.3], [-39.7, 18.3]]) lvBox(x, Y + 20, z, 0.5, 40, 0.5, M.mullion);
+  lvSlab(-55, 11, -51, 17, Y + 10, steel, 0.3); lvRail(-51, 11, -51, 17, Y + 10);
+  lvSlab(-39, 11, -35, 17, Y + 20, steel, 0.3); lvRail(-39, 11, -39, 17, Y + 20);
+  lvSlab(-49, 19, -41, 23, Y + 30, steel, 0.3); lvRail(-49, 19, -41, 19, Y + 30);
+  lvSlab(-50, 2, -40, 9.6, Y + 33, steel, 0.4); W(-50, 2, -40, 2, 33, 35, dark);
+  for (const id of Object.keys(ROOM_DEFS)) if (ROOM_DEFS[id].floor === "sim") rmProps(ROOM_DEFS[id], id);
+  RM.sim = null;
+}
+function rmSimLoad(id, restart = false) {
+  const def = ROOM_DEFS[id]; if (!def || state.mode !== "test") return;
+  if (restart) { try { for (const r of [...ragdolls]) removeRagdoll(r); goreReset(); for (const b of [...bolts]) { levelGroup.remove(b.mesh); } bolts.length = 0; } catch (err) { console.warn(err); } }
+  RM.sim = id; roomsInit("sim", RM_SIM[id] || [id]); roomsSkipTo(id);
+  const [x, y, z, yw] = def.sim.start; player.body.setTranslation({ x, y, z }, true); player.body.setLinvel({ x: 0, y: 0, z: 0 }, true); player.prev = new THREE.Vector3(x, y, z); yaw = yw; pitch = 0;
+  player.hp = 100; player.stims = 3; RM.scanT = 0;
+  flash(`${restart ? "Restart · " : ""}${def.name}`, "var(--amber)");
+  if (!restart) hint(`Room sim: ${def.name}. L restarts the room. Challenges: ${(def.challenges || []).map((c) => RM_CH[c.k]?.(c) || c.k).join(" · ")}.`);
+}
+function rmSimLeave() { rmClearAll(); RM.sim = null; player.body.setTranslation({ x: 0, y: 1.3, z: 8 }, true); player.body.setLinvel({ x: 0, y: 0, z: 0 }, true); player.prev = new THREE.Vector3(0, 1.3, 8); yaw = Math.PI; }
+function rmSimMenu(sec, btns, row) {
+  const s = sec("Room sim");
+  const names = { desk_farm: "Desk Farm · purge", server_aisle: "Server Aisle · silence", lockdown_run: "Lockdown run", df_core: "Desk Farm · core pull", df_live: "Desk Farm · floor is live", df_witness: "Desk Farm · witness", freight_lift: "Freight Lift · hold the lift" };
+  btns(s, Object.keys(RM_SIM).map((id) => [names[id] || ROOM_DEFS[id].name, () => tgmDo(() => rmSimLoad(id))]));
+  btns(s, [["Restart room (L)", () => tgmDo(() => RM.sim && rmSimLoad(RM.sim, true))], ["Leave the sim", () => tgmDo(() => rmSimLeave(), "Back on the grid")]]);
+  const R = RM.live || RM.focus; const st = document.createElement("p"); st.className = "set-l"; st.style.margin = "8px 0 0";
+  st.textContent = RM.sim ? `Loaded: ${ROOM_DEFS[RM.sim].name}. ${RM.order.map((r) => `${r.def.name}: ${r.state}`).join(" · ")}` : "Rooms float over the grid. L restarts the room you're in; the end card shows on clear.";
+  s.append(st);
+}
+
 // ---------- loop ----------
 let acc = 0, last = performance.now();
 function simStep() {
@@ -14553,6 +15071,7 @@ function simStep() {
   ts = comboRamp(ts); ts = carxTs(ts); ts = mfTs(scopeTs(ts));
   state.time += DT;
   (player.prev ||= new THREE.Vector3()).copy(playerPos());
+  rmPre();
   stepPlayer(DT);
   pressed.clear();
   if (player.dead) return;
@@ -14567,7 +15086,7 @@ function simStep() {
     if (tv.length() > 5) for (const b of barrelsNear(tp.clone().setY(0.55), 0.6)) hitBarrel(b, 0.08);
   }
   updateBooms(DT * Math.max(ts, 0.3)); boomStep(DT * Math.max(ts, 0.3));
-  lvStep(DT * ts);
+  lvStep(DT * ts); rmStep(DT, DT * ts);
   if (state.phase === 1.5 && playerPos().distanceTo(new THREE.Vector3(0, 1, -26)) < 1.8) pickupSword();
   if (door.opening && door.mesh.position.y > -2.1) door.mesh.position.y -= DT * 2.5;
   // the player keeps full speed while the world is slowed
@@ -14668,7 +15187,7 @@ setVoice(VOICE.on); renderBook();
 document.querySelector("#mnav button").focus({ preventScroll: true });
 state.pendingRestart = true; state.pendingFresh = true;
 // test hooks
-window.__res = { M, AND_PART_MAT, get GORE_CHROME() { return GORE_CHROME; }, get world() { return world; }, RAPIER, warmHidden, get WARM_G() { return WARM_G; }, THREE, spawnEnemy, get enemies() { return enemies; }, AND, AVIEW, andBuild, andStep, andViewApply, andHit, andGore, freezeRagdoll, R6, GORE, MIR, TGM, ONEH, R6I, goreBurst, goreKill, goreWire, propMirror, tgmOpen, tgmClose, oneHandPose, idleProps, grappleRay, fireGrapple, PROPS, propHitH, propsBlast, propChair, propPainting, propCoffee, propCooler, propPlant, propCabinet, propVending, propExt, explosion, BOOM5, get barrels() { return barrels; }, MF, MFA, SLING, SCOPE, mfStart, meleeTarget, meleeStrike, mfCan, pistolSpin, scopeUpdate, comboLanded, COMBOS, CARX, CARRY, IDLE, carxForce, carxOffer, carryPick, carryDrop, pressed, get panes() { return panes; }, idleStart, get ragdolls2() { return ragdolls; }, BOSSES, BOSS_KINDS, bossPenSpawn, bossPenSkip, bossPenClear, scene, renderer, LV, FLOORS, damageEnemy, killEnemy, buildFloor, lvCleared, get CITYR() { return CITYR; }, get finRig() { return finRig; }, applyFinPose, pose2, P2, FIN_POSES, rigIK, rigHandAim, rigPalm, FIN2, get U7M() { return globalThis.U7M_; },
+window.__res = { RM, ROOM_DEFS, roomsInit, roomsSkipTo, roomResolve, roomSpawn, rmSimLoad, rmSimLeave, rmCorePull, damageEnemy, killEnemy, get MF() { return MF; }, M, AND_PART_MAT, get GORE_CHROME() { return GORE_CHROME; }, get world() { return world; }, RAPIER, warmHidden, get WARM_G() { return WARM_G; }, THREE, spawnEnemy, get enemies() { return enemies; }, AND, AVIEW, andBuild, andStep, andViewApply, andHit, andGore, freezeRagdoll, R6, GORE, MIR, TGM, ONEH, R6I, goreBurst, goreKill, goreWire, propMirror, tgmOpen, tgmClose, oneHandPose, idleProps, grappleRay, fireGrapple, PROPS, propHitH, propsBlast, propChair, propPainting, propCoffee, propCooler, propPlant, propCabinet, propVending, propExt, explosion, BOOM5, get barrels() { return barrels; }, MF, MFA, SLING, SCOPE, mfStart, meleeTarget, meleeStrike, mfCan, pistolSpin, scopeUpdate, comboLanded, COMBOS, CARX, CARRY, IDLE, carxForce, carxOffer, carryPick, carryDrop, pressed, get panes() { return panes; }, idleStart, get ragdolls2() { return ragdolls; }, BOSSES, BOSS_KINDS, bossPenSpawn, bossPenSkip, bossPenClear, scene, renderer, LV, FLOORS, damageEnemy, killEnemy, buildFloor, lvCleared, get CITYR() { return CITYR; }, get finRig() { return finRig; }, applyFinPose, pose2, P2, FIN_POSES, rigIK, rigHandAim, rigPalm, FIN2, get U7M() { return globalThis.U7M_; },
   view(pos, at, fov = 40) { const cam = new THREE.PerspectiveCamera(fov, innerWidth / innerHeight, 0.05, 400); cam.position.set(...pos); cam.lookAt(new THREE.Vector3(...at)); scene.updateMatrixWorld(true); renderer.setRenderTarget(null); renderer.render(scene, cam); return renderer.domElement.toDataURL("image/png"); },
   FX2, FPROPS, DOORWAYS, ARS, WDEF, arsCancel, solveArmIK, armL, armR, cur, rig, get vmCam() { return vmCamera; }, SET, openSettings, applySet, bootFloor,
   get player() { return player; }, get enemies() { return enemies; }, get panes() { return panes; }, get bolts() { return bolts; }, state, keys, mouse, pressed,
