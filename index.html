@@ -579,7 +579,10 @@ const DT = 1 / 60;
 const TS = { normal: 1, slow: 0.3, stop: 0.02, focus: 0.18 };
 
 // ---------- settings (persisted per browser) ----------
-const SET_DEF = { sens: 1, invert: false, fov: 88, vol: 0.8, voiceVol: 0.9, subs: true, shake: 1, quality: "auto", shadows: true, fps: false, cel: 0.7, gore: "full", coolant: "blue" };
+const SET_DEF = { sens: 1, invert: false, fov: 88, vol: 0.8, voiceVol: 0.9, subs: true, shake: 1, quality: "auto", shadows: true, fps: false, cel: 0.7, gore: "full", coolant: "blue", fx: "medium" };
+// effects tiers change counts only (never materials, so nothing recompiles): wire pool, debris bodies, mirrors
+const FX_TIERS = { low: { wires: 16, debris: 0.5, mirrors: false }, medium: { wires: 32, debris: 0.8, mirrors: true }, high: { wires: 56, debris: 1, mirrors: true } };
+const fxTier = () => FX_TIERS[SET.fx] || FX_TIERS.medium;
 const SET = (() => { try { return { ...SET_DEF, ...JSON.parse(localStorage.getItem("res.settings") || "{}") }; } catch { return { ...SET_DEF }; } })();
 function saveSettings() { try { localStorage.setItem("res.settings", JSON.stringify(SET)); } catch {} }
 const qualityCap = () => (SET.quality === "high" ? Math.min(devicePixelRatio, 2) : SET.quality === "low" ? 0.75 : Math.min(devicePixelRatio, 1.25));
@@ -1838,7 +1841,7 @@ function shatter(pane, point, dir, speed, shrapnel = false) {
 }
 // debris budget: the oldest pieces go first, so a big moment never piles up hundreds of bodies
 const SHARD_CAP = 140;
-function trimShards() { while (shards.length > SHARD_CAP) removeShard(shards[0]); }
+function trimShards() { const cap = Math.round(SHARD_CAP * fxTier().debris); while (shards.length > cap) removeShard(shards[0]); }
 function removeShard(s) { world.removeRigidBody(s.body); levelGroup.remove(s.mesh); dispGeo(s.mesh.geometry); shards.splice(shards.indexOf(s), 1); }
 function crashCheck(pos, vel, radius, minSpeed, onCrash) {
   const speed = vel.length(); if (speed < minSpeed) return;
@@ -3846,7 +3849,7 @@ function updateCamera(dt) {
   updateSelfBody(dt);
   updateRope(dt);
   updateGunFx(dt); updateArsenalFx(dt);
-  updateWorldSparks(dt * Math.max(0.05, state.ts));
+  updateWorldSparks(dt * Math.max(0.05, timeVis()));
   updateMoveVisuals(dt);
 }
 
@@ -5043,7 +5046,7 @@ function updateMoveVisuals(dt) {
     for (let i = 0; i < discTrail.userData.N; i++) { const p = pts[Math.min(i, pts.length - 1)]; arr[i * 3] = p.x; arr[i * 3 + 1] = p.y; arr[i * 3 + 2] = p.z; }
     discTrail.geometry.attributes.position.needsUpdate = true; discTrail.visible = fly;
   }
-  updateImpactFx(dt * Math.max(0.05, state.ts));
+  updateImpactFx(dt * Math.max(0.05, timeVis()));
 }
 function moveSelfLegs() {
   const C = player.climb;
@@ -5789,6 +5792,7 @@ const SET_UI = [
     ["shadows", "Shadows", "toggle"],
     ["cel", "Cel shading", "range", { min: 0, max: 1, step: 0.05, fmt: (v) => Math.round(v * 100) + "%" }],
     ["fps", "Show frame rate", "toggle"],
+    ["fx", "Effects", "seg", { opts: [["low", "Low"], ["medium", "Medium"], ["high", "High"]], note: "Low: fewer wires and debris, no mirrors. Only counts change, so nothing hitches" }],
   ]],
   ["Violence", [
     ["gore", "Gore", "seg", { opts: [["full", "Full"], ["sparks", "Sparks only"], ["off", "Off"]], note: "Androids only. No blood anywhere: coolant, oil, sparks and metal" }],
@@ -12827,7 +12831,7 @@ function goreWire(at, v, o = {}) {
   if (andGore() !== "full") return;
   { const c = camera.position; const tx = at.x - c.x, ty = at.y - c.y, tz = at.z - c.z; const L = Math.hypot(tx, ty, tz) || 1; const tow = -(v.x * tx + v.y * ty + v.z * tz) / L; if (tow > 0) { v = v.clone(); v.x += tx / L * tow * 1.6; v.y += ty / L * tow * 1.6; v.z += tz / L * tow * 1.6; } }
   goreWireMesh(); if (GORE.mesh.parent !== levelGroup) levelGroup.add(GORE.mesh);
-  let W = GORE.w.find((x) => !x.on); if (!W) { W = GORE.w.reduce((a, b) => (a.life < b.life ? a : b)); }
+  const WN = Math.min(GORE_W, fxTier().wires); let W = null; for (let i = 0; i < WN; i++) if (!GORE.w[i].on) { W = GORE.w[i]; break; } if (!W) { W = GORE.w[0]; for (let i = 1; i < WN; i++) if (GORE.w[i].life < W.life) W = GORE.w[i]; }
   W.on = true; W.life = W.max = o.life ?? 7 + Math.random() * 4; W.seg = o.seg ?? 0.035 + Math.random() * 0.035; W.r = o.r ?? 0.0028 + Math.random() * 0.0035;
   W.body = o.body || null; W.rd = o.rd || null; W.spark = Math.random() < 0.6 ? 1 : 0;
   if (W.body) { const t = W.body.translation(), r = W.body.rotation(); _r6gq.set(r.x, r.y, r.z, r.w).invert(); W.loc.set(at.x - t.x, at.y - t.y, at.z - t.z).applyQuaternion(_r6gq); }
@@ -12846,7 +12850,7 @@ function goreAnchor(W, out) {
 // render rate: verlet, a few constraint passes, the floor, then the ribbons
 function goreFrame(dt) {
   if (!GORE.mesh || !GORE.mesh.parent) return;
-  const ts = state.fin ? state.fin.tsNow ?? 1 : state.ts ?? 1; const h = Math.min(0.033, dt) * Math.max(0.05, ts);
+  const ts = timeVis(); const h = Math.min(0.033, dt) * Math.max(0.05, ts);
   const P = GORE.mesh.geometry.attributes.position.array, C = GORE.mesh.geometry.attributes.color.array; const eye = camera.position;
   let any = false;
   for (let w = 0; w < GORE.w.length; w++) {
@@ -13407,6 +13411,7 @@ function mirFrame() {
     if ((f.x * dx + f.y * dy + f.z * dz) < -0.3 * d) continue;
     bd = d; best = P;
   }
+  if (!fxTier().mirrors) { best = null; bd = 99; } // Low effects: every mirror shows its plain face
   for (const P of MIR.list) { if (!P.refl || P.gone) continue; const on = P === best && !state.fin; P.refl.visible = on; P.fb.visible = !on && !P.broken; }
   MIR.skip = bd > 6;
 }
@@ -13721,6 +13726,7 @@ function tgmRender() {
   btns(s3, [["Car on the nearest body", () => tgmDo(() => carxForce())], ["Idle · phone", () => tgmDo(() => { idleCancel(); IDLE.cur = null; idleStart("phone"); })], ["Idle · banana", () => tgmDo(() => { idleCancel(); IDLE.cur = null; idleStart("banana"); })],
     ["Sword finisher on the nearest", () => tgmDo(() => pressed.add("KeyN"))], ["Combo book", () => { tgmClose(); setTimeout(() => { document.exitPointerLock?.(); setTimeout(openBook, 60); }, 80); }, false]]);
   andViewMenu(sec, btns, row, seg);
+  for (const f of TGM_EXT) try { f(sec, btns, row, seg, tog); } catch (err) { console.warn(err); }
   // places
   const s4 = sec("Go to");
   btns(s4, TGM_TP.map(([name, at, yw]) => [name, () => tgmDo(() => { if (!at) { pressed.add("KeyB"); return; } player.body.setTranslation(at, true); player.body.setLinvel({ x: 0, y: 0, z: 0 }, true); player.prev = new THREE.Vector3(at.x, at.y, at.z); yaw = yw; }, name)]));
@@ -14544,13 +14550,114 @@ function andViewMenu(sec, btns, row, seg) {
   btns(s, [["Go to the robot viewer", () => tgmDo(() => { const at = { x: AVIEW.at.x, y: 1.3, z: AVIEW.at.z - 7 }; player.body.setTranslation(at, true); player.body.setLinvel({ x: 0, y: 0, z: 0 }, true); player.prev = new THREE.Vector3(at.x, at.y, at.z); yaw = Math.PI; pitch = -0.08; }, "Robot viewer")]]);
 }
 
+// ================= C0 · one clock, a perf HUD, effects tiers =================
+// TIME is the one place the world's speed is decided. Every slow-down (Focus, stims, hit-stop, the combo ramp, car
+// scenes, mini finishers, the scope, the testing ground clock, and later Gyre) is a source; the slowest one wins and
+// becomes TIME.scale for the step. The world (enemies, bodies, props, physics) runs on DT * TIME.scale with a fixed
+// step; the player, mouse look, UI and weapon cooldowns keep real DT, so you move at full speed in a slowed world.
+// A new slow-motion source registers once: timeMod("gyre", (ts) => (GYRE.on ? 0.2 : 1)).
+const TIME = { scale: 1, by: "normal", real: 0, game: 0, mods: [] };
+function timeMod(name, fn) { const i = TIME.mods.findIndex((m) => m.name === name); if (i >= 0) TIME.mods[i].fn = fn; else TIME.mods.push({ name, fn }); }
+function timeScale() {
+  let ts = state.ts * (state.mode === "test" ? TGM.ts : 1), by = state.tsMode !== "normal" ? state.tsMode : ts < 1 ? "test clock" : "normal";
+  const take = (v, name) => { if (v < ts - 1e-6) { ts = v; by = name; } };
+  if (hitstopT > 0) { hitstopT -= DT; take(Math.min(ts, 0.08), "hitstop"); }
+  take(comboRamp(ts), "combo"); take(carxTs(ts), "car"); take(scopeTs(ts), "scope"); take(mfTs(ts), "finisher");
+  for (const m of TIME.mods) { let v = 1; try { v = m.fn(ts); } catch (err) { console.warn(err); } if (Number.isFinite(v)) take(v, m.name); }
+  ts = Math.max(0.005, ts); // never 0: the player's speed is divided by it
+  TIME.scale = ts; TIME.by = by; TIME.real += DT; TIME.game += DT * ts;
+  return ts;
+}
+// render-rate effects (sparks, impact puffs, wires) follow the same clock; a finisher scene keeps its own
+const timeVis = () => (state.fin ? state.fin.tsNow ?? state.ts ?? 1 : TIME.scale);
+
+// ---------- perf HUD (testing ground: Tab > Simulation > Performance) ----------
+// frame time graph, main-thread (cpu) ms per frame, physics ms, draw calls, live bodies and shader programs. "Hitch compiles" are programs built by a
+// draw call (the freeze kind) outside warmHidden and after a level's first 3 frames; the perf gate wants 0.
+const PH = { on: false, anywhere: false, n: 240, ft: new Float32Array(240), pm: new Float32Array(240), cp: new Float32Array(240), i: 0, count: 0, last: 0,
+  phys: 0, calls: 0, tris: 0, callsF: 0, trisF: 0, progs0: -1, progs: 0, compiles: 0, hitch: 0, hitchLog: [], warming: false, gen: -1, lvF: 0, txt: 0, el: null, cv: null, out: null };
+function perfStep() { const t0 = performance.now(); world.step(); PH.phys += performance.now() - t0; }
+{
+  const r0 = renderer.render.bind(renderer);
+  renderer.render = (s, c) => { r0(s, c); PH.callsF += renderer.info.render.calls; PH.trisF += renderer.info.render.triangles; };
+  const w0 = warmHidden; // compiles inside warm-up are the intended kind, not hitches
+  warmHidden = (...a) => { PH.warming = true; try { return w0(...a); } finally { PH.warming = false; PH.progs = renderer.info.programs?.length ?? 0; } };
+}
+function perfUi() {
+  if (PH.el) return;
+  const st = document.createElement("style");
+  st.textContent = `#perfhud{position:fixed;top:calc(78px + env(safe-area-inset-top,0px));right:12px;z-index:27;pointer-events:none;background:rgba(8,9,12,.72);border:1px solid rgba(217,226,234,.18);padding:8px 10px;font:11px/1.45 var(--mono);color:var(--ink);font-variant-numeric:tabular-nums;max-width:calc(100vw - 24px)}
+#perfhud canvas{display:block;width:200px;height:48px;margin-bottom:6px}#perfhud pre{margin:0;font:inherit;white-space:pre}#perfhud .bad{color:#ff5a5a}`;
+  document.head.appendChild(st);
+  const el = document.createElement("div"); el.id = "perfhud"; el.hidden = true; el.setAttribute("aria-hidden", "true");
+  const cv = document.createElement("canvas"); cv.width = 200; cv.height = 48; const out = document.createElement("pre");
+  el.append(cv, out); document.body.appendChild(el); PH.el = el; PH.cv = cv; PH.out = out;
+}
+function perfSet(on) { PH.on = !!on; perfUi(); if (!PH.on) PH.el.hidden = true; }
+function perfP(arr, n, q) { const a = Array.from(arr.subarray(0, n)).sort((x, y) => x - y); return a.length ? a[Math.min(a.length - 1, Math.floor(a.length * q))] : 0; }
+function perfStats() {
+  const n = Math.min(PH.count, PH.n);
+  let bodies = 0; try { bodies = world.bodies.len(); } catch {}
+  return { ft: PH.ft[(PH.i + PH.n - 1) % PH.n], p50: perfP(PH.ft, n, 0.5), p95: perfP(PH.ft, n, 0.95), max: perfP(PH.ft, n, 1), phys: PH.pm[(PH.i + PH.n - 1) % PH.n], physP95: perfP(PH.pm, n, 0.95), cpu: PH.cp[(PH.i + PH.n - 1) % PH.n], cpuP95: perfP(PH.cp, n, 0.95),
+    calls: PH.calls, tris: PH.tris, bodies, ragdolls: ragdolls.length, shards: shards.length, enemies: enemies.filter((e) => !e.dead).length, programs: PH.progs, compiles: PH.compiles, hitch: PH.hitch, time: TIME.scale, by: TIME.by, fx: SET.fx };
+}
+// once per drawn frame, after the last render
+function perfFrame(now) {
+  const ms = PH.last ? now - PH.last : 16.7; PH.last = now;
+  PH.calls = PH.callsF; PH.tris = PH.trisF; PH.callsF = PH.trisF = 0;
+  PH.ft[PH.i] = ms; PH.pm[PH.i] = PH.phys; PH.cp[PH.i] = performance.now() - now; PH.phys = 0; PH.i = (PH.i + 1) % PH.n; PH.count++;
+  const np = renderer.info.programs?.length ?? 0;
+  if (PH.progs0 < 0) PH.progs0 = PH.progs = np;
+  if (state.gen !== PH.gen) { PH.gen = state.gen; PH.lvF = 0; }
+  PH.lvF++;
+  if (np > PH.progs) { const k = np - PH.progs; PH.compiles += k; if (state.started && PH.lvF > 3) { PH.hitch += k; if (PH.hitchLog.length < 20) PH.hitchLog.push({ at: +(TIME.real.toFixed(2)), n: k, lvF: PH.lvF }); } }
+  PH.progs = np;
+  if (!PH.on || !(PH.anywhere || state.mode === "test")) { if (PH.el && !PH.el.hidden) PH.el.hidden = true; return; }
+  if (PH.el.hidden) PH.el.hidden = false;
+  // graph: last 200 frames, 0-50 ms, lines at 16.7 and 20 ms
+  const g = PH.cv.getContext("2d"), W = 200, H = 48, y = (v) => H - Math.min(1, v / 50) * H;
+  g.clearRect(0, 0, W, H); g.fillStyle = "rgba(217,226,234,.15)"; g.fillRect(0, y(16.7), W, 1); g.fillStyle = "rgba(255,90,90,.45)"; g.fillRect(0, y(20), W, 1);
+  for (let x = 0; x < W; x++) { const v = PH.ft[(PH.i + PH.n - W + x) % PH.n]; const p = PH.pm[(PH.i + PH.n - W + x) % PH.n]; g.fillStyle = v > 20 ? "#ff5a5a" : "#ffb547"; g.fillRect(x, y(v), 1, H - y(v)); g.fillStyle = "#40c8ff"; g.fillRect(x, y(p), 1, H - y(p)); }
+  if ((PH.txt -= ms) > 0) return; PH.txt = 250;
+  const s = perfStats();
+  PH.out.innerHTML = `frame  ${s.ft.toFixed(1)} ms   p95 ${s.p95 > 20 ? '<span class="bad">' + s.p95.toFixed(1) + "</span>" : s.p95.toFixed(1)}\ncpu    ${s.cpu.toFixed(1)} ms   p95 ${s.cpuP95.toFixed(1)}\nphysics ${s.phys.toFixed(2)} ms  p95 ${s.physP95.toFixed(2)}\ndraws  ${s.calls}   tris ${(s.tris / 1000).toFixed(0)}k\nbodies ${s.bodies}  ragdolls ${s.ragdolls}  debris ${s.shards}\nshaders ${s.programs}  +${s.compiles} since start  ${s.hitch ? '<span class="bad">hitch ' + s.hitch + "</span>" : "hitch 0"}\ntime   ${s.time.toFixed(2)}× ${s.by}   fx ${s.fx}`;
+}
+// testing ground menu: later components add their own sections here instead of editing tgmRender
+const TGM_EXT = [];
+TGM_EXT.push((sec, btns, row, seg, tog) => {
+  const s = sec("Performance");
+  row(s, "Perf HUD", [tog(PH.on, () => perfSet(!PH.on))], "Frame time graph (amber), physics (blue), draws, bodies, shader compiles");
+  row(s, "Effects", seg([["low", "Low"], ["medium", "Medium"], ["high", "High"]], SET.fx, (v) => applySet("fx", v)), "Counts only: wires, debris, mirrors");
+  btns(s, [["Reset perf counters", () => { PH.count = 0; PH.ft.fill(0); PH.pm.fill(0); PH.cp.fill(0); PH.compiles = 0; PH.hitch = 0; PH.hitchLog = []; }, false]]);
+});
+perfUi();
+
+// ================= slots =================
+// Each component inserts its module between its own two anchor lines (never between someone else's), so PRs that
+// land in parallel touch different lines of this file. Hooks into existing code stay one-line calls.
+// ---- slot: rooms ----
+// ---- end slot: rooms ----
+
+// ---- slot: gyre ----
+// ---- end slot: gyre ----
+
+// ---- slot: traversal ----
+// ---- end slot: traversal ----
+
+// ---- slot: mfvariants ----
+// ---- end slot: mfvariants ----
+
+// ---- slot: floors ----
+// ---- end slot: floors ----
+
+// ---- slot: replay ----
+// ---- end slot: replay ----
+
 // ---------- loop ----------
 let acc = 0, last = performance.now();
 function simStep() {
   if (state.tsMode !== "normal") { state.tsTimer -= DT; if (state.tsTimer <= 0) { if (state.tsMode === "stop") sfx.resume(); setTime("normal", 0); } }
-  let ts = state.ts * (state.mode === "test" ? TGM.ts : 1);
-  if (hitstopT > 0) { hitstopT -= DT; ts = Math.min(ts, 0.08); }
-  ts = comboRamp(ts); ts = carxTs(ts); ts = mfTs(scopeTs(ts));
+  const ts = timeScale(); // TIME: the slowest source wins (Focus, stim, hit-stop, finishers, scope, test clock, Gyre...)
   state.time += DT;
   (player.prev ||= new THREE.Vector3()).copy(playerPos());
   stepPlayer(DT);
@@ -14577,7 +14684,7 @@ function simStep() {
   for (const s2 of shards) { const t = s2.body.translation(), r = s2.body.rotation(); (s2.pp ||= new THREE.Vector3()).set(t.x, t.y, t.z); (s2.pq ||= new THREE.Quaternion()).set(r.x, r.y, r.z, r.w); }
   propsPre();
   world.timestep = DT * ts;
-  world.step();
+  perfStep();
   const nv = player.body.linvel();
   player.body.setLinvel({ x: nv.x * ts, y: nv.y * ts, z: nv.z * ts }, true);
 }
@@ -14656,6 +14763,7 @@ function frame(now) {
   postMat.uniforms.uTherm.value = SCOPE.k; postMat.uniforms.uCel.value = SET.cel ?? 0.7;
   const ku = postMat.uniforms.uKeep; ku.value += ((stimG > 0 || CF.on ? 1 : 0) - ku.value) * (1 - Math.exp(-gdt * (CF.on ? 16 : 6)));
   renderer.render(postScene, postCam);
+  perfFrame(now);
 }
 restart(true); player.dead = true;
 requestAnimationFrame(frame);
@@ -14668,7 +14776,7 @@ setVoice(VOICE.on); renderBook();
 document.querySelector("#mnav button").focus({ preventScroll: true });
 state.pendingRestart = true; state.pendingFresh = true;
 // test hooks
-window.__res = { M, AND_PART_MAT, get GORE_CHROME() { return GORE_CHROME; }, get world() { return world; }, RAPIER, warmHidden, get WARM_G() { return WARM_G; }, THREE, spawnEnemy, get enemies() { return enemies; }, AND, AVIEW, andBuild, andStep, andViewApply, andHit, andGore, freezeRagdoll, R6, GORE, MIR, TGM, ONEH, R6I, goreBurst, goreKill, goreWire, propMirror, tgmOpen, tgmClose, oneHandPose, idleProps, grappleRay, fireGrapple, PROPS, propHitH, propsBlast, propChair, propPainting, propCoffee, propCooler, propPlant, propCabinet, propVending, propExt, explosion, BOOM5, get barrels() { return barrels; }, MF, MFA, SLING, SCOPE, mfStart, meleeTarget, meleeStrike, mfCan, pistolSpin, scopeUpdate, comboLanded, COMBOS, CARX, CARRY, IDLE, carxForce, carxOffer, carryPick, carryDrop, pressed, get panes() { return panes; }, idleStart, get ragdolls2() { return ragdolls; }, BOSSES, BOSS_KINDS, bossPenSpawn, bossPenSkip, bossPenClear, scene, renderer, LV, FLOORS, damageEnemy, killEnemy, buildFloor, lvCleared, get CITYR() { return CITYR; }, get finRig() { return finRig; }, applyFinPose, pose2, P2, FIN_POSES, rigIK, rigHandAim, rigPalm, FIN2, get U7M() { return globalThis.U7M_; },
+window.__res = { TIME, timeMod, timeScale, PH, perfSet, perfStats, FX_TIERS, fxTier, TGM_EXT, M, AND_PART_MAT, get GORE_CHROME() { return GORE_CHROME; }, get world() { return world; }, RAPIER, warmHidden, get WARM_G() { return WARM_G; }, THREE, spawnEnemy, get enemies() { return enemies; }, AND, AVIEW, andBuild, andStep, andViewApply, andHit, andGore, freezeRagdoll, R6, GORE, MIR, TGM, ONEH, R6I, goreBurst, goreKill, goreWire, propMirror, tgmOpen, tgmClose, oneHandPose, idleProps, grappleRay, fireGrapple, PROPS, propHitH, propsBlast, propChair, propPainting, propCoffee, propCooler, propPlant, propCabinet, propVending, propExt, explosion, BOOM5, get barrels() { return barrels; }, MF, MFA, SLING, SCOPE, mfStart, meleeTarget, meleeStrike, mfCan, pistolSpin, scopeUpdate, comboLanded, COMBOS, CARX, CARRY, IDLE, carxForce, carxOffer, carryPick, carryDrop, pressed, get panes() { return panes; }, idleStart, get ragdolls2() { return ragdolls; }, BOSSES, BOSS_KINDS, bossPenSpawn, bossPenSkip, bossPenClear, scene, renderer, LV, FLOORS, damageEnemy, killEnemy, buildFloor, lvCleared, get CITYR() { return CITYR; }, get finRig() { return finRig; }, applyFinPose, pose2, P2, FIN_POSES, rigIK, rigHandAim, rigPalm, FIN2, get U7M() { return globalThis.U7M_; },
   view(pos, at, fov = 40) { const cam = new THREE.PerspectiveCamera(fov, innerWidth / innerHeight, 0.05, 400); cam.position.set(...pos); cam.lookAt(new THREE.Vector3(...at)); scene.updateMatrixWorld(true); renderer.setRenderTarget(null); renderer.render(scene, cam); return renderer.domElement.toDataURL("image/png"); },
   FX2, FPROPS, DOORWAYS, ARS, WDEF, arsCancel, solveArmIK, armL, armR, cur, rig, get vmCam() { return vmCamera; }, SET, openSettings, applySet, bootFloor,
   get player() { return player; }, get enemies() { return enemies; }, get panes() { return panes; }, get bolts() { return bolts; }, state, keys, mouse, pressed,
