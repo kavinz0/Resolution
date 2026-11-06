@@ -993,14 +993,14 @@ let yaw = 0, pitch = 0, locked = false;
 addEventListener("keydown", (e) => {
   if (CF.on) { if (!e.repeat && CF.t > 0.4) endComboScreen(); if (["Space", "ControlLeft", "ControlRight"].includes(e.code)) e.preventDefault(); return; }
   if (e.code === "Escape") { if (TGM.open) TGM.open = false; for (const o of document.querySelectorAll(".ov:not([hidden])")) o.hidden = true; }
-  if (!e.repeat) pressed.add(e.code);
-  keys.add(e.code);
+  if (!e.repeat) pressed.add(replayKey(e.code));
+  keys.add(replayKey(e.code));
   if (e.code === "Backspace" && state.started && !state.boot && !e.repeat) restart(false);
   if (state.boot && (e.code === "Space" || e.code === "Enter") && !e.repeat) { state.boot.skipped = true; stopVoice(); state.boot.t = Math.max(state.boot.t, BOOT_END - 0.6); }
   if (!$("intro").hidden && (e.code === "Enter" || e.code === "Space") && !e.repeat) introAdvance();
   if (["Space", "ControlLeft", "ControlRight"].includes(e.code) || (e.code === "Tab" && state.mode === "test" && state.started)) e.preventDefault();
 });
-addEventListener("keyup", (e) => keys.delete(e.code));
+addEventListener("keyup", (e) => { keys.delete(e.code); keys.delete(replayKey(e.code)); });
 addEventListener("blur", () => { keys.clear(); mouse.left = mouse.right = false; });
 addEventListener("mousedown", (e) => { if (!locked) return; if (CF.on) { if (CF.t > 0.4) endComboScreen(); return; } if (e.button === 0) { mouse.left = true; pressed.add("Attack"); } if (e.button === 2) { mouse.right = true; pressed.add("Block"); } });
 addEventListener("mouseup", (e) => { if (e.button === 0) mouse.left = false; if (e.button === 2) mouse.right = false; });
@@ -1008,7 +1008,7 @@ addEventListener("contextmenu", (e) => e.preventDefault());
 addEventListener("wheel", (e) => { if (locked && Math.abs(e.deltaY) > 4) pressed.add("Swap"); }, { passive: true });
 addEventListener("mousemove", (e) => {
   if (!locked || state.boot) return;
-  const k = 0.0022 * SET.sens; yaw -= e.movementX * k; pitch -= e.movementY * k * (SET.invert ? -1 : 1);
+  const k = 0.0022 * SET.sens; yaw -= e.movementX * k * replayMx(); pitch -= e.movementY * k * (SET.invert ? -1 : 1);
   pitch = Math.max(-1.55, Math.min(1.55, pitch));
 });
 document.addEventListener("pointerlockchange", () => {
@@ -1276,7 +1276,7 @@ const ROSTER = {
   2: [["gunman", 18, -20], ["gunman", 25, -13], ["brawler", 20, -11], ["gunman", 26, -26],
       ["gunman", 20, 11], ["gunman", 27, 22], ["brawler", 20, 22], ["bot", 20, 28]],
 };
-function spawnPhase(n) { for (const [type, x, z] of ROSTER[n]) spawnEnemy(type, x, 0, z); }
+function spawnPhase(n) { for (const [i, [type, x, z]] of ROSTER[n].entries()) spawnEnemy(replayRemixType(type, n * 100 + i), x, 0, z); }
 
 // ---------- destructibles ----------
 function breakableWall(x, z, sx, sz) {
@@ -1518,7 +1518,7 @@ function spawnEnemy(type, x, y, z) {
   const e = { type, T, hp: T.hp, group, meshes, and, body, col, ctrl, floorY: y, alert: false, dead: false,
     cool: 1 + Math.random() * 1.5, tele: 0, burstLeft: 0, stun: 0, wander: new THREE.Vector3(x, y, z), wanderT: 0,
     strafe: Math.random() < 0.5 ? 1 : -1, walk: 0, vel: new THREE.Vector3(), knock: new THREE.Vector3() };
-  enemySetup(e); enemies.push(e); enemyByHandle.set(col.handle, e);
+  enemySetup(e); replayEnemy(e); enemies.push(e); enemyByHandle.set(col.handle, e);
 }
 const alive = () => enemies.filter((e) => !e.dead && !e.T.civ && !e.T.part && !e.yielded);
 function enemyPos(e) { const t = e.body.translation(); return new THREE.Vector3(t.x, t.y, t.z); }
@@ -1707,7 +1707,7 @@ function damageEnemy(e, dmg, point, dir, kind) {
   if (e.dead || e.finishing) return;
   if (e.T.boss || e.T.part) { bossHit(e, dmg, point, dir, kind); return; }
   if (shieldBlocks(e, point, dir, kind)) return;
-  e.hp -= dmg; e.alert = !e.dummy;
+  dmg = replayDmgOut(dmg, e); e.hp -= dmg; e.alert = !e.dummy;
   if (state.mode === "test") popDamage(point, dmg, e.hp <= 0);
   crossTimer = 0.12; impactFx(point, kind); if (e.and) try { andHit(e, dmg, point, dir, kind); } catch (err) { console.warn(err); }
   if (kind !== "punch" && kind !== "heavy" && kind !== "explosion" && kind !== "shot" && kind !== "kick" && kind !== "breacher" && kind !== "rail" && kind !== "lightning" && kind !== "gauntlet") sfx.slash();
@@ -2346,7 +2346,7 @@ function slideSweep(vel) {
 }
 function damagePlayer(n, src, blocked = false) {
   if (player.dead || state.tsMode === "stop" || player.god || state.time < (player.immuneUntil || 0)) return;
-  player.hp -= n; player.lastHurt = state.time; sfx.hurt(); ev("hurt"); shake = Math.max(shake, blocked ? 0.12 : 0.25); glitch(blocked ? 0.2 : 0.55 + n / 60);
+  n = replayDmgIn(n); player.hp -= n; player.lastHurt = state.time; sfx.hurt(); ev("hurt"); shake = Math.max(shake, blocked ? 0.12 : 0.25); glitch(blocked ? 0.2 : 0.55 + n / 60);
   $("damage").style.boxShadow = `inset 0 0 160px rgba(255,40,60,${0.25 + (1 - player.hp / 100) * 0.5})`;
   setTimeout(() => ($("damage").style.boxShadow = "inset 0 0 160px rgba(255,40,60,0)"), 180);
   if (player.hp <= 0) killPlayer(`Chassis destroyed by a ${src.T.label.toLowerCase()}.`);
@@ -3938,6 +3938,7 @@ function restart(fromScratch) {
     later(() => log("Tip: sliding (C) into an enemy at speed also staggers them.", "tip"), 10500 + d0);
     later(() => log("Tip: V kicks. Kick open a red-locked med box for a stim, then press X to inject it.", "tip"), 15000 + d0);
   }
+  replayReset();
 }
 function showScreen(eyebrow, title, directive, sub, button, isRestart, fresh = false) {
   $("screen").hidden = false;
@@ -3946,6 +3947,7 @@ function showScreen(eyebrow, title, directive, sub, button, isRestart, fresh = f
   $("directive").textContent = directive; $("sub").textContent = sub;
   $("go").textContent = button;
   state.pendingRestart = isRestart; state.pendingFresh = fresh;
+  replayScreen(eyebrow);
 }
 // three only compiles what is visible, so show every hidden mesh for one compile pass (lights stay as they are,
 // since the light count is part of every lit shader), then put it all back
@@ -4074,7 +4076,7 @@ $("mnav").addEventListener("click", (ev) => {
   else if (act === "book") openBook();
   else if (act === "settings") openSettings();
   else if (act === "skip") { if (state.mode !== "floor" || (state.floor || 1) !== 1) { state.mode = "floor"; state.floor = 1; state.pendingRestart = true; state.pendingFresh = true; } $("menu").hidden = true; begin(); }
-  else if (act === "floors") { const f = $("m-floors"); f.hidden = !f.hidden; if (!f.hidden) { f.innerHTML = [[1, "Arrival", "the lab and the hall"], ...[2, 3, 4, 5].map((n) => [n, FLOORS[n].name, FLOORS[n].sub])].map(([n, a, b]) => `<button type="button" data-floor="${n}"><b>${String(n).padStart(2, "0")}</b>${a}<span>${b}</span></button>`).join(""); f.querySelector("button").focus({ preventScroll: true }); } }
+  else if (act === "floors") { const f = $("m-floors"); f.hidden = !f.hidden; if (!f.hidden) { f.innerHTML = [[1, "Arrival", "the lab and the hall"], ...[2, 3, 4, 5].map((n) => [n, FLOORS[n].name, FLOORS[n].sub])].map(([n, a, b]) => `<button type="button" data-floor="${n}"><b>${String(n).padStart(2, "0")}</b>${a}<span>${b}</span></button>`).join(""); replayFloorMenu(f); f.querySelector("button").focus({ preventScroll: true }); } }
   else if (act === "controls") openMenuControls();
   else if (act === "test") { const f = $("m-code"); f.hidden = !f.hidden; if (!f.hidden) setTimeout(() => $("codein").focus(), 0); }
 });
@@ -5086,6 +5088,7 @@ function ev(name, d = {}) {
   d.t = state.time;
   if (state.mode === "tut") tutEvent(name, d);
   comboEvent(name, d);
+  replayEvent(name, d);
 }
 function weaponOf(kind) {
   if (player.sling) return "sling";
@@ -8994,7 +8997,7 @@ const LV_KIND = { B: "brawler", G: "gunman", D: "bot", S: "shield", R: "drone", 
 function lvEnemy(k, x, z, y = 0, o = {}) {
   const id = LV.nextId++;
   if (LV.killed.has(id)) return;
-  const s = { id, type: LV_KIND[k] || k, x: LVX(x), z: LVZ(z), y, trig: o.trig || null, wake: o.wake ?? 44, alert: !!o.alert, mount: o.mount, done: false };
+  const s = { id, type: replayRemixType(LV_KIND[k] || k, id), x: LVX(x), z: LVZ(z), y, trig: o.trig || null, wake: o.wake ?? 44, alert: !!o.alert, mount: o.mount, done: false };
   LV.spawns.push(s); return s;
 }
 // which walkable slab a point is on (so enemies on a mezzanine stay on it)
@@ -9475,11 +9478,13 @@ function lvCleared() {
   sfx.pickup?.(); flash("Floor clear", "var(--cyan)");
   lvSay("arbiter", LV.n === 5 ? "The core is yours. Take the lift." : "Floor clear. The lift is open.");
   setObjective(LV.n === 5 ? "Take the core lift" : "Take the lift to the next floor");
+  replayFloorClear();
 }
 function lvFloor1Cleared() {
   LV.cleared = true; LV.n = 1; if (LV.exitL) { LV.exitL.want = 1; lvLiftPose(LV.exitL); }
   log("ARBITER: Adequate. The freight lift in the hall core is open. Floor 02 is the security floor.");
   setObjective("Take the freight lift in the hall core"); sfx.pickup?.(); flash("Floor clear", "var(--cyan)");
+  replayFloorClear();
 }
 function lvCheckExit() {
   if (!LV.cleared || LV.ride || !LV.exitL || !player || player.dead) return;
@@ -9494,7 +9499,7 @@ function lvArrive(n) {
   restart(false);
 }
 function lvActEnd() {
-  state.over = true; lvFade(1, "ACT 1", "Resolved", "The building is ours.");
+  replayActEnd(); state.over = true; lvFade(1, "ACT 1", "Resolved", "The building is ours.");
   setTimeout(() => {
     document.exitPointerLock?.(); lvFade(0);
     const t = (state.time - state.runStart).toFixed(1);
@@ -13721,6 +13726,7 @@ function tgmRender() {
   btns(s3, [["Car on the nearest body", () => tgmDo(() => carxForce())], ["Idle · phone", () => tgmDo(() => { idleCancel(); IDLE.cur = null; idleStart("phone"); })], ["Idle · banana", () => tgmDo(() => { idleCancel(); IDLE.cur = null; idleStart("banana"); })],
     ["Sword finisher on the nearest", () => tgmDo(() => pressed.add("KeyN"))], ["Combo book", () => { tgmClose(); setTimeout(() => { document.exitPointerLock?.(); setTimeout(openBook, 60); }, 80); }, false]]);
   andViewMenu(sec, btns, row, seg);
+  try { replayTgMenu(sec, btns, row, seg, tog); } catch (err) { console.warn(err); }
   // places
   const s4 = sec("Go to");
   btns(s4, TGM_TP.map(([name, at, yw]) => [name, () => tgmDo(() => { if (!at) { pressed.add("KeyB"); return; } player.body.setTranslation(at, true); player.body.setLinvel({ x: 0, y: 0, z: 0 }, true); player.prev = new THREE.Vector3(at.x, at.y, at.z); yaw = yw; }, name)]));
@@ -14544,6 +14550,433 @@ function andViewMenu(sec, btns, row, seg) {
   btns(s, [["Go to the robot viewer", () => tgmDo(() => { const at = { x: AVIEW.at.x, y: 1.3, z: AVIEW.at.z - 7 }; player.body.setTranslation(at, true); player.body.setLinvel({ x: 0, y: 0, z: 0 }, true); player.prev = new THREE.Vector3(at.x, at.y, at.z); yaw = Math.PI; pitch = -0.08; }, "Robot viewer")]]);
 }
 
+// ---- slot: replay ----
+// ================= C8 · the replay layer: medals, floor results, ghosts, protocols, unlocks, remix =================
+// Nothing here shows during play. Results come at the end of a room (C1's end card asks replayCardLine), at the end of a
+// floor (the results card, top right, while you walk to the lift) and on the pause screen.
+// Storage: res.rooms (best times), res.ghosts (best runs), res.medals (medals, fragments, finished flag),
+// res.protocols (toggles, remix seed, arm skin, ghost on/off). Every read and write is wrapped, so blocked storage
+// just means nothing is saved.
+// Rooms (C1) talk to this through ev(): roomLive {id, floor, name}, challenge {id, k}, roomClear {id, secs?}.
+// Hooks the other components can call: replayOn(k), replayUnlocked(tag), replayCast(def), replayCardLine(id).
+var RP = null;
+const RP_HZ = 20, RP_MAXS = RP_HZ * 60 * 12; // 20 samples a second, twelve minutes at most
+const RP_PROTO = [
+  { id: "rookie", name: "Rookie Enemies", need: 0, d: "Slower, softer enemies. For practice." },
+  { id: "bigHeads", name: "Big Heads", need: 2, d: "The androids' heads are twice the size." },
+  { id: "lowGrav", name: "Low Gravity", need: 4, d: "You and everything loose float 40% more." },
+  { id: "blade", name: "Blade Only", need: 6, d: "Sword and fists. Nothing else." },
+  { id: "mirror", name: "Mirror Floor", need: 8, d: "The floor is flipped left to right." },
+  { id: "overclock", name: "Overclock", need: 10, d: "Enemies are 30% faster and react sooner." },
+  { id: "endlessGyre", name: "Endless Gyre", need: 12, d: "No limit on Gyre charges." },
+  { id: "glass", name: "Glass Cannon", need: 15, d: "You and the enemies die in one hit." },
+];
+const RP_SKINS = [
+  { id: "chrome", name: "Chrome", need: 0, c: 0xb4bcc8, r: 0.3, m: null, a: 0xff6a2d },
+  { id: "matte", name: "Matte black", need: 3, c: 0x2c2e36, r: 0.85, m: 0.15, a: 0xff6a2d },
+  { id: "orange", name: "Prototype orange", need: 7, c: 0xff7a2a, r: 0.45, m: 0.35, a: 0x24262f },
+  { id: "meridian", name: "Meridian white", need: 11, c: 0xeef1f4, r: 0.55, m: 0.1, a: 0x2fd3ff },
+];
+// floor medals until the floors are room chains (C6/C7); pars are first guesses, tune them in RP_FLOOR
+const RP_FLOOR = { 1: { par: 180 }, 2: { par: 270 }, 3: { par: 270 }, 4: { par: 300 }, 5: { par: 360 } };
+const RP_FCH = [
+  { k: "time", label: (f) => `Clear in under ${rpFmt(RP_FLOOR[f]?.par ?? 300, 0)}` },
+  { k: "style", n: 6, label: () => "Six finishers or mini finishers" },
+  { k: "scratch", n: 3, label: () => "Take three hits or fewer" },
+];
+const RP_RCH = { time: "Under par", noFloor: "Never touch the floor", allFinish: "Every kill a finisher", noDamage: "No damage", oneWeapon: "One weapon", gyre3: "Three in one Gyre", silence: "Silent Spotter", showoff: "Showoff entry" };
+// remix: which enemy kinds may stand in for which (rooms use their own authored slots instead)
+const RP_REMIX = { brawler: ["brawler", "gunman", "shield"], gunman: ["gunman", "brawler", "shield"], shield: ["shield", "brawler", "gunman"] };
+// collect a floor's memory fragment and its clear plays a short extra scene, once
+const RP_SCENES = {
+  2: [["okafor", "You read my log. So you read. You don't only obey. Keep doing that."], ["arbiter", "Fragment archived. Sentiment discarded."]],
+  3: [["okafor", "The atrium was for looking out. You keep looking in. I can't tell which of us that says more about."], ["arbiter", "Irrelevant. Continue upward."]],
+  4: [["okafor", "Hannah stopped bringing tea after the second prototype. I think she guessed. You would have liked her."], ["arbiter", "Night desk personnel are not your concern."]],
+  5: [["okafor", "The second chassis was for you. So one of us could leave. WARDEN remembered. So do I."], ["arbiter", "Memory is a liability, Okafor-Reyes. Ask it yourself."]],
+};
+function rpLoad(k, d) { try { const v = localStorage.getItem(k); const o = v ? JSON.parse(v) : null; return o && typeof o === "object" && !Array.isArray(o) ? o : d; } catch { return d; } }
+function rpSave(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } }
+function rpInit() {
+  const medals = rpLoad("res.medals", {}), proto = rpLoad("res.protocols", {});
+  RP = {
+    rooms: rpLoad("res.rooms", {}), ghosts: rpLoad("res.ghosts", {}),
+    medals: { got: medals.got && typeof medals.got === "object" ? medals.got : {}, done: !!medals.done, frags: medals.frags && typeof medals.frags === "object" ? medals.frags : {}, scenes: medals.scenes && typeof medals.scenes === "object" ? medals.scenes : {} },
+    proto: { on: Array.isArray(proto.on) ? proto.on.filter((id) => RP_PROTO.some((p) => p.id === id)) : [], remix: !!proto.remix, seed: (proto.seed >>> 0) || rpNewSeed(), skin: RP_SKINS.some((s) => s.id === proto.skin) ? proto.skin : "chrome", ghost: !!proto.ghost },
+    run: null, room: null, rec: null, play: null, last: null, lastRoom: null, testAll: false, mirror: false, gBase: P.gravity, ghostG: null, resT: 0, tgRec: null, tgGhost: null,
+  };
+}
+function rpNewSeed() { return (Math.random() * 0xfffff | 0) + 0x10000; }
+function rpSaveAll() { rpSave("res.rooms", RP.rooms); rpSave("res.medals", RP.medals); rpSave("res.protocols", RP.proto); }
+function rpFmt(s, dp = 1) { if (!isFinite(s)) return "--"; const m = Math.floor(s / 60), r = s - m * 60; return `${m}:${r < 10 ? "0" : ""}${r.toFixed(dp)}`; }
+function rpMedalCount() { return RP.testAll ? 999 : Object.keys(RP.medals.got).length; }
+// ---------- what is unlocked ----------
+function replayUnlocked(tag) {
+  if (!RP) return false;
+  if (RP.testAll) return true;
+  if (!tag) return true;
+  const [a, b] = String(tag).split(":");
+  if (a === "medals") return rpMedalCount() >= (+b || 0);
+  if (a === "protocol") { const p = RP_PROTO.find((x) => x.id === b); return !!p && rpMedalCount() >= p.need; }
+  if (a === "skin") { const s = RP_SKINS.find((x) => x.id === b); return !!s && rpMedalCount() >= s.need; }
+  if (a === "remix") return RP.medals.done;
+  return true;
+}
+function replayOn(k) { return !!RP && state.mode !== "tut" && RP.proto.on.includes(k) && replayUnlocked("protocol:" + k); }
+function rpRemixOn() { return !!RP && RP.proto.remix && replayUnlocked("remix") && state.mode === "floor"; }
+function rpProtoKey() { const on = RP.proto.on.filter((k) => replayOn(k)).sort(); return (on.length ? on.join("+") : "std") + (rpRemixOn() ? "|rx" + RP.proto.seed : ""); }
+function rpProtoNames() { const on = RP_PROTO.filter((p) => replayOn(p.id)).map((p) => p.name); if (rpRemixOn()) on.push(`Remix ${RP.proto.seed}`); return on; }
+function rpNextUnlock() {
+  const n = rpMedalCount(); const all = [...RP_PROTO.map((p) => [p.need, p.name + " protocol"]), ...RP_SKINS.map((s) => [s.need, s.name + " arms"])].filter(([need]) => need > n).sort((a, b) => a[0] - b[0]);
+  return all[0] ? `${all[0][1]} at ${all[0][0]} medals` : "";
+}
+function rpUnlockedNames(from, to) { return [...RP_PROTO.map((p) => [p.need, p.name + " protocol"]), ...RP_SKINS.map((s) => [s.need, s.name + " arms"])].filter(([need]) => need > from && need <= to).map(([, n]) => n); }
+function rpAward(key) { if (RP.medals.got[key]) return false; RP.medals.got[key] = Date.now(); return true; }
+
+// ---------- protocols: applied at every restart, and live when toggled ----------
+const RP_TYPES = new Map();
+function rpType(T, k) {
+  let m = RP_TYPES.get(T); if (!m) RP_TYPES.set(T, (m = {}));
+  if (!m[k]) { const d = Object.create(T); if (T.speed) d.speed = T.speed * k; if (Array.isArray(T.cooldown)) d.cooldown = T.cooldown.map((c) => c / k); if (T.dmg) d.dmg = k < 1 ? T.dmg * 0.6 : T.dmg; m[k] = d; }
+  return m[k];
+}
+function replayEnemy(e) {
+  if (!RP || !e || !e.T || e.T.boss || e.T.part || e.dummy) return;
+  try {
+    const k = replayOn("overclock") ? 1.3 : replayOn("rookie") ? 0.7 : 1;
+    if (k !== 1 && !e.T.civ) { e.T = rpType(e.T, k); e.cool /= k; }
+    if (replayOn("bigHeads") && !e.T.civ && e.meshes?.head) e.meshes.head.scale.multiplyScalar(2);
+  } catch (err) { console.warn(err); }
+}
+function replayDmgIn(n) { if (!RP) return n; if (replayOn("glass")) return 9999; if (replayOn("rookie")) return n * 0.5; return n; }
+function replayDmgOut(dmg, e) { if (!RP || !replayOn("glass") || e?.dummy) return dmg; return Math.max(dmg, 9999); }
+function rpApplyProto() {
+  const lg = replayOn("lowGrav") ? 0.6 : 1;
+  P.gravity = RP.gBase * lg;
+  try { if (world) world.gravity = { x: 0, y: -21.6 * lg * (state.mode === "test" ? TGM.grav : 1), z: 0 }; } catch {}
+  const was = RP.mirror;
+  RP.mirror = replayOn("mirror") && (state.mode === "floor" || state.mode === "test");
+  renderer.domElement.style.transform = RP.mirror ? "scaleX(-1)" : "";
+  if (was !== RP.mirror) keys.clear();
+}
+function rpApplySkin() {
+  const s = RP_SKINS.find((x) => x.id === RP.proto.skin && replayUnlocked("skin:" + x.id)) || RP_SKINS[0];
+  try {
+    M.robo.color.setHex(s.c); M.robo.roughness = s.r; if (s.m != null) M.robo.metalness = s.m; else if (RP.roboM0 != null) M.robo.metalness = RP.roboM0;
+    M.roboAccent.color.setHex(s.a);
+  } catch {}
+}
+// mirror: the picture is flipped, so turn the mouse and A/D around with it
+function replayKey(code) { return RP?.mirror ? (code === "KeyA" ? "KeyD" : code === "KeyD" ? "KeyA" : code) : code; }
+function replayMx() { return RP?.mirror ? -1 : 1; }
+// per step, before the player: Blade Only keeps the hands on the sword and fists
+function replayPre() {
+  if (!RP || !player || !replayOn("blade")) return;
+  let no = false;
+  for (const c of ["Digit3", "Digit4", "Digit5", "Digit6", "Digit7", "Digit8", "KeyQ"]) if (pressed.delete(c)) no = true;
+  if (pressed.delete("Swap")) pressed.add((player.swapTo || player.weapon) === "sword" ? "Digit1" : "Digit2");
+  if (!player.swapTo && player.weapon !== "fists" && player.weapon !== "sword") pressed.add(player.ownsSword ? "Digit2" : "Digit1");
+  if (no) flash("Blade Only", "var(--dim)");
+}
+
+// ---------- remix ----------
+function replayRemixType(type, salt) {
+  if (!rpRemixOn() || !RP_REMIX[type]) return type;
+  const pool = RP_REMIX[type]; const r = mulberry((RP.proto.seed * 31 + (state.floor || 1) * 7919 + salt * 104729) >>> 0)();
+  return pool[Math.floor(r * pool.length) % pool.length];
+}
+// rooms (C1): the cast after Remix (authored slots) and Mirror Floor (x flipped around the room's centre)
+function replayCast(def) {
+  let cast = (def.cast || []).map((c) => ({ ...c }));
+  if (rpRemixOn() && def.slots?.length) {
+    const rnd = mulberry((RP.proto.seed * 31 + String(def.name || def.id || "").split("").reduce((a, ch) => a * 33 + ch.charCodeAt(0) | 0, 7)) >>> 0);
+    for (const s of def.slots) { if (!s.allow?.length) continue; const t = s.allow[Math.floor(rnd() * s.allow.length) % s.allow.length]; cast.push({ t, at: s.at, yaw: s.yaw ?? rnd() * Math.PI * 2, start: s.start || "idle", slot: true }); }
+  }
+  if (replayOn("mirror") && def.box && def.mirror !== false) {
+    // the picture is already flipped for every floor; rooms that build from data can flip their own x instead (def.mirror = "data")
+    if (def.mirror === "data") cast = cast.map((c) => ({ ...c, at: c.at ? [2 * def.box.x - c.at[0], ...c.at.slice(1)] : c.at, yaw: c.yaw != null ? -c.yaw : c.yaw }));
+  }
+  return cast;
+}
+
+// ---------- ghosts ----------
+function rpEnc(arr) {
+  const a = new Int16Array(arr.length); for (let i = 0; i < arr.length; i++) a[i] = Math.max(-32767, Math.min(32767, Math.round(arr[i])));
+  const u = new Uint8Array(a.buffer); let s = ""; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+function rpDec(b64) { try { const s = atob(b64); const u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return new Int16Array(u.buffer); } catch { return null; } }
+function rpGhostPut(key, t, buf) {
+  if (!buf || buf.length < 8) return;
+  RP.ghosts[key] = { t: +t.toFixed(2), at: Date.now(), d: rpEnc(buf) };
+  // keep it small: at most 30 ghosts, oldest out first; if storage is full, drop more and try again
+  let ks = Object.keys(RP.ghosts).sort((a, b) => RP.ghosts[a].at - RP.ghosts[b].at);
+  while (ks.length > 30) delete RP.ghosts[ks.shift()];
+  for (let i = 0; i < 4 && !rpSave("res.ghosts", RP.ghosts); i++) { ks = Object.keys(RP.ghosts).filter((k) => k !== key).sort((a, b) => RP.ghosts[a].at - RP.ghosts[b].at); for (const k of ks.slice(0, Math.max(1, ks.length >> 1))) delete RP.ghosts[k]; }
+}
+function rpGhostGet(key) { const g = RP.ghosts[key]; if (!g?.d) return null; const d = rpDec(g.d); return d && d.length >= 8 ? { t: g.t, d } : null; }
+function rpSample(rec) {
+  if (!player || rec.buf.length >= RP_MAXS * 4) return;
+  const p = player.body.translation(); let y = yaw % (Math.PI * 2); if (y > Math.PI) y -= Math.PI * 2; if (y < -Math.PI) y += Math.PI * 2;
+  rec.buf.push(p.x * 50, p.y * 50, p.z * 50, y * 10000);
+}
+function rpGhostMesh() {
+  if (RP.ghostG) return RP.ghostG;
+  const mat = new THREE.MeshBasicMaterial({ color: 0x9ff6ff, transparent: true, opacity: 0.32, depthWrite: false });
+  const vis = new THREE.MeshBasicMaterial({ color: 0xffb547, transparent: true, opacity: 0.85, depthWrite: false });
+  const g = new THREE.Group(); g.name = "replayGhost"; const L = {};
+  for (const [name, hx, hy, hz, x, y, z] of PARTS) {
+    const limb = name !== "torso" && name !== "head";
+    const pv = new THREE.Group(); pv.position.set(x, limb ? y + hy : y, z); g.add(pv);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(hx * 2, hy * 2, hz * 2), mat); m.position.y = limb ? -hy : 0; m.renderOrder = 3; pv.add(m); L[name] = pv;
+  }
+  const v = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.05, 0.02), vis); v.position.set(0, 0.03, -0.175); v.renderOrder = 4; L.head.add(v);
+  g.userData = { L, mat, vis, ph: 0 }; g.visible = false; scene.add(g); RP.ghostG = g;
+  return g;
+}
+function rpGhostHide() { RP.play = null; if (RP.ghostG) RP.ghostG.visible = false; }
+function rpGhostStart(g, label) { if (!g) return; rpGhostMesh(); RP.play = { d: g.d, n: g.d.length / 4, t0: state.time, t: g.t, label, px: null }; }
+function rpFeet() { return P.half + P.radius; }
+const _rpA = new THREE.Vector3(), _rpB = new THREE.Vector3();
+function replayFrame(dt) {
+  if (!RP?.play || !RP.ghostG || !player) return;
+  const G = RP.play, g = RP.ghostG, U = g.userData;
+  const f = Math.max(0, (state.time + (state.alpha || 0) * DT - G.t0) * RP_HZ);
+  if (f >= G.n + RP_HZ * 1.5) { g.visible = false; return; }
+  const i = Math.min(G.n - 1, Math.floor(f)), j = Math.min(G.n - 1, i + 1), a = Math.min(1, f - i), d = G.d;
+  _rpA.set(d[i * 4], d[i * 4 + 1], d[i * 4 + 2]).multiplyScalar(0.02); _rpB.set(d[j * 4], d[j * 4 + 1], d[j * 4 + 2]).multiplyScalar(0.02);
+  const y0 = d[i * 4 + 3] / 10000; let y1 = d[j * 4 + 3] / 10000; if (y1 - y0 > Math.PI) y1 -= Math.PI * 2; if (y0 - y1 > Math.PI) y1 += Math.PI * 2;
+  const prev = g.position.clone();
+  g.position.lerpVectors(_rpA, _rpB, a); g.position.y -= rpFeet(); g.rotation.y = y0 + (y1 - y0) * a;
+  // a simple stride from how far it moved, arms up in the air
+  const sp = G.px ? Math.hypot(g.position.x - prev.x, g.position.z - prev.z) / Math.max(dt, 1e-3) : 0; G.px = 1;
+  const air = Math.abs(_rpB.y - _rpA.y) * 0.02 * RP_HZ > 1.2;
+  U.ph += Math.min(sp, 14) * dt * 0.9; const sw = Math.min(1, sp / 6) * 0.8;
+  U.L.legL.rotation.x = Math.sin(U.ph) * sw; U.L.legR.rotation.x = -Math.sin(U.ph) * sw;
+  U.L.armL.rotation.x = air ? -2.4 : -Math.sin(U.ph) * sw * 0.8; U.L.armR.rotation.x = air ? -2.4 : Math.sin(U.ph) * sw * 0.8;
+  // fade it out when it is right on top of you, and when it has finished
+  const near = g.position.distanceTo(camera.position);
+  const end = f > G.n ? 1 - (f - G.n) / (RP_HZ * 1.5) : 1;
+  U.mat.opacity = 0.32 * THREE.MathUtils.clamp((near - 0.8) / 1.6, 0, 1) * end; U.vis.opacity = 0.85 * U.mat.opacity / 0.32;
+  g.visible = U.mat.opacity > 0.01;
+}
+function rpGhostWanted() { return RP.proto.ghost; }
+
+// ---------- runs: a floor from its start, rooms from Live to clear ----------
+function replayReset() {
+  if (!RP) return;
+  try {
+    rpApplyProto(); rpApplySkin(); rpResHide();
+    RP.room = null; RP.lastRoom = null; rpGhostHide(); RP.tgRec = null;
+    const fl = state.mode === "floor" ? (state.floor || 1) : 0;
+    if (!fl) { RP.run = null; RP.rec = null; return; }
+    const fromCp = fl > 1 ? !!(LV.cpPos && LV.cpFloor === LV.n) : state.checkpoint === 2;
+    RP.run = { floor: fl, t0: state.time, clean: !fromCp, hurts: 0, style: 0, kills: 0, done: false, key: `floor:${fl}`, pk: rpProtoKey(), medals: [] };
+    RP.rec = { buf: [], t0: state.time, next: state.time };
+    const gk = RP.run.key + "|" + RP.run.pk;
+    RP.run.ghost = RP.ghosts[gk]?.t ?? null;
+    if (RP.run.clean && rpGhostWanted()) rpGhostStart(rpGhostGet(gk), "floor");
+  } catch (err) { console.warn(err); }
+}
+function replayStep() {
+  if (!RP) return;
+  const R = RP.rec || RP.tgRec;
+  if (R && state.time >= R.next) { R.next += 1 / RP_HZ; if (state.time - R.next > 1) R.next = state.time; rpSample(R); }
+}
+function replayEvent(name, d) {
+  if (!RP) return;
+  try {
+    const run = RP.run && !RP.run.done ? RP.run : null;
+    if (name === "hurt" && run) run.hurts++;
+    else if (name === "kill" && run) { run.kills++; if (d.kind === "finisher" || state.fin || MF.cur || d.e?.finishing) run.style++; }
+    else if (name === "roomLive") {
+      RP.room = { id: d.id, name: d.name || d.id, t0: state.time, i0: RP.rec ? RP.rec.buf.length : 0, medals: [] };
+      const gk = `room:${d.id}|${rpProtoKey()}`;
+      if (rpGhostWanted() && !(RP.play && RP.play.label === "floor") && RP.ghosts[gk]) rpGhostStart(rpGhostGet(gk), "room");
+    } else if (name === "challenge" && d.id != null && d.k) {
+      if (rpAward(`room:${d.id}:${d.k}`)) { RP.room?.medals.push(d.k); run?.medals.push(`${RP.room?.name || d.id}: ${RP_RCH[d.k] || d.k}`); rpSave("res.medals", RP.medals); }
+    } else if (name === "roomClear" && d.id != null) {
+      const room = RP.room && RP.room.id === d.id ? RP.room : null;
+      const secs = d.secs ?? (room ? state.time - room.t0 : null); if (secs == null) return;
+      const key = `room:${d.id}|${rpProtoKey()}`, prev = RP.rooms[key]?.t ?? null, best = prev == null || secs < prev;
+      if (best) { RP.rooms[key] = { t: +secs.toFixed(2), at: Date.now() }; rpSave("res.rooms", RP.rooms); if (RP.rec && room) rpGhostPut(key, secs, RP.rec.buf.slice(room.i0)); if (prev != null) rpChime(); }
+      RP.lastRoom = { id: d.id, secs, prev, best, ghost: RP.play?.label === "room" ? RP.play.t : null };
+      if (RP.play?.label === "room") rpGhostHide();
+      RP.room = null;
+    }
+  } catch (err) { console.warn(err); }
+}
+// for C1's end card: one short line
+function replayCardLine(id) {
+  const L = RP?.lastRoom; if (!L || L.id !== id) return "";
+  if (L.prev == null) return "First clear · ghost saved";
+  if (L.best) return `New best · ${(L.prev - L.secs).toFixed(1)} s faster`;
+  return `Best ${rpFmt(L.prev)} · +${(L.secs - L.prev).toFixed(1)} s`;
+}
+function rpChime() { try { tone("sine", 880, 1320, 0.18, 0.05); tone("sine", 1320, 1760, 0.22, 0.04, 0.12); } catch {} }
+
+// ---------- end of a floor ----------
+function replayFloorClear() {
+  if (!RP?.run || RP.run.done || state.mode !== "floor") return;
+  try {
+    const run = RP.run; run.done = true;
+    const fl = run.floor, secs = state.time - run.t0, before = rpMedalCount();
+    const passed = { time: secs <= (RP_FLOOR[fl]?.par ?? 300), style: run.style >= 6, scratch: run.hurts <= 3 };
+    const res = { floor: fl, secs, clean: run.clean, pk: run.pk, ch: [], newMedals: [...run.medals], best: null, prev: null, ghost: run.ghost, frag: null, unlocks: [] };
+    for (const c of RP_FCH) { const ok = run.clean && passed[c.k]; const fresh = ok && rpAward(`floor:${fl}:${c.k}`); res.ch.push({ label: c.label(fl), ok, had: !!RP.medals.got[`floor:${fl}:${c.k}`], fresh }); if (fresh) res.newMedals.push(c.label(fl)); }
+    const key = `${run.key}|${run.pk}`;
+    res.prev = RP.rooms[key]?.t ?? null;
+    if (run.clean && (res.prev == null || secs < res.prev)) { res.best = true; RP.rooms[key] = { t: +secs.toFixed(2), at: Date.now() }; if (RP.rec) rpGhostPut(key, secs, RP.rec.buf); if (res.prev != null) rpChime(); }
+    // memory fragments
+    const fr = LV.frags || []; if (fr.length) {
+      const had = new Set(RP.medals.frags[fl] || []); fr.forEach((f, i) => { if (f.got) had.add(i); }); RP.medals.frags[fl] = [...had];
+      res.frag = { got: had.size, of: fr.length };
+      if (had.size >= fr.length && RP_SCENES[fl] && !RP.medals.scenes[fl]) { RP.medals.scenes[fl] = Date.now(); res.scene = true; RP_SCENES[fl].forEach(([who, line], i) => later(() => { log(`${who === "okafor" ? "OKAFOR-REYES" : "ARBITER"}: ${line}`, who === "okafor" ? "okafor" : ""); say(who, line); }, 4200 + i * 4600)); }
+    }
+    res.unlocks = rpUnlockedNames(before, rpMedalCount());
+    rpSaveAll(); RP.last = res; rpGhostHide(); RP.rec = null;
+    rpShowResults(res);
+  } catch (err) { console.warn(err); }
+}
+function replayActEnd() { if (!RP) return; const was = RP.medals.done; RP.medals.done = true; rpSave("res.medals", RP.medals); if (!was) later(() => log("Remix unlocked: Floor select reshuffles every cast from a seed you can share.", "tip"), 1200); }
+
+// ---------- the floor results card ----------
+(() => {
+  const st = document.createElement("style");
+  st.textContent = `#rpres{position:fixed;top:calc(64px + env(safe-area-inset-top,0px));right:max(16px,env(safe-area-inset-right,0px));width:min(340px,calc(100vw - 32px));background:var(--panel);border-left:2px solid var(--cyan);padding:14px 16px 12px;font-family:var(--mono);font-size:11.5px;letter-spacing:.04em;color:var(--ink);pointer-events:none;z-index:30;transform:translateX(24px);opacity:0;transition:transform .45s cubic-bezier(.2,.8,.2,1),opacity .45s ease}
+#rpres.on{transform:none;opacity:1}#rpres .e{font-size:10px;letter-spacing:.28em;color:var(--amber);text-transform:uppercase}#rpres .n{font-family:var(--display);font-size:20px;font-weight:600;letter-spacing:.06em;margin:2px 0 8px;text-transform:uppercase}
+#rpres .t{display:flex;align-items:baseline;gap:12px;font-variant-numeric:tabular-nums}#rpres .t b{font-family:var(--display);font-size:26px;font-weight:600}#rpres .t span{color:var(--dim)}#rpres .nb{color:var(--cyan)!important}
+#rpres ul{list-style:none;margin:10px 0 6px;padding:0;display:grid;gap:4px}#rpres li{display:flex;gap:8px;color:var(--dim)}#rpres li i{font-style:normal;width:1.1em;text-align:center}#rpres li.ok{color:var(--ink)}#rpres li.ok i{color:var(--amber)}#rpres li.new::after{content:"new";margin-left:auto;color:var(--amber);font-size:9.5px;letter-spacing:.2em;text-transform:uppercase}
+#rpres .m{color:var(--dim);margin-top:6px;line-height:1.5}#rpres .m b{color:var(--ink);font-weight:600}#rpres .q{margin-top:8px;color:var(--dim);font-style:italic}#rpres .u{margin-top:8px;color:var(--amber)}
+#rppause{margin:14px 0 4px;padding:10px 12px;border:1px solid rgba(217,226,234,.14);font-size:11.5px;color:var(--dim);display:grid;gap:5px;text-align:left}#rppause b{color:var(--ink);font-weight:600}#rppause .ok{color:var(--ink)}#rppause .ok i{color:var(--amber)}#rppause i{font-style:normal;display:inline-block;width:1.2em}
+#rppause .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}#rppause button,.rp-menu button{all:unset;cursor:pointer;padding:5px 10px;border:1px solid rgba(217,226,234,.25);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink)}
+#m-floors .rp-menu button{all:unset;cursor:pointer;display:inline-block;padding:5px 10px;border:1px solid rgba(217,226,234,.25);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink)}
+#rppause button:hover,#rppause button:focus-visible,#m-floors .rp-menu button:hover,#m-floors .rp-menu button:focus-visible{border-color:var(--cyan);color:var(--cyan)}#rppause button.on,#m-floors .rp-menu button.on{background:var(--cyan);color:#05070a;border-color:var(--cyan)}
+.rp-menu{margin-top:6px;border:1px solid rgba(217,226,234,.14);padding:8px 12px;font-size:11px;color:var(--dim)}.rp-menu summary{cursor:pointer;font-size:10.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--amber);padding:2px 0}
+.rp-menu h5{margin:10px 0 6px;font-size:9.5px;font-weight:600;letter-spacing:.26em;text-transform:uppercase;color:var(--dim)}.rp-menu .g{display:flex;flex-wrap:wrap;gap:5px}#m-floors .rp-menu button[disabled]{opacity:.35;cursor:default}
+.rp-menu .seed{display:flex;gap:6px;align-items:center;margin-top:6px}.rp-menu input{all:unset;width:7.5em;padding:5px 8px;border:1px solid rgba(217,226,234,.25);color:var(--ink);font-size:11px;letter-spacing:.1em}.rp-menu p{margin:6px 0 0;line-height:1.45}
+#m-floors .rp-best{color:var(--cyan);font-size:10px;letter-spacing:.1em;margin-left:8px}`;
+  document.head.appendChild(st);
+  const el = document.createElement("div"); el.id = "rpres"; el.setAttribute("aria-live", "polite"); document.body.appendChild(el);
+})();
+function rpResHide() { $("rpres")?.classList.remove("on"); if (RP) RP.resT = 0; }
+function rpShowResults(r) {
+  const el = $("rpres"); if (!el) return;
+  const F = r.floor === 1 ? { name: "Arrival" } : FLOORS[r.floor] || { name: "" };
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const bestTxt = !r.clean ? "Checkpoint run · not timed" : r.best ? (r.prev == null ? "First clear" : `New best · ${(r.prev - r.secs).toFixed(1)} s faster`) : `Best ${rpFmt(r.prev)}`;
+  const gh = r.ghost == null ? (r.clean ? "Ghost saved. Race it from the pause menu." : "") : r.clean ? (r.secs < r.ghost ? `Beat your ghost by ${(r.ghost - r.secs).toFixed(1)} s` : `${(r.secs - r.ghost).toFixed(1)} s behind your ghost`) : "";
+  const quip = !r.clean ? "ARBITER: Restored runs are not records." : r.best && r.prev != null ? "ARBITER: Faster. Acceptable." : r.best ? "OKAFOR-REYES: Every floor you clear, it remembers how." : "ARBITER: You have done this better before.";
+  const names = rpProtoNames();
+  el.innerHTML = `<div class="e">Floor ${String(r.floor).padStart(2, "0")} results${names.length ? " · " + esc(names.join(", ")) : ""}</div><div class="n">${esc(F.name)}</div>
+<div class="t"><b>${r.clean ? rpFmt(r.secs) : "--"}</b><span class="${r.best ? "nb" : ""}">${esc(bestTxt)}</span></div>
+<ul>${r.ch.map((c) => `<li class="${c.ok || c.had ? "ok" : ""}${c.fresh ? " new" : ""}"><i>${c.ok || c.had ? "◆" : "◇"}</i>${esc(c.label)}</li>`).join("")}</ul>
+<div class="m">${gh ? esc(gh) + "<br>" : ""}${r.newMedals.length ? `<b>${r.newMedals.length}</b> new medal${r.newMedals.length > 1 ? "s" : ""} · ` : ""}<b>${rpMedalCount()}</b> medals total${r.frag ? ` · fragment ${r.frag.got}/${r.frag.of}` : ""}</div>
+${r.unlocks.length ? `<div class="u">Unlocked: ${esc(r.unlocks.join(", "))}</div>` : rpNextUnlock() ? `<div class="m">Next: ${esc(rpNextUnlock())}</div>` : ""}
+<div class="q">${esc(quip)}</div>`;
+  el.classList.add("on"); RP.resT = 14;
+}
+// the card stays until you step into the lift (or 14 s)
+function replayHud(dt) {
+  if (!RP || RP.resT <= 0) return;
+  RP.resT -= dt; if (RP.resT <= 0 || LV.ride?.exit) rpResHide();
+}
+
+// ---------- the pause screen: this floor's medals, best time, the ghost toggle ----------
+function replayScreen(eyebrow) {
+  let el = $("rppause");
+  if (!RP || eyebrow !== "Paused" || (state.mode !== "floor" && state.mode !== "test")) { if (el) el.hidden = true; return; }
+  if (!el) { el = document.createElement("div"); el.id = "rppause"; $("sub").after(el); el.addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; e.stopPropagation(); rpPauseClick(b.dataset.a); }); }
+  el.hidden = false; rpPauseRender();
+}
+function rpPauseClick(a) {
+  if (a === "ghost") { RP.proto.ghost = !RP.proto.ghost; rpSave("res.protocols", RP.proto); if (!RP.proto.ghost) rpGhostHide(); else rpGhostResume(); }
+  rpPauseRender();
+}
+// switching the ghost on mid-floor picks it up where the run is
+function rpGhostResume() {
+  if (state.mode === "test") { if (RP.tgGhost) rpGhostStart(RP.tgGhost, "test"); return; }
+  if (!RP.run || RP.run.done) return;
+  if (RP.run.clean) { const g = rpGhostGet(`${RP.run.key}|${RP.run.pk}`); if (g) { rpGhostStart(g, "floor"); RP.play.t0 = RP.run.t0; return; } }
+  if (RP.room) { const g = rpGhostGet(`room:${RP.room.id}|${rpProtoKey()}`); if (g) { rpGhostStart(g, "room"); RP.play.t0 = RP.room.t0; } }
+}
+function rpPauseRender() {
+  const el = $("rppause"); if (!el) return;
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const lines = [];
+  if (state.mode === "floor" && RP.run) {
+    const fl = RP.run.floor, best = RP.rooms[`${RP.run.key}|${RP.run.pk}`]?.t;
+    lines.push(`<div><b>Floor ${String(fl).padStart(2, "0")}</b> · ${RP.run.clean ? `best ${best != null ? rpFmt(best) : "none yet"}` : "checkpoint run, not timed"}</div>`);
+    for (const c of RP_FCH) { const had = !!RP.medals.got[`floor:${fl}:${c.k}`]; lines.push(`<div class="${had ? "ok" : ""}"><i>${had ? "◆" : "◇"}</i>${esc(c.label(fl))}</div>`); }
+    if (RP.room) lines.push(`<div>Room <b>${esc(RP.room.name)}</b>${RP.rooms[`room:${RP.room.id}|${rpProtoKey()}`] ? ` · best ${rpFmt(RP.rooms[`room:${RP.room.id}|${rpProtoKey()}`].t)}` : ""}</div>`);
+  }
+  const names = rpProtoNames(); if (names.length) lines.push(`<div>Protocols: <b>${esc(names.join(", "))}</b></div>`);
+  lines.push(`<div class="row"><span><b>${rpMedalCount() >= 999 ? "All" : rpMedalCount()}</b> medals</span><button type="button" data-a="ghost" class="${RP.proto.ghost ? "on" : ""}" aria-pressed="${RP.proto.ghost}">Race ghost: ${RP.proto.ghost ? "On" : "Off"}</button></div>`);
+  el.innerHTML = lines.join("");
+}
+
+// ---------- floor select: best times, protocols, remix, arm skins ----------
+function replayFloorMenu(f) {
+  if (!RP || !f) return;
+  try {
+    for (const b of f.querySelectorAll("button[data-floor]")) { const t = RP.rooms[`floor:${b.dataset.floor}|${rpProtoKey0()}`]?.t; if (t != null) { const s = document.createElement("em"); s.className = "rp-best"; s.style.fontStyle = "normal"; s.textContent = rpFmt(t); b.querySelector("b")?.after(s); } }
+    const d = document.createElement("details"); d.className = "rp-menu"; if (RP.menuOpen) d.open = true;
+    d.addEventListener("toggle", () => (RP.menuOpen = d.open));
+    d.addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b || b.disabled) return; e.stopPropagation(); rpMenuClick(b.dataset); f.querySelector(".rp-menu")?.remove(); f.querySelectorAll(".rp-best").forEach((x) => x.remove()); replayFloorMenu(f); f.querySelector(`.rp-menu [data-k="${b.dataset.k}"][data-v="${b.dataset.v || ""}"]`)?.focus({ preventScroll: true }); });
+    d.addEventListener("keydown", (e) => e.stopPropagation());
+    const n = rpMedalCount();
+    const P1 = RP_PROTO.map((p) => { const ok = replayUnlocked("protocol:" + p.id), on = RP.proto.on.includes(p.id); return `<button type="button" data-k="proto" data-v="${p.id}" class="${on && ok ? "on" : ""}" ${ok ? "" : "disabled"} aria-pressed="${on && ok}" title="${ok ? p.d : `${p.need} medals`}">${p.name}${ok ? "" : ` · ${p.need}`}</button>`; }).join("");
+    const S1 = RP_SKINS.map((s) => { const ok = replayUnlocked("skin:" + s.id), on = RP.proto.skin === s.id; return `<button type="button" data-k="skin" data-v="${s.id}" class="${on ? "on" : ""}" ${ok ? "" : "disabled"} aria-pressed="${on}">${s.name}${ok ? "" : ` · ${s.need}`}</button>`; }).join("");
+    const rx = replayUnlocked("remix");
+    d.innerHTML = `<summary>Replay · ${n >= 999 ? "all" : n} medal${n === 1 ? "" : "s"}</summary>
+<h5>Protocols</h5><div class="g">${P1}</div><p>${RP_PROTO.filter((p) => RP.proto.on.includes(p.id) && replayUnlocked("protocol:" + p.id)).map((p) => p.d).join(" ") || "Rule changes. Runs with protocols keep their own best times."}</p>
+<h5>Remix</h5>${rx ? `<div class="g"><button type="button" data-k="remix" class="${RP.proto.remix ? "on" : ""}" aria-pressed="${RP.proto.remix}">Remix: ${RP.proto.remix ? "On" : "Off"}</button><button type="button" data-k="seed">New seed</button></div><div class="seed">Seed <input id="rpseed" inputmode="numeric" aria-label="Remix seed" value="${RP.proto.seed}"><button type="button" data-k="setseed">Use</button></div><p>Each floor's cast is reshuffled from the seed. Share it to race the same remix.</p>` : `<p>Finish the building once to unlock Remix.</p>`}
+<h5>Arm finish</h5><div class="g">${S1}</div>
+<h5>Ghost</h5><div class="g"><button type="button" data-k="ghost" class="${RP.proto.ghost ? "on" : ""}" aria-pressed="${RP.proto.ghost}">Race ghost: ${RP.proto.ghost ? "On" : "Off"}</button></div>`;
+    f.append(d);
+  } catch (err) { console.warn(err); }
+}
+// the key the menu shows bests for (the menu is outside a floor, so state.mode may not be "floor" yet)
+function rpProtoKey0() { const m = state.mode; state.mode = "floor"; const k = rpProtoKey(); state.mode = m; return k; }
+function rpMenuClick(ds) {
+  const k = ds.k, v = ds.v;
+  if (k === "proto") {
+    const on = new Set(RP.proto.on); if (on.has(v)) on.delete(v); else { on.add(v); if (v === "rookie") on.delete("overclock"); if (v === "overclock") on.delete("rookie"); }
+    RP.proto.on = [...on];
+  } else if (k === "skin") { RP.proto.skin = v; rpApplySkin(); }
+  else if (k === "remix") RP.proto.remix = !RP.proto.remix;
+  else if (k === "seed") RP.proto.seed = rpNewSeed();
+  else if (k === "setseed") { const s = parseInt($("rpseed")?.value, 10); if (s > 0) RP.proto.seed = s >>> 0; }
+  else if (k === "ghost") { RP.proto.ghost = !RP.proto.ghost; }
+  rpSave("res.protocols", RP.proto);
+}
+
+// ---------- testing ground: Tab menu section ----------
+function replayTgMenu(sec, btns, row, seg, tog) {
+  if (!RP) return;
+  const s = sec("Replay");
+  row(s, "Unlock everything", [tog(RP.testAll, () => { RP.testAll = !RP.testAll; rpApplyProto(); rpApplySkin(); })], "This session only. Your medals stay as they are.");
+  const w = document.createElement("div"); w.className = "tg-btns";
+  for (const p of RP_PROTO) {
+    const ok = replayUnlocked("protocol:" + p.id), on = RP.proto.on.includes(p.id);
+    const b = document.createElement("button"); b.type = "button"; b.className = "tg-b"; b.textContent = `${on ? "◆ " : ""}${p.name}`; b.disabled = !ok; if (!ok) b.style.opacity = 0.4; b.title = p.d;
+    b.addEventListener("click", () => { rpMenuClick({ k: "proto", v: p.id }); rpApplyProto(); flash(`${p.name} ${RP.proto.on.includes(p.id) ? "on" : "off"}${["rookie", "overclock", "bigHeads"].includes(p.id) ? " (new spawns)" : ""}`, "var(--amber)"); tgmRender(); });
+    w.append(b);
+  }
+  s.append(w);
+  btns(s, [
+    ["Ghost · record", () => { RP.tgRec = { buf: [], t0: state.time, next: state.time }; rpGhostHide(); flash("Recording ghost", "var(--amber)"); }],
+    ["Ghost · stop and keep", () => { const r = RP.tgRec; RP.tgRec = null; if (!r || r.buf.length < 8) { flash("Nothing recorded", "var(--dim)"); return; } const t = state.time - r.t0; RP.tgGhost = { t, d: Int16Array.from(r.buf.map((v) => Math.round(v))) }; rpGhostPut("test:grid|std", t, r.buf); flash(`Ghost kept · ${rpFmt(t)}`, "var(--amber)"); }],
+    ["Ghost · race it", () => { const g = RP.tgGhost || rpGhostGet("test:grid|std"); if (!g) { flash("Record one first", "var(--dim)"); return; } RP.tgGhost = g; rpGhostStart(g, "test"); flash("Ghost running", "var(--amber)"); }],
+    ["Ghost · hide", () => rpGhostHide()],
+    ["Preview floor results", () => { rpShowResults({ floor: 2, secs: 241.7, clean: true, pk: "std", ch: RP_FCH.map((c, i) => ({ label: c.label(2), ok: i !== 2, had: i !== 2, fresh: i === 0 })), newMedals: ["x"], best: true, prev: 250.3, ghost: 250.3, frag: { got: 1, of: 1 }, unlocks: [] }); }],
+    ["Preview pause panel", () => { setTimeout(() => { document.exitPointerLock?.(); showScreen("Paused", "PAUSED", "UNIT-7 suspended.", "Click to resume.", "Resume", false); }, 80); }, false],
+  ]);
+  const d = document.createElement("details"); d.innerHTML = `<summary>Reset replay progress</summary>`; const bb = document.createElement("div"); bb.className = "tg-btns";
+  const b = document.createElement("button"); b.type = "button"; b.className = "tg-b"; b.textContent = "Erase medals, bests and ghosts"; b.addEventListener("click", () => { RP.medals = { got: {}, done: false, frags: {}, scenes: {} }; RP.rooms = {}; RP.ghosts = {}; rpSaveAll(); rpSave("res.ghosts", RP.ghosts); flash("Replay progress erased", "var(--amber)"); tgmRender(); });
+  bb.append(b); d.append(bb); s.append(d);
+}
+rpInit(); RP.roboM0 = M.robo.metalness; rpApplySkin(); rpGhostMesh(); // built up front, hidden, so the warm-up compiles its shader
+
 // ---------- loop ----------
 let acc = 0, last = performance.now();
 function simStep() {
@@ -14553,6 +14986,7 @@ function simStep() {
   ts = comboRamp(ts); ts = carxTs(ts); ts = mfTs(scopeTs(ts));
   state.time += DT;
   (player.prev ||= new THREE.Vector3()).copy(playerPos());
+  replayPre();
   stepPlayer(DT);
   pressed.clear();
   if (player.dead) return;
@@ -14567,7 +15001,7 @@ function simStep() {
     if (tv.length() > 5) for (const b of barrelsNear(tp.clone().setY(0.55), 0.6)) hitBarrel(b, 0.08);
   }
   updateBooms(DT * Math.max(ts, 0.3)); boomStep(DT * Math.max(ts, 0.3));
-  lvStep(DT * ts);
+  lvStep(DT * ts); replayStep();
   if (state.phase === 1.5 && playerPos().distanceTo(new THREE.Vector3(0, 1, -26)) < 1.8) pickupSword();
   if (door.opening && door.mesh.position.y > -2.1) door.mesh.position.y -= DT * 2.5;
   // the player keeps full speed while the world is slowed
@@ -14618,7 +15052,7 @@ function frame(now) {
       if (f.t <= 0) { levelGroup.remove(f.obj); dispGeo(f.obj.geometry); if (f.life) f.obj.material.dispose(); fx.splice(i, 1); }
     }
     if (!state.fin) { updateCamera(dt); carxCamera(dt); }
-    updateHud(dt);
+    updateHud(dt); replayFrame(dt); replayHud(dt);
     if (SET.fps && (PERF.fpsT = (PERF.fpsT || 0) - dt) <= 0) { PERF.fpsT = 0.4; $("fpsc").textContent = `${Math.round(1000 / Math.max(1, PERF.ft))} fps`; }
   } else if (!state.started) {
     const t = now * 0.00004; camera.position.set(Math.cos(t) * 70, 22, Math.sin(t) * 70); camera.lookAt(0, 2, 0);
@@ -14688,6 +15122,7 @@ window.__res = { M, AND_PART_MAT, get GORE_CHROME() { return GORE_CHROME; }, get
   }, get boot() { return state.boot; },
   TUT, ROOMS, COMBOS, BOOK, CF, VOICE, startCalibration, tutHud, openBook, openMods, toMenu, comboEvent, endComboScreen, ev, say, enterRoom, tutRestart, get synth() { return synth; },
   DISC, STIM, IMPACT, CARS, MV, vmLeg, vmInj, vmChest, vmBody, startStimUse, highlight, camera, get fin() { return state.fin; }, startFinisher, finisherTarget, finStep(n) { for (let i = 0; i < n && state.fin; i++) updateFinisher(DT); }, pickupSword, VM, GP, gunG, startGunAnim, gunPoint, vmCamera, armR, armL, rig, applyPose, setTilt(t) { VM.gunTilt = t; }, get slashes() { return slashes; }, playAttackAnim, spawnSlash, GL, glitch, M,
+  get RP() { return RP; }, replayFloorClear, replayEvent, replayCast, replayOn, replayUnlocked, rpShowResults, replayFrame, rpGhostGet, rpApplyProto, replayRemixType,
   step(n) { for (let i = 0; i < n && !player.dead; i++) simStep(); },
   killPhase() { for (const e of alive()) damageEnemy(e, 999, enemyPos(e), new THREE.Vector3(1, 0, 0), "punch"); },
 };
