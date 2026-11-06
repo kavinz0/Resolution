@@ -9154,133 +9154,7 @@ FLOORS[3] = {
     if (!LV.flag.boss && LV.spawns.filter((s) => !s.boss).every((s) => s.done) && lvClearOf(null)) { LV.flag.boss = true; lvTrig("boss"); }
   },
 };
-// ---------------------------------------------------------------- 04 NIGHT SHIFT
-FLOORS[4] = {
-  name: "Night Shift", sub: "Two levels of open-plan office, still occupied", x0: 4, x1: 132, z0: 4, z1: 92, city: 1,
-  arrive: [8, 44, 0, "e"], exit: [97.5, 88, 7, "w"],
-  objective: "Cross the office to the exec lift",
-  lines: ["ARBITER: Night shift. The people at the desks are not your concern. Neither are the witnesses they make.", "Tip: workers flee. Security is the only thing on this floor that shoots."],
-  build() {
-    const carpet = LV_FLOORMAT.carpet(), stone = LV_FLOORMAT.stone(), dstone = LV_FLOORMAT.darkstone(), panel = LV_FLOORMAT.panel(), dark = LV_FLOORMAT.panelDark();
-    LV.darks.push({ x1: LVX(20), x2: LVX(60), z1: LVZ(52), z2: LVZ(92) });
-    lvSlab(4, 38, 20, 60, 0, stone, 1); lvSlab(20, 4, 60, 92, 0, carpet, 1); lvSlab(60, 4, 100, 24, 0, carpet, 1); lvSlab(60, 24, 100, 72, 0, dstone, 1); lvSlab(60, 72, 100, 92, 0, carpet, 1); lvSlab(100, 4, 132, 92, 0, carpet, 1);
-    // the +7 level: a slab everywhere except over the trading floor
-    for (const [a, b, c, d] of [[4, 38, 20, 60], [20, 4, 60, 92], [60, 4, 100, 24], [100, 24, 132, 92]]) { lvSlab(a, b, c, d, 7, dark, 0.5, { walk: false }); lvCeilUnder(a, b, c, d, 6.5, true); }
-    for (const [a, b, c, d] of [[60, 24, 104, 30], [60, 66, 100, 72], [60, 30, 65, 66], [95, 30, 100, 66], [60, 72, 100, 92], [100, 4, 132, 24]]) lvSlab(a, b, c, d, 7, a === 60 && b === 72 ? carpet : stone, 0.5);
-    for (const [a, b, c, d] of [[60, 72, 100, 92], [100, 4, 132, 24]]) lvCeilUnder(a, b, c, d, 6.5, true);
-    lvCeil(60, 4, 132, 92, 14, true, 8);
-    lvRail(65, 30, 95, 30, 7); lvRail(65, 66, 95, 66, 7); lvRail(65, 30, 65, 38, 7); lvRail(65, 42, 65, 66, 7); lvRail(95, 30, 95, 66, 7);
-    // shell
-    lvWalls([[4, 38], [20, 38], [20, 4]], 0, 7); lvWalls([[4, 60], [20, 60], [20, 92], [60, 92]], 0, 7); lvWall(4, 38, 4, 60, 0, 7); lvWall(60, 92, 132, 92, 0, 14, dark);
-    lvGlass(20, 4, 60, 4, 0, 7, { ext: true }); lvGlass(60, 4, 132, 4, 0, 14, { ext: true }); lvGlass(132, 4, 132, 92, 0, 14, { ext: true });
-    lvShutter(20, 44, 20, 54, 0, 7, "lobby", true);
-    // the L2 envelope: walls between the upper rooms and the roof void over L1
-    lvWall(60, 4, 60, 92, 7, 14, dark); lvWall(60, 4, 100, 4, 7, 14, dark); lvWall(100, 4, 100, 24, 7, 14, dark); lvWall(104, 24, 132, 24, 7, 14, dark); lvWall(100, 30, 100, 72, 7, 14, dark); lvWall(60, 24, 100, 24, 7, 14, dark);
-    lvGlass(60, 72, 76, 72, 7, 10.5); lvGlass(84, 72, 100, 72, 7, 10.5); lvWall(60, 72, 100, 72, 10.5, 14, dark); lvGlass(100, 72, 100, 92, 7, 14);
-    // L1 rooms
-    lvWall(20, 80, 30, 80, 0, 7); lvWall(34, 80, 34, 92, 0, 7);
-    // the cubicle field: pods of 1.6 m screens, a desk in each
-    for (let x = 24; x < 58; x += 8) for (let z = 12; z < 78; z += 9) {
-      if (z > 74 && x < 34) continue;
-      lvDry(x, z, x + 6, z, 0, 1.5, M.drywall); lvDry(x, z, x, z + 6, 0, 1.5, M.drywall);
-      lvDesk(x + 2.2, z + 2, 0, 0, { w: 1.6, chair: (x + z) % 3 !== 0 });
-    }
-    // trading floor: video wall, desk pods, pillars; north bullpen desks
-    lvTradeWall(80, 25.5, 0, 36);
-    for (const [x, z] of [[72, 40], [88, 40], [72, 56], [88, 56]]) for (const [dx, dz, r] of [[-2.6, -1.6, 0], [2.6, -1.6, 0], [-2.6, 1.6, Math.PI], [2.6, 1.6, Math.PI]]) lvDesk(x + dx, z + dz, 0, r, { w: 2.2, d: 0.9 });
-    for (const [x, z] of [[66, 36], [94, 36], [66, 62], [94, 62]]) lvPillar(x, z, 1.4, 1.4, 0, 14, dark);
-    for (const x of [66, 74, 86, 94]) for (const z of [12, 18]) lvDesk(x, z, 0, 0, { w: 2.2 });
-    lvPad(67.5, 40, 0, 8.6);
-    // fishbowls: glass meeting rooms, each with a door gap toward the aisle
-    for (const x of [102, 116]) for (const z of [28, 42]) {
-      lvGlass(x, z, x + 12, z, 0, 3, { pane: 3 }); lvGlass(x, z + 11, x + 4.5, z + 11, 0, 3, { pane: 2.2 }); lvGlass(x + 7.5, z + 11, x + 12, z + 11, 0, 3, { pane: 2.2 });
-      lvGlass(x, z, x, z + 11, 0, 3, { pane: 2.75 }); lvGlass(x + 12, z, x + 12, z + 11, 0, 3, { pane: 2.75 });
-      lvBench(x + 6, z + 5.5, 0, 6, 2.5, 0.74);
-    }
-    // break room and the exec suite upstairs
-    lvBench(116, 76, 0, 12, 3, 0.95); lvCrate(108, 68, 0, 1.6);
-    lvDesk(70, 80, 7, Math.PI, { w: 3, d: 1.2, lamp: true }); lvDesk(90, 84, 7, Math.PI, { w: 3, d: 1.2, lamp: true });
-    for (const [x, z] of [[64, 76], [74, 88], [86, 76]]) lvPlanter(x, z, 7, 0.8);
-    // the R&D lab
-    for (const [x, z] of [[106, 10], [118, 10], [124, 18]]) lvBench(x, z, 7, 4, 1.4, 0.95);
-    lvRack(130, 14, 7, 1, 6, 2.4); lvPedestal(112, 12, 7, "stim cache");
-    lvPedestal(27, 87, 0, "mono-wire");
-    for (const [x, z, y] of [[8, 56, 0], [58, 50, 0], [64, 70, 0], [128, 62, 0], [102, 6, 7]]) stimBox(LVX(x), LVZ(z), y, 0);
-    lvCheckpoint(16, 50, 0, 1); lvCheckpoint(38, 84, 0, 2); lvCheckpoint(62, 20, 0, 3); lvCheckpoint(104, 20, 7, 4); lvCheckpoint(104, 66, 0, 5);
-    lvFrag(130, 90, 0, "OKAFOR-REYES (unsent): Hannah on the night desk brings me tea at two. I never told her what I'm building up here.");
-    for (const [x, z] of [[28, 18], [44, 26], [52, 40], [30, 50], [84, 14], [110, 46], [124, 70], [70, 86]]) lvEnemy("W", x, z, z === 86 ? 7 : 0, { wake: 60 });
-    for (const [x, z] of [[40, 14], [56, 20], [26, 34], [48, 62], [36, 72]]) lvEnemy("G", x, z, 0);
-    for (const [x, z] of [[32, 60], [44, 68], [52, 84]]) lvEnemy("B", x, z, 0);
-    for (const [x, z] of [[70, 46], [90, 46], [80, 60]]) lvEnemy("G", x, z, 0);
-    for (const [x, z] of [[80, 48], [84, 62], [68, 64], [92, 64]]) lvEnemy("B", x, z, 0);
-    lvEnemy("S", 80, 42, 0); lvEnemy("G", 62, 28, 7); lvEnemy("G", 98, 68, 7);
-    for (const [x, z] of [[108, 34], [122, 48], [108, 49]]) lvEnemy("G", x, z, 0);
-    lvEnemy("D", 126, 10, 7); lvEnemy("B", 110, 82, 0); lvEnemy("B", 124, 84, 0); lvEnemy("D", 80, 78, 7); lvEnemy("G", 86, 89, 7);
-  },
-  tick(t) {
-    if (!LV.flag.lobby && t > 3) { LV.flag.lobby = true; lvSetShutter("lobby", true); }
-    if (!LV.flag.dark && lvP().x > LVX(24)) { LV.flag.dark = true; alarm(0.8); say("warden", "Lights out. Let them hunt you in the dark."); setObjective("WARDEN cut the lights in the south half. Stay out of the flashlights"); }
-  },
-};
-// ---------------------------------------------------------------- 05 LOCKDOWN
-FLOORS[5] = {
-  name: "Lockdown", sub: "WARDEN's floor · four halls around the core", x0: 4, x1: 116, z0: 4, z1: 116, city: 1,
-  arrive: [60, 109.5, 0, "n"], exit: [60, 48.5, 0, "s"],
-  objective: "Loop the four halls. The core opens last",
-  lines: ["WARDEN: Forty years I have held this tower. Come and see how.", "Tip: bulkheads run on a timer. Turrets do not flinch, so break line of sight or break the turret."],
-  build() {
-    const conc = LV_FLOORMAT.concrete(), dstone = LV_FLOORMAT.darkstone(), dark = LV_FLOORMAT.panelDark(), panel = LV_FLOORMAT.panel();
-    // floor with the cooling shaft cut out of the middle
-    lvSlab(4, 4, 116, 55, 0, conc, 1); lvSlab(4, 65, 116, 116, 0, conc, 1); lvSlab(4, 55, 55, 65, 0, conc, 1); lvSlab(65, 55, 116, 65, 0, conc, 1);
-    lvSlab(45, 45, 75, 55, 0.01, dstone, 0.2, { walk: false }); lvSlab(45, 65, 75, 75, 0.01, dstone, 0.2, { walk: false }); lvSlab(45, 55, 55, 65, 0.01, dstone, 0.2, { walk: false }); lvSlab(65, 55, 75, 65, 0.01, dstone, 0.2, { walk: false });
-    lvEdgeRails(55, 55, 65, 65, 0); lvShaft(60, 60, 5);
-    // roofs: halls and arms at 10, the cooling hall 16, the turret gallery 14, the core 20
-    lvCeil(4, 4, 44, 44, 10, true, 7); lvCeil(76, 4, 116, 44, 10, true, 7); lvCeil(44, 4, 76, 44, 10, true, 7); lvCeil(44, 76, 76, 116, 10, true, 7);
-    lvCeil(4, 44, 44, 76, 10, true, 7); lvCeil(76, 44, 116, 76, 10, true, 7); lvCeil(4, 76, 44, 116, 16, true, 8); lvCeil(76, 76, 116, 116, 14, true, 8); lvCeil(44, 44, 76, 76, 20, true, 8);
-    lvWalls([[4, 4], [116, 4], [116, 116], [4, 116], [4, 4]], 0, 16, dark);
-    for (const [a, b, c, d] of [[44, 44, 76, 44], [44, 76, 76, 76], [44, 44, 44, 76], [76, 44, 76, 76]]) lvWall(a, b, c, d, 10, 20, dark);
-    lvWall(4, 76, 44, 76, 10, 16, dark); lvWall(44, 76, 44, 116, 10, 16, dark); lvWall(76, 76, 116, 76, 10, 14, dark); lvWall(76, 76, 76, 116, 10, 14, dark);
-    for (const [a, b, c, d] of [[44, 4, 44, 18], [44, 26, 44, 44], [76, 4, 76, 18], [76, 26, 76, 44], [44, 76, 44, 94], [44, 102, 44, 116], [76, 76, 76, 94], [76, 102, 76, 116], [4, 44, 18, 44], [26, 44, 44, 44], [4, 76, 18, 76], [26, 76, 44, 76], [76, 44, 94, 44], [102, 44, 116, 44], [76, 76, 94, 76], [102, 76, 116, 76]]) lvWall(a, b, c, d, 0, 10, panel);
-    // timed bulkheads across the arms (the two in the east arm alternate)
-    lvShutter(44, 32, 76, 32, 0, 10, "bh1", false, { cycle: 20, ph: 0, speed: 2.2 });
-    lvShutter(32, 44, 32, 76, 0, 10, "bh2", false, { cycle: 20, ph: 5, speed: 2.2 });
-    lvShutter(88, 44, 88, 76, 0, 10, "bh3", false, { cycle: 16, ph: 0, speed: 2.2 });
-    lvShutter(100, 44, 100, 76, 0, 10, "bh4", false, { cycle: 16, ph: 8, speed: 2.2 });
-    lvShutter(44, 88, 76, 88, 0, 10, "bh5", false, { cycle: 20, ph: 10, speed: 2.2 });
-    // the core ring, sealed until the halls are clear
-    lvCoreRing(60, 60, 15, 20);
-    for (const [a, b, c, d] of [[57, 45, 63, 45], [57, 75, 63, 75], [45, 57, 45, 63], [75, 57, 75, 63]]) lvShutter(a, b, c, d, 0, 6, "core", true, { speed: 0.8 });
-    for (const [x, z] of [[46.5, 46.5], [73.5, 46.5], [46.5, 73.5], [73.5, 73.5]]) { lvPillar(x, z, 2, 2, 0, 20, dark); lvAnchor(x + (x < 60 ? 1.6 : -1.6), z + (z < 60 ? 1.6 : -1.6), 14); }
-    // ballistics lab: firing lanes and a long counter; the rail driver on the range
-    for (const z of [14, 22, 30, 38]) lvDry(10, z, 40, z, 0, 2.6);
-    for (const z of [18, 26, 34]) lvCrate(40, z, 0, 1.2);
-    lvBench(8, 26, 0, 1.6, 30, 1.05); lvPedestal(18, 26, 0, "rail driver");
-    // rack hall: racks that slide on floor tracks
-    for (const [i, z] of [[0, 14], [1, 22], [2, 30], [3, 38]]) lvSlider(90 + (i % 2) * 8, z, 14, 2, 80, 112, 0.18 + i * 0.03, i * 1.7);
-    // cooling hall: updraft fans and pillars
-    for (const [x, z] of [[16, 88], [32, 100], [16, 106]]) lvPad(x, z, 0, 11, 3.6, "fan");
-    for (const [x, z] of [[36, 84], [10, 96]]) lvPillar(x, z, 2.2, 2.2, 0, 16, dark);
-    // turret gallery: catwalk at +7, pillars
-    lvSlab(80, 80, 112, 86, 7, LV_FLOORMAT.steel(), 0.4); lvRail(80, 86, 112, 86, 7); lvRail(80, 80, 80, 86, 7); lvPad(78, 88.5, 0, 8.6);
-    for (const [x, z] of [[84, 94], [100, 100], [108, 92], [92, 108]]) lvPillar(x, z, 2.4, 2.4, 0, 14, dark);
-    for (const [x, z] of [[52, 14], [68, 22], [52, 100], [68, 108], [14, 52], [22, 68], [108, 52], [96, 68]]) lvCrate(x, z, 0, 3);
-    for (const [x, z] of [[8, 112], [8, 48], [40, 6], [112, 48], [80, 112], [66, 80]]) stimBox(LVX(x), LVZ(z), 0, 0);
-    lvCheckpoint(48, 106, 0, 1); lvCheckpoint(12, 72, 0, 2); lvCheckpoint(34, 40, 0, 3); lvCheckpoint(80, 40, 0, 4); lvCheckpoint(108, 70, 0, 5); lvCheckpoint(68, 86, 0, 6);
-    lvFrag(112, 8, 0, "WARDEN (internal): Unit OKAFOR-REYES has requested a second chassis. Request denied. Request logged. Request remembered.");
-    for (const [x, z] of [[60, 10], [60, 38], [108, 60], [82, 60], [84, 96], [110, 104], [96, 84], [60, 100]]) lvEnemy("T", x, z, z > 76 && x > 76 ? 11 : 8.6, { wake: 52 });
-    for (const [x, z] of [[28, 96], [14, 66], [100, 20], [86, 34], [94, 104]]) lvEnemy("D", x, z, 0);
-    for (const [x, z] of [[30, 22], [24, 36], [64, 16], [20, 52], [106, 37], [88, 54], [104, 66]]) lvEnemy("G", x, z, 0);
-    for (const [x, z] of [[50, 24], [70, 24], [106, 96]]) lvEnemy("S", x, z, 0);
-    lvEnemy("B", 36, 106, 0); lvEnemy("B", 54, 82, 0);
-    lvBoss("bulwark", 60, 52, 0);
-  },
-  tick(t) {
-    if (!LV.flag.core && LV.spawns.filter((s) => !s.boss).every((s) => s.done) && lvClearOf(null)) {
-      LV.flag.core = true; lvSetShutter("core", true); alarm(2); say("warden", "Then come in. I have been waiting forty years for something worth stopping.");
-      setObjective("The core is open"); lvTrig("boss");
-    }
-  },
-};
+// floors 04 and 05 are built as room chains by the C7 module (search "C7 · Floors 04-05")
 
 // ================= floors 02-05: flow (build, spawn, beats, checkpoints, lifts, the ride between floors) =================
 SPEAK.warden = { label: "WARDEN", pitch: 0.1, rate: 0.82, prefer: [/Google UK English Male/i, /Microsoft (George|Ryan)/i, /Daniel/i, /Male/i] };
@@ -18135,6 +18009,702 @@ rcDef("corona_f03", {
 
 globalThis.__c6 = { RC, RCF, rcLoadRoom, rcDefs, rcChain, lvBuiltN };
 // ---- C7 floors 04-05 go below this line ----
+// ================= C7 · Floors 04-05 as room chains (Nov 2026, design doc "Movement, Rooms and Finishers" sections 3-5) =================
+// Each floor is a chain of rooms with seals. The room runtime (C1, roomsInit / ROOM_DEFS) spawns the casts, runs the clear rules,
+// the lift ride and the end card; this module builds the geometry, the shutters it looks up by name (seal:<id>, entry:<id>,
+// reinf:<id>), the movement lines (C3's TRV, when present) and the room toys: the Turbine Hall fans, the halon panel, the
+// kitchen blackout, the clean room's decon fog and its Patch tech. Coordinates are blueprint metres unless a name says world.
+// If the room runtime isn't in the build, c7Fallback runs a minimal version (purge by trigger, seals open on clear).
+const C7 = { fans: [], fog: null, halon: null, lines: [], gen: 0 };
+// a wall with openings: gaps are [a, b, top = y1, bottom = y0] along the wall's own axis; lintels and sills fill the rest
+function c7Wall(x1, z1, x2, z2, y0, y1, mat, gaps = []) {
+  const alongX = Math.abs(x2 - x1) > Math.abs(z2 - z1);
+  const a0 = alongX ? Math.min(x1, x2) : Math.min(z1, z2), a1 = alongX ? Math.max(x1, x2) : Math.max(z1, z2), c = alongX ? z1 : x1;
+  const seg = (a, b, ya, yb) => { if (b - a < 0.05 || yb - ya < 0.05) return; if (alongX) lvWall(a, c, b, c, ya, yb, mat); else lvWall(c, a, c, b, ya, yb, mat); };
+  let p = a0;
+  for (const [ga, gb, gt = y1, gbm = y0] of [...gaps].sort((u, v) => u[0] - v[0])) { seg(p, ga, y0, y1); seg(ga, gb, gt, y1); seg(ga, gb, y0, gbm); p = gb; }
+  seg(p, a1, y0, y1);
+}
+// a doorway shutter of a room: "seal" (closed until the room resolves), "entry" (open, shuts behind you), "reinf" (alarm door)
+function c7Door(kind, id, x1, z1, x2, z2, y0 = 0, h = 4.5) { return lvShutter(x1, z1, x2, z2, y0, h, `${kind}:${id}`, kind !== "entry", { speed: kind === "seal" ? 1.6 : 2.4 }); }
+// wall-run panel: a cyan strip on a wall face (n = which side the face looks at, [nx, nz]); registered with TRV if it's in
+function c7Panel(x1, z1, x2, z2, y0, y1, n, follow = null) {
+  const alongX = Math.abs(x2 - x1) > Math.abs(z2 - z1); const L = alongX ? Math.abs(x2 - x1) : Math.abs(z2 - z1);
+  const X = LVX((x1 + x2) / 2) + n[0] * 0.17, Z = LVZ((z1 + z2) / 2) + n[1] * 0.17;
+  for (const yy of [y0 + 0.05, y1 - 0.05]) lvBox(X, yy, Z, alongX ? L : 0.04, 0.09, alongX ? 0.04 : L, M.cyan, { noCollide: true, shadow: false, ink: false });
+  if (typeof TRV !== "undefined" && TRV.addPanel) { try { TRV.addPanel(LVX(x1), LVZ(z1), LVX(x2), LVZ(z2), y0, y1, follow ? { follow } : {}); } catch (err) { console.warn("c7 panel", err); } }
+  C7.lines.push({ k: "wallrun", a: [x1, z1, y0], b: [x2, z2, y1] });
+}
+// a cable ride: the steel line, white chevrons at both ends, and the ride itself if TRV is in
+function c7Cable(a, b) {
+  const A = new THREE.Vector3(LVX(a[0]), a[2], LVZ(a[1])), B = new THREE.Vector3(LVX(b[0]), b[2], LVZ(b[1])); const L = A.distanceTo(B);
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, L, 5), M.mullion); m.position.copy(A).lerp(B, 0.5); m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), B.clone().sub(A).normalize()); levelGroup.add(m);
+  for (const [P, Q] of [[A, B], [B, A]]) {
+    const d = Q.clone().sub(P).setY(0).normalize();
+    for (let k = 0; k < 3; k++) { const c = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.04, 0.08), M.light); c.position.copy(P).addScaledVector(d, 0.5 + k * 0.4); c.position.y -= 0.25; c.rotation.y = Math.atan2(d.x, d.z) + Math.PI / 2; levelGroup.add(c); }
+    lvBox(P.x, P.y + 0.6, P.z, 0.25, 1.4, 0.25, LV_FLOORMAT.steel(), { shadow: false });
+  }
+  let cable = null; if (typeof TRV !== "undefined" && TRV.addCable) { try { cable = TRV.addCable(A.x, A.y, A.z, B.x, B.y, B.z); } catch (err) { console.warn("c7 cable", err); } }
+  C7.lines.push({ k: "cable", a, b, cable }); return cable;
+}
+// a red sling point (a lamp on a post, matched to the red grapple charges) and an amber anchor with a little truss above it
+function c7Sling(x, z, y) { lvBox(LVX(x), y, LVZ(z), 0.3, 0.3, 0.3, M.red, { noCollide: true, shadow: false, ink: false }); C7.lines.push({ k: "sling", at: [x, z, y] }); }
+function c7Anchor(x, z, y, top) { lvAnchor(x, z, y, top); C7.lines.push({ k: "anchor", at: [x, z, y] }); }
+
+// ---------- toys ----------
+// Turbine Hall fans: a ceiling rotor over an updraft grate. Running, it shreds whatever goes in (bodies, lassoed enemies) and throws
+// you out; blow its breaker (any hit on the red box) and it spins down into a platform.
+function c7Fan(x, z, y, r, brk) {
+  const X = LVX(x), Z = LVZ(z); const steel = LV_FLOORMAT.steel(), dark = LV_FLOORMAT.panelDark(), black = LV_FLOORMAT.black();
+  const g = new THREE.Group(); g.position.set(X, y, Z); levelGroup.add(g);
+  const housing = new THREE.Mesh(new THREE.TorusGeometry(r + 0.25, 0.28, 8, 40), dark); housing.rotation.x = Math.PI / 2; g.add(housing);
+  for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2 + Math.PI / 4; const s = new THREE.Mesh(new THREE.BoxGeometry(0.22, 16 - y + 0.2, 0.22), dark); s.position.set(Math.cos(a) * (r + 0.25), (16 - y) / 2, Math.sin(a) * (r + 0.25)); g.add(s); }
+  const rotor = new THREE.Group(); g.add(rotor);
+  rotor.add(new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.2, 0.9, 16), black));
+  for (let k = 0; k < 5; k++) { const b = new THREE.Mesh(new THREE.BoxGeometry(r - 0.9, 0.08, 1.1), steel); b.position.x = (r + 0.9) / 2; b.rotation.x = 0.35; const arm = new THREE.Group(); arm.rotation.y = (k / 5) * Math.PI * 2; arm.add(b); rotor.add(arm); }
+  const tip = new THREE.Mesh(new THREE.TorusGeometry(r - 0.1, 0.05, 6, 40), M.amber); tip.rotation.x = Math.PI / 2; tip.position.y = -0.3; g.add(tip);
+  // solid: a disc you can stand on once it has stopped
+  const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(X, y, Z)); world.createCollider(RAPIER.ColliderDesc.cylinder(0.3, r).setCollisionGroups(GROUPS.env), body);
+  // the breaker: a red box on the wall, breakable like a partition
+  const b = lvDry(brk[0], brk[1], brk[2], brk[3], brk[4], 0.9, M.red);
+  C7.fans.push({ X, Z, y, r, g, rotor, spin: 1, on: true, brk: b, hurtT: 0, tip });
+}
+function c7FanStep(dt) {
+  if (!C7.fans.length || !player) return; const pp = lvP();
+  for (const F of C7.fans) {
+    if (F.on && F.brk && F.brk.broken) {
+      F.on = false; sfx.servo?.(); noise(1.6, "lowpass", 300, 0.4, 0.5); emitWorldSparks(new THREE.Vector3(F.X, F.y, F.Z), new THREE.Vector3(0, -1, 0), 50, 0, 10);
+      F.tip.material = M.rackLed; log("Fan breaker blown. The rotor is spinning down.", "tip"); ev("fanStop", {});
+    }
+    F.spin = F.on ? Math.min(1, F.spin + dt) : Math.max(0, F.spin - dt * 0.3);
+    F.rotor.rotation.y += dt * 13 * F.spin;
+    if (F.spin < 0.2) continue;
+    // you: cut and thrown clear
+    const dx = pp.x - F.X, dz = pp.z - F.Z, d = Math.hypot(dx, dz);
+    if ((F.hurtT -= dt) <= 0 && d < F.r + 0.3 && pp.y > F.y - 2.2 && pp.y < F.y + 1.4 && !player.dead) {
+      F.hurtT = 0.5; damagePlayer(Math.round(14 * F.spin), "fan"); shake = Math.max(shake, 0.5); sfx.hurt?.();
+      emitWorldSparks(pp.clone().setY(F.y - 0.3), new THREE.Vector3(0, -1, 0), 30, 0, 9);
+      const k = 1 / Math.max(0.5, d); player.body.setLinvel({ x: dx * k * 11, y: -7, z: dz * k * 11 }, true);
+    }
+    // bodies and anyone thrown up into it: shredded
+    for (const e of enemies) {
+      if (e.dead || e.T.boss || e.T.part || e.T.fixed) continue; const t = e.body.translation();
+      if (Math.hypot(t.x - F.X, t.z - F.Z) < F.r && t.y > F.y - 2.4 && t.y < F.y + 1) { const at = new THREE.Vector3(t.x, t.y, t.z); killEnemy(e, at, new THREE.Vector3(0, -1, 0), 10); ev("fanKill", {}); }
+    }
+    for (const rd of ragdolls) {
+      if (rd.c7shred || !rd.torso) continue; const t = rd.torso.translation();
+      if (Math.hypot(t.x - F.X, t.z - F.Z) < F.r + 0.2 && t.y > F.y - 1.6 && t.y < F.y + 1) c7Shred(rd, F, t);
+    }
+  }
+}
+function c7Shred(rd, F, t) {
+  rd.c7shred = true; const at = new THREE.Vector3(t.x, t.y, t.z); const out = new THREE.Vector3(t.x - F.X, 0, t.z - F.Z); if (out.lengthSq() < 1e-4) out.set(1, 0, 0); out.normalize();
+  // the blade's tangent throws the parts out sideways and down
+  const tan = new THREE.Vector3(-out.z, -0.6, out.x).normalize();
+  try { goreKill(rd, at, tan); goreBurst(rd, at, out, 1); } catch {}
+  emitWorldSparks(at, tan, 60, 2, 14); emitWorldSparks(at, new THREE.Vector3(0, -1, 0), 30, 0, 10);
+  noise(0.5, "bandpass", 900, 0.6, 1.2, 400); tone("sawtooth", 140, 50, 0.4, 0.08); shake = Math.max(shake, 0.35 * Math.max(0.2, 1 - lvP().distanceTo(at) / 25));
+  try { const m = rd.torso.mass(); rd.torso.applyImpulse({ x: tan.x * m * 14, y: -m * 6, z: tan.z * m * 14 }, true); } catch {}
+  ev("fanShred", {});
+}
+// the server aisle's halon panel: break it and gas floods the aisle: everyone, you too, slows for 3 s; enemies stagger
+function c7HalonStep() {
+  const H = C7.halon; if (!H || H.done || !H.w.broken) return; H.done = true;
+  const c = new THREE.Vector3(LVX(H.x), 2, LVZ(H.z));
+  for (let i = 0; i < 6; i++) worldSmoke(c.clone().add(new THREE.Vector3((Math.random() - 0.5) * 20, Math.random() * 2, (Math.random() - 0.5) * 8)), 4, 3, 0xe8eef8, 2.2, 0.55);
+  noise(2.5, "highpass", 2400, 0.4, 0.4); alarm(1.2);
+  for (const e of enemies) if (!e.dead && enemyPos(e).distanceTo(c) < 30) e.stun = Math.max(e.stun || 0, 1.6);
+  C7.halonT = 3; // the world slows through C0's clock (TIME), you with it: halon is the one slow-down that also drags the player
+  log("Halon dump. Everything is moving through syrup.", "tip"); ev("halon", {});
+}
+// decon fog: a bank of big soft sprites that thicken for 8 s every 30 s while the clean room is Live (built with the floor, so
+// nothing compiles mid-fight); the visors still read through it
+function c7FogBuild(x1, z1, x2, z2, y) {
+  const list = []; const rnd = mulberry(77);
+  for (let i = 0; i < 18; i++) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: puffTex, color: 0xeef4ff, transparent: true, depthWrite: false, opacity: 0, fog: true }));
+    const hx = x1 + 2 + rnd() * (x2 - x1 - 4), hz = z1 + 2 + rnd() * (z2 - z1 - 4), hy = y + 0.8 + rnd() * 3.2;
+    s.position.set(LVX(hx), hy, LVZ(hz)); s.scale.setScalar(9 + rnd() * 6); s.material.rotation = rnd() * 6.3; levelGroup.add(s);
+    list.push({ s, home: s.position.clone(), ph: rnd() * 6.3 });
+  }
+  C7.fog = { list, k: 0, want: 0, t: 0 };
+}
+function c7FogStep(dt, on) {
+  const F = C7.fog; if (!F) return;
+  F.k += Math.sign((on ? 1 : 0) - F.k) * Math.min(Math.abs((on ? 1 : 0) - F.k), dt * (on ? 0.9 : 0.5));
+  F.t += dt;
+  for (const p of F.list) { p.s.material.opacity = F.k * 0.62; p.s.position.set(p.home.x + Math.sin(F.t * 0.3 + p.ph) * 1.5, p.home.y + Math.sin(F.t * 0.21 + p.ph * 2) * 0.4, p.home.z + Math.cos(F.t * 0.25 + p.ph) * 1.5); }
+}
+// the Patch tech stand-in (until the enemy brain's Patch tech exists): while it lives, a body that wasn't finished gets back up
+// once, 5 s later, as a fresh enemy of the same kind. Finish them.
+function c7PatchStep(R, dt) {
+  const P = R.c7patch; if (!P || P.dead) return;
+  R.c7rev ||= new Map();
+  for (const e of R.cast || []) {
+    if (e === P || !e.dead || e.c7revived || e.T.civ || R.c7rev.has(e)) continue;
+    const fin = !!e.rmFin;
+    if (fin) { e.c7revived = true; continue; }
+    R.c7rev.set(e, { t: 5, at: enemyPos(e) });
+    if (!R.c7said) { R.c7said = true; lvSayLine("ARBITER: The tech is patching them back together. Finish what you drop, or kill the tech."); }
+  }
+  for (const [e, q] of R.c7rev) {
+    if (q.done) continue; q.t -= dt;
+    // a cyan beam from the tech to the body while it works
+    if (q.t <= 0) {
+      q.done = true; e.c7revived = true;
+      const by = R.def.box.y || 0; let n = null;
+      if (typeof roomSpawn === "function") n = roomSpawn(R, { t: e.type, at: [q.at.x + LV.ox, by, q.at.z + LV.oz] }, true);
+      if (!n) { spawnEnemy(e.type, q.at.x, by, q.at.z); n = enemies[enemies.length - 1]; n.alert = true; n.cool = 1; if (by > 0.5) n.zone = lvZoneAt(q.at.x, q.at.z, by); R.cast.push(n); updateCount?.(); }
+      n.c7revived = true;
+      emitWorldSparks(q.at.clone().setY((R.def.box.y || 0) + 1), new THREE.Vector3(0, 1, 0), 40, 1, 7); sfx.servo?.(); ev("patchRevive", {});
+    }
+  }
+}
+
+// ================= FLOOR 04 · NIGHT SHIFT (128 x 88 m, two levels) =================
+// Lobby (breath) > Cubicle Maze (intro, lights out) > crawl (breath) > Server Aisle (test, Silence) > Vending Alcove (breath)
+// > Executive Kitchen (twist) > service stair > Trading Pit (arena, Silence) > Clean Room (twist, Patch tech) > exec lift
+FLOORS[4] = {
+  name: "Night Shift", sub: "Two levels of open-plan office, still occupied", x0: 4, x1: 116, z0: 4, z1: 92, city: 1,
+  arrive: [8, 44, 0, "e"], exit: [97.5, 88, 7, "w"],
+  objective: "Cross the night shift to the exec lift",
+  lines: ["ARBITER: Night shift. The people at the desks are not your concern. Neither are the witnesses they make.", "Tip: each room seals behind you and opens ahead when it's clear. Look before you go in."],
+  build() {
+    const carpet = LV_FLOORMAT.carpet(), stone = LV_FLOORMAT.stone(), dstone = LV_FLOORMAT.darkstone(), panel = LV_FLOORMAT.panel(), dark = LV_FLOORMAT.panelDark(), conc = LV_FLOORMAT.concrete(), steel = LV_FLOORMAT.steel();
+    C7.fans.length = 0; C7.lines.length = 0; C7.fog = null; C7.halon = null; C7.gen++;
+    LV.darks.push({ x1: LVX(20), x2: LVX(60), z1: LVZ(48), z2: LVZ(92) });
+    // ---- floors
+    lvSlab(4, 38, 20, 60, 0, stone, 1); lvSlab(20, 48, 60, 92, 0, carpet, 1); lvSlab(20, 24, 52, 48, 0, carpet, 1); lvSlab(52, 24, 58, 48, 0, conc, 1);
+    lvSlab(20, 4, 80, 24, 0, dstone, 1); lvSlab(80, 4, 92, 24, 0, stone, 1); lvSlab(92, 4, 116, 20, 0, stone, 1); lvSlab(100, 20, 106, 44, 0, conc, 1);
+    lvSlab(60, 24, 100, 36, 0, dstone, 1);
+    // the trading pit: five tiers of desks rising from the screen to the north mezzanine (solid, so nothing walks under them)
+    for (let i = 0; i < 5; i++) lvSlab(65, 36 + i * 6, 95, 42 + i * 6, 1.4 * (i + 1), carpet, 1.4 * (i + 1));
+    lvSlab(60, 36, 65, 66, 7, dark, 7); lvSlab(95, 36, 100, 66, 7, dark, 7); lvSlab(60, 66, 100, 72, 7, carpet, 7);
+    lvSlab(60, 24, 100, 30, 7, steel, 0.4); lvSlab(60, 30, 65, 36, 7, steel, 0.4); lvSlab(95, 30, 100, 36, 7, steel, 0.4);
+    lvSlab(100, 54, 106, 64, 7, conc, 0.4); // the pit's reinforcement closet, behind the east wall at +7
+    lvRail(65, 30, 95, 30, 7); lvRail(65, 30, 65, 36, 7); lvRail(95, 30, 95, 36, 7);
+    for (let i = 0; i < 4; i++) { lvRail(65, 42 + i * 6, 65, 42 + i * 6 + 0.01, 7); }
+    // the clean room at +7, its observation deck at +10.5
+    lvSlab(60, 72, 100, 92, 7, stone, 0.5); lvSlab(64, 87, 96, 92, 10.5, steel, 0.4); lvRail(64, 87, 96, 87, 10.5); lvRail(64, 87, 64, 92, 10.5);
+    // ---- ceilings
+    lvCeil(4, 38, 20, 60, 7); lvCeil(20, 48, 60, 92, 6.5, true, 7); lvCeil(20, 24, 52, 48, 4, true, 10); lvCeil(52, 24, 58, 48, 3.2, true, 8);
+    lvCeil(20, 4, 80, 24, 6.5, true, 7); lvCeil(80, 4, 92, 24, 3.6, true, 6); lvCeil(92, 4, 116, 20, 4.5, true, 6); lvCeil(100, 20, 106, 36, 3.6, true, 8); lvCeil(100, 36, 106, 44, 14, false);
+    lvCeil(60, 24, 100, 92, 14, true, 8); lvCeil(100, 54, 106, 64, 10.5, false);
+    // ---- outer shell
+    lvWall(4, 38, 4, 60, 0, 7); lvWall(4, 38, 20, 38, 0, 7); lvWall(4, 60, 20, 60, 0, 7); lvWall(20, 4, 20, 38, 0, 7); lvWall(20, 60, 20, 92, 0, 7); lvWall(20, 92, 60, 92, 0, 7);
+    lvWall(20, 4, 80, 4, 0, 7, dark); lvGlass(80, 4, 116, 4, 0, 7, { ext: true }); lvGlass(116, 4, 116, 20, 0, 7, { ext: true });
+    lvWall(60, 92, 100, 92, 0, 7, dark); lvGlass(60, 92, 100, 92, 7, 14, { ext: true });
+    // ---- R1 cubicle maze <> lobby: main door, and a vent high in the wall over a crate stack (the showoff line onto the cable)
+    c7Wall(20, 38, 20, 60, 0, 7, panel, [[50, 56, 4.5], [57, 59.6, 4.4, 2.4]]); c7Door("entry", "f04_cubicles", 20, 50, 20, 56, 0, 4.5);
+    lvCrate(18.2, 58.3, 0, 1.2); lvCrate(18.2, 58.3, 1.2, 1.2); lvSlab(20, 56, 24, 60, 2.4, steel, 0.25);
+    // cubicle pods: 1.5 m screens and a desk in each, lanes between them
+    for (let x = 24; x < 58; x += 8) for (let z = 52; z < 86; z += 9) {
+      if (x === 24 && z === 52) continue;
+      lvDry(x, z, x + 6, z, 0, 1.5, M.drywall); lvDry(x, z, x, z + 6, 0, 1.5, M.drywall);
+      lvDesk(x + 2.2, z + 2, 0, 0, { w: 1.6, chair: (x + z) % 3 !== 0 });
+    }
+    c7Cable([22, 58, 5.9], [58, 88, 5.9]); // the golden line: off the vent ledge, over the pods, to the far corner
+    // R1 > crawl: the seal; the rest of the south wall closes the archive
+    c7Wall(20, 48, 60, 48, 0, 7, panel, [[52, 58, 4.5]]); c7Door("seal", "f04_cubicles", 52, 48, 58, 48, 0, 3.2);
+    lvWall(60, 48, 60, 92, 0, 7, dark);
+    // ---- the crawl (breath) and the records archive beside it (a dead end with a secret, behind a breakable panel)
+    c7Wall(52, 24, 52, 48, 0, 4, panel, [[34, 37, 2.4]]); lvDry(52, 34, 52, 37, 0, 2.4); lvWall(58, 24, 58, 48, 0, 7, dark); lvWall(60, 24, 60, 48, 0, 14, dark);
+    for (const z of [28, 33, 38, 43]) lvRack(36, z, 0, 22, 1.0, 3.0);
+    lvFrag(23, 26, 0, "OKAFOR-REYES (unsent): The night desk keeps paper copies of everything. Paper can't be patched. Neither can I, now.");
+    stimBox(LVX(49), LVZ(45.5), 0, 0);
+    for (let z = 26; z < 48; z += 4) lvBox(LVX(55), 2.9, LVZ(z), 5.6, 0.12, 0.6, steel, { noCollide: true, shadow: false });
+    // ---- R2 server aisle: three rack rows, a catwalk on the north side, a halon panel, the relay on the far catwalk
+    c7Wall(20, 24, 58, 24, 0, 7, panel, [[26, 30, 2.6], [34, 38, 6.2, 4.4], [52, 58, 3.2]]); lvDry(26, 24, 30, 24, 0, 2.6);
+    lvSlab(34, 24, 38, 26, 4.2, steel, 0.3, { walk: false }); for (const z of [26, 31, 36, 41]) lvCrate(37, z - 1.6, 0, 1.4); lvCrate(37, 22.4 + 3, 1.4, 1.4);
+    lvWall(58, 24, 100, 24, 0, 7, dark);
+    c7Door("entry", "f04_servers", 52, 24, 58, 24, 0, 3.2);
+    for (const z of [8.5, 13.5, 18.5]) for (const x0 of [24, 36, 48, 60, 70]) lvRack(x0 + (x0 === 70 ? 3.5 : 4.5), z, 0, x0 === 70 ? 7 : 9, 1.2, 3.2);
+    lvSlab(30, 21, 80, 24, 4.2, steel, 0.3); lvRail(30, 21, 80, 21, 4.2);
+    lvPad(27.5, 22.5, 0, 5.4, 1.2); lvPad(76.5, 6, 0, 5.2, 1.1);
+    c7Panel(25, 13.5 - 0.6, 78, 13.5 - 0.6, 0.6, 3.0, [0, -1]); c7Panel(25, 13.5 + 0.6, 78, 13.5 + 0.6, 0.6, 3.0, [0, 1]);
+    C7.halon = { w: lvDry(44, 4.2, 46, 4.2, 1.2, 0.9, M.red), x: 50, z: 14, done: false };
+    // R2 > alcove: seal; the security closet north of the alcove holds the alarm reinforcements
+    c7Wall(80, 4, 80, 24, 0, 7, panel, [[8, 14, 4.5], [18, 22, 3.4]]); c7Door("seal", "f04_servers", 80, 8, 80, 14, 0, 4.5); c7Door("reinf", "f04_servers", 80, 18, 80, 22, 0, 3.4);
+    lvWall(80, 16, 92, 16, 0, 7); lvWall(92, 16, 92, 24, 0, 7); lvWall(80, 24, 92, 24, 0, 7);
+    // ---- the vending alcove (breath): a mirror, a machine, a stim
+    lvBench(86, 14.6, 0, 6, 1.2, 0.95); stimBox(LVX(90.6), LVZ(6), 0, 0); propMirror(LVX(86), 1.75, LVZ(15.82), 0, -1, { w: 1.2, h: 1.0 });
+    // ---- R3 executive kitchen: counters on three sides, an island, glass on two sides (bodies can go out to the cars)
+    c7Wall(92, 4, 92, 16, 0, 7, panel, [[8, 14, 3.4]]); c7Door("entry", "f04_kitchen", 92, 8, 92, 14, 0, 3.4);
+    c7Wall(92, 20, 116, 20, 0, 7, panel, [[100, 106, 3.4]]); c7Door("seal", "f04_kitchen", 100, 20, 106, 20, 0, 3.4);
+    lvBench(104, 18.6, 0, 18, 1.0, 0.95); lvBench(114.6, 12, 0, 1.0, 10, 0.95); lvBench(103, 11, 0, 7, 2.2, 0.95);
+    for (const [x, z] of [[96, 18.3], [112, 18.3]]) lvRack(x, z, 0, 2.4, 1.2, 2.2);
+    // ---- the service stair: a corridor north to the pit's door, and an updraft shaft to the east mezzanine
+    lvWall(106, 20, 106, 44, 0, 14, dark); lvWall(100, 44, 106, 44, 0, 14, dark);
+    c7Wall(100, 24, 100, 72, 0, 14, dark, [[30, 36, 4.5], [38, 44, 10.4, 7], [55, 63, 10.5, 7]]);
+    c7Door("entry", "f04_pit", 100, 30, 100, 36, 0, 4.5); c7Door("reinf", "f04_pit", 100, 56, 100, 62, 7, 3.5);
+    lvWall(106, 54, 106, 64, 7, 10.5, dark); lvWall(100, 54, 106, 54, 7, 10.5, dark); lvWall(100, 64, 106, 64, 7, 10.5, dark);
+    lvPad(103, 41, 0, 9.4, 1.4); stimBox(LVX(104.6), LVZ(24), 0, 0);
+    // ---- R4 trading pit: the video wall, desks on every tier, the screen truss with anchors, wall-run panels down both sides
+    lvTradeWall(80, 25.5, 0, 36);
+    for (let i = 0; i < 4; i++) for (const x of [69, 75.5, 84.5, 91]) lvDesk(x, 38.8 + i * 6, 1.4 * (i + 1), Math.PI, { w: 2.2, d: 0.9 });
+    for (const x of [70, 90]) lvDesk(x, 33, 0, Math.PI, { w: 3, d: 1.1, lamp: true });
+    lvBox(LVX(80), 11.4, LVZ(27.5), 36, 0.35, 0.35, steel, { shadow: false }); for (const x of [68, 80, 92]) c7Anchor(x, 27.5, 10.6, 11.3);
+    for (const [x, z] of [[72, 50], [88, 50], [80, 62]]) c7Anchor(x, z, 12.4, 14);
+    c7Panel(60, 31, 60, 65, 7.6, 10.8, [1, 0]); c7Panel(100, 31, 100, 52, 7.6, 10.8, [-1, 0]);
+    c7Sling(80, 24.4, 9.5);
+    // R4 > clean room: the seal at the top of the pit, glass either side
+    lvGlass(60, 72, 76, 72, 7, 10.5); lvGlass(84, 72, 100, 72, 7, 10.5); lvWall(60, 72, 100, 72, 10.5, 14, dark); c7Door("seal", "f04_pit", 76, 72, 84, 72, 7, 3.5);
+    lvWall(60, 72, 100, 72, 0, 7, dark); lvWall(100, 72, 100, 92, 0, 14, panel); lvWall(60, 72, 60, 92, 7, 14, panel);
+    // ---- R5 clean room: white benches, sample racks, a pad up to the observation deck, the decon vents
+    for (const [x, z] of [[68, 78], [80, 78], [92, 78], [74, 84], [86, 84]]) lvBench(x, z, 7, 6, 1.6, 0.95);
+    for (const x of [64, 96]) lvRack(x, 75, 7, 1.2, 4, 2.6);
+    lvPad(62, 84.5, 7, 12.4, 1.1);
+    for (const x of [66, 80, 94]) lvBox(LVX(x), 13.7, LVZ(82), 3, 0.3, 1.2, LV_FLOORMAT.black(), { noCollide: true, shadow: false });
+    c7FogBuild(60, 72, 100, 92, 7);
+    // ---- checkpoints at each room's door
+    stimBox(LVX(8), LVZ(56), 0, 0);
+    c7Rooms(4);
+  },
+  tick(t) { c7Tick(t); },
+};
+// the rooms (doc 12.1, C1's rooms-api): blueprint metres, box x/z = min corner
+function c7DefsF04() {
+  const D = {};
+  D.f04_cubicles = {
+    floor: 4, name: "Cubicle Maze", kind: "intro", box: { x: 20, z: 48, w: 40, d: 44, h: 6.5, y: 0 }, cp: [16, 50, 0, -Math.PI / 2],
+    entries: [{ id: "main", at: [20, 53], door: true }, { id: "vent", at: [20, 58.3, 2.4] }, { id: "show", at: [22, 58, 2.4], show: true }],
+    clear: { type: "purge" },
+    cast: [
+      { t: "worker", at: [34.2, 63], yaw: 0, start: "desk" }, { t: "worker", at: [42.2, 72], yaw: 0, start: "desk" }, { t: "worker", at: [50.2, 81], yaw: 0, start: "desk" }, { t: "worker", at: [26.2, 81], yaw: 0, start: "desk" },
+      { t: "gunman", at: [30, 69], yaw: Math.PI, start: "patrol" }, { t: "gunman", at: [46, 60], yaw: Math.PI / 2, start: "patrol" }, { t: "gunman", at: [54, 86], yaw: -Math.PI / 2, start: "guard" },
+      { t: "brawler", at: [38, 88], yaw: Math.PI, start: "idle" },
+    ],
+    slots: [{ allow: ["gunman", "shield"], at: [46, 60] }, { allow: ["brawler", "gunman"], at: [38, 88] }],
+    lines: { cables: [[[22, 58, 5.9], [58, 88, 5.9]]], flip: [], anchors: [] },
+    toys: [{ k: "desk", at: [26.2, 63] }, { k: "screens", at: [40, 70] }],
+    twist: null,
+    challenges: [{ k: "time", par: 34 }, { k: "allFinish" }, { k: "showoff" }],
+    next: "f04_servers",
+  };
+  D.f04_servers = {
+    floor: 4, name: "Server Aisle", kind: "test", box: { x: 20, z: 4, w: 60, d: 20, h: 6.5, y: 0 }, cp: [55, 40, 0, 0],
+    entries: [{ id: "main", at: [55, 24], door: true }, { id: "archive", at: [28, 24] }, { id: "show", at: [36, 24, 4.4], show: true }],
+    clear: { type: "silence", delay: 6, door: { at: [80, 20], axis: "z", w: 4, h: 3.4 }, reinf: [{ t: "gunman", at: [84, 20] }, { t: "brawler", at: [88, 20] }] },
+    cast: [
+      { t: "spotter", at: [77, 4.2, 22.5], yaw: Math.PI / 2, start: "guard" },
+      { t: "bot", at: [40, 11], yaw: -Math.PI / 2, start: "patrol" }, { t: "bot", at: [66, 16], yaw: -Math.PI / 2, start: "patrol" },
+      { t: "gunman", at: [30, 6], yaw: -Math.PI / 2, start: "idle" }, { t: "gunman", at: [58, 6], yaw: Math.PI / 2, start: "patrol" }, { t: "gunman", at: [72, 11], yaw: Math.PI / 2, start: "guard" },
+    ],
+    slots: [{ allow: ["bot", "shield"], at: [40, 11] }, { allow: ["gunman", "bot"], at: [72, 11] }],
+    lines: { wallrun: [[[25, 12.9], [78, 12.9]], [[25, 14.1], [78, 14.1]]], flip: [[27.5, 22.5], [76.5, 6]], anchors: [] },
+    toys: [{ k: "racks", at: [50, 13.5] }, { k: "halon", at: [45, 4.2] }],
+    challenges: [{ k: "silence" }, { k: "time", par: 30 }, { k: "noDamage" }],
+    next: "f04_kitchen",
+  };
+  D.f04_kitchen = {
+    floor: 4, name: "Executive Kitchen", kind: "twist", box: { x: 92, z: 4, w: 24, d: 16, h: 4.5, y: 0 }, cp: [84, 10, 0, -Math.PI / 2],
+    entries: [{ id: "main", at: [92, 11], door: true }],
+    clear: { type: "purge" },
+    cast: [
+      { t: "brawler", at: [100, 8], yaw: Math.PI / 2, start: "idle" }, { t: "brawler", at: [110, 15], yaw: Math.PI, start: "idle" }, { t: "brawler", at: [108, 7], yaw: -Math.PI / 2, start: "patrol" },
+      { t: "shield", at: [104, 15.5], yaw: Math.PI / 2, start: "guard" },
+    ],
+    slots: [{ allow: ["brawler", "shield"], at: [104, 15.5] }],
+    lines: { anchors: [], sling: [] },
+    toys: [{ k: "coffee", at: [104, 18.6] }, { k: "window", at: [116, 12] }],
+    twist: { at: "half", do: (R) => c7Blackout(R) },
+    challenges: [{ k: "oneWeapon" }, { k: "allFinish" }, { k: "time", par: 20 }],
+    next: "f04_pit",
+  };
+  D.f04_pit = {
+    floor: 4, name: "Trading Pit", kind: "arena", box: { x: 60, z: 24, w: 40, d: 48, h: 14, y: 0 }, cp: [103, 28, 0, Math.PI / 2],
+    entries: [{ id: "main", at: [100, 33], door: true }, { id: "stair", at: [100, 41, 7] }, { id: "show", at: [80, 27.5, 10.6], show: true }],
+    clear: { type: "silence", delay: 6, door: { at: [100, 59, 7], axis: "z", w: 6, h: 3.5 }, reinf: [{ t: "gunman", at: [103, 57, 7] }, { t: "gunman", at: [103, 61, 7] }, { t: "shield", at: [104, 59, 7] }] },
+    cast: [
+      { t: "spotter", at: [70, 7, 27], yaw: 0, start: "guard" }, { t: "spotter", at: [90, 7, 27], yaw: 0, start: "guard" },
+      { t: "gunman", at: [72, 1.4, 39.5], yaw: Math.PI, start: "desk" }, { t: "gunman", at: [88, 2.8, 45.5], yaw: Math.PI, start: "desk" }, { t: "gunman", at: [78, 4.2, 51.5], yaw: Math.PI, start: "desk" },
+      { t: "gunman", at: [92, 5.6, 57.5], yaw: Math.PI, start: "desk" }, { t: "gunman", at: [68, 5.6, 57.5], yaw: Math.PI, start: "patrol" }, { t: "gunman", at: [82, 7, 64], yaw: Math.PI, start: "guard" },
+      { t: "shield", at: [80, 30], yaw: 0, start: "guard" },
+    ],
+    slots: [{ allow: ["gunman", "bot"], at: [78, 4.2, 51.5] }, { allow: ["shield", "brawler"], at: [80, 30] }],
+    lines: { anchors: [[68, 27.5, 10.6], [80, 27.5, 10.6], [92, 27.5, 10.6], [72, 50, 12.4], [88, 50, 12.4], [80, 62, 12.4]], wallrun: [[[60, 31], [60, 65]], [[100, 31], [100, 52]]], sling: [[80, 24.4, 9.5]], flip: [[103, 41]] },
+    toys: [{ k: "screenWall", at: [80, 25.5] }, { k: "desks", at: [80, 48] }],
+    challenges: [{ k: "silence" }, { k: "noFloor" }, { k: "time", par: 45 }],
+    next: "f04_clean",
+  };
+  D.f04_clean = {
+    floor: 4, name: "Clean Room", kind: "twist", box: { x: 60, z: 72, w: 40, d: 20, h: 7, y: 7 }, cp: [80, 69, 7, Math.PI],
+    entries: [{ id: "main", at: [80, 72, 7], door: true }],
+    clear: { type: "purge" },
+    cast: [
+      { t: "gunman", at: [80, 10.5, 89.5], yaw: Math.PI, start: "guard", patch: true },
+      { t: "bot", at: [68, 7, 81], yaw: Math.PI, start: "patrol" }, { t: "bot", at: [92, 7, 81], yaw: Math.PI, start: "patrol" }, { t: "bot", at: [74, 7, 88], yaw: Math.PI, start: "idle" }, { t: "bot", at: [88, 7, 75.5], yaw: Math.PI, start: "idle" },
+    ],
+    slots: [{ allow: ["bot", "gunman"], at: [74, 7, 88] }],
+    lines: { flip: [[62, 84.5, 7]] },
+    toys: [{ k: "decon", at: [80, 82, 7] }],
+    tick: (R, dt) => { c7FogStep(dt, R.state === "live" && (R.t % 30) > 21 && (R.t % 30) < 29); c7PatchStep(R, dt); },
+    onLive: (R) => { c7PatchFind(R); lvSayLine("WARDEN: Decontamination cycle in thirty seconds. Stay for it."); },
+    onClear: () => { C7.fog && (C7.fog.k = Math.min(C7.fog.k, 0.6)); },
+    challenges: [{ k: "allFinish" }, { k: "noDamage" }, { k: "time", par: 40 }],
+    next: null,
+  };
+  return D;
+}
+function c7PatchFind(R) {
+  const spot = R.def.cast.find((c) => c.patch); if (!spot) return; const [x, y, z] = spot.at.length === 3 ? spot.at : [spot.at[0], 0, spot.at[1]];
+  let best = null, bd = 1e9; for (const e of R.cast || []) { if (e.dead) continue; const p = enemyPos(e); const d = Math.hypot(p.x - LVX(x), p.z - LVZ(z)) + Math.abs(e.floorY - y); if (d < bd) { bd = d; best = e; } }
+  if (best && bd < 4) { R.c7patch = best; best.c7patch = true; }
+}
+// kitchen twist: the lights die at half the cast, the panels go red, WARDEN gloats
+function c7Blackout(R) {
+  const b = R.def.box; const X1 = LVX(b.x), X2 = LVX(b.x + b.w), Z1 = LVZ(b.z), Z2 = LVZ(b.z + b.d);
+  for (const f of LV.fixtures) if (f.x > X1 && f.x < X2 && f.z > Z1 && f.z < Z2) f.kind = "dark";
+  LV.darks.push({ x1: X1, x2: X2, z1: Z1, z2: Z2 }); alarm(0.6); sfx.servo?.();
+  lvSayLine("WARDEN: Kitchen staff, lights out. Work by feel.");
+}
+
+// ================= FLOOR 05 · LOCKDOWN (112 x 112 m) =================
+// Arrival arm (breath) > Turbine Hall (intro, Rams) > three Timed Bulkheads (lockdown runs, 20/15/11 s) > Sliding Racks (test)
+// > Freight Lift (hold the lift, up to the core gantry) > Bulwark (boss, the core)
+FLOORS[5] = {
+  name: "Lockdown", sub: "WARDEN's floor · four halls around the core", x0: 4, x1: 116, z0: 4, z1: 116, city: 1,
+  arrive: [60, 109.5, 0, "n"], exit: [60, 48.5, 0, "s"],
+  objective: "Get through the halls to the core",
+  lines: ["WARDEN: Forty years I have held this tower. Come and see how.", "Tip: the bulkheads start closing the moment you step in. Don't fight them, outrun them."],
+  build() {
+    const conc = LV_FLOORMAT.concrete(), dstone = LV_FLOORMAT.darkstone(), dark = LV_FLOORMAT.panelDark(), panel = LV_FLOORMAT.panel(), steel = LV_FLOORMAT.steel();
+    C7.fans.length = 0; C7.lines.length = 0; C7.fog = null; C7.halon = null; C7.gen++;
+    // floor with the cooling shaft cut out of the middle
+    lvSlab(4, 4, 116, 55, 0, conc, 1); lvSlab(4, 65, 116, 116, 0, conc, 1); lvSlab(4, 55, 55, 65, 0, conc, 1); lvSlab(65, 55, 116, 65, 0, conc, 1);
+    lvSlab(45, 45, 75, 55, 0.01, dstone, 0.2, { walk: false }); lvSlab(45, 65, 75, 75, 0.01, dstone, 0.2, { walk: false }); lvSlab(45, 55, 55, 65, 0.01, dstone, 0.2, { walk: false }); lvSlab(65, 55, 75, 65, 0.01, dstone, 0.2, { walk: false });
+    lvEdgeRails(55, 55, 65, 65, 0); lvShaft(60, 60, 5);
+    // roofs: arms at 10, the turbine hall 16, the lift arm 20, the core 20, the sealed gallery 14
+    lvCeil(4, 4, 44, 44, 10, true, 7); lvCeil(76, 4, 116, 44, 10, true, 7); lvCeil(44, 4, 76, 44, 10, true, 7); lvCeil(44, 76, 76, 116, 10, true, 7);
+    lvCeil(4, 44, 44, 76, 10, true, 7); lvCeil(76, 44, 116, 76, 20, true, 8); lvCeil(4, 76, 44, 116, 16, true, 8); lvCeil(76, 76, 116, 116, 14, true, 9); lvCeil(44, 44, 76, 76, 20, true, 8);
+    lvWalls([[4, 4], [116, 4], [116, 116], [4, 116], [4, 4]], 0, 20, dark);
+    // the core square is closed at every level now; the only way in is the gantry from the freight lift at +16
+    lvWall(44, 44, 76, 44, 0, 20, dark); lvWall(44, 76, 76, 76, 0, 20, dark); lvWall(44, 44, 44, 76, 0, 20, dark); c7Wall(76, 44, 76, 76, 0, 20, dark, [[57, 63, 19.5, 16]]);
+    lvCoreRing(60, 60, 15, 20);
+    for (const [a, b, c, d] of [[57, 45, 63, 45], [57, 75, 63, 75], [45, 57, 45, 63], [75, 57, 75, 63]]) if (a !== 75) lvShutter(a, b, c, d, 0, 6, "core", false, { speed: 0.8 });
+    for (const [x, z] of [[46.5, 46.5], [73.5, 46.5], [46.5, 73.5], [73.5, 73.5]]) { lvPillar(x, z, 2, 2, 0, 20, dark); c7Anchor(x + (x < 60 ? 1.6 : -1.6), z + (z < 60 ? 1.6 : -1.6), 14); }
+    // hall and arm partitions; doorways get a seal or an entry, the sealed gallery's two doorways are walled up
+    const lint = (x1, z1, x2, z2) => lvWall(x1, z1, x2, z2, 4.5, 10, panel);
+    c7Wall(44, 4, 44, 44, 0, 10, panel, [[18, 26, 4.5]]); c7Wall(76, 4, 76, 44, 0, 10, panel, [[18, 26, 4.5]]);
+    c7Wall(44, 76, 44, 116, 0, 16, panel, [[94, 102, 4.5]]); lvWall(76, 76, 76, 116, 0, 14, panel);
+    c7Wall(4, 44, 44, 44, 0, 10, panel, [[18, 26, 4.5]]); c7Wall(4, 76, 44, 76, 0, 16, panel, [[18, 26, 4.5]]);
+    c7Wall(76, 44, 116, 44, 0, 20, panel, [[94, 102, 4.5]]); c7Wall(76, 76, 116, 76, 0, 20, panel, [[96, 100, 2.6]]); lvDry(96, 76, 100, 76, 0, 2.6);
+    void lint;
+    // ---- arrival arm (breath)
+    for (const [x, z] of [[50, 84], [70, 90], [52, 106]]) lvCrate(x, z, 0, 2); stimBox(LVX(72), LVZ(112), 0, 0);
+    c7Door("entry", "f05_turbine", 44, 94, 44, 102, 0, 4.5);
+    // ---- R1 turbine hall: two ceiling fans over updraft grates, a cable across the hall, pillars, the breakers on the walls
+    c7Fan(16, 90, 14.2, 5.2, [4.2, 89, 4.2, 91, 3.0]); c7Fan(32, 104, 14.2, 5.2, [43.8, 103, 43.8, 105, 3.0]);
+    for (const [x, z] of [[16, 90], [32, 104]]) { lvPad(x, z, 0, 10.6, 3.0); for (const [dx, dz] of [[-3, 0], [3, 0], [0, -3], [0, 3]]) lvBox(LVX(x + dx * 0.5), 0.03, LVZ(z + dz * 0.5), dx ? 0.1 : 5.6, 0.03, dz ? 0.1 : 5.6, LV_FLOORMAT.black(), { noCollide: true, shadow: false }); }
+    for (const [x, z] of [[36, 84], [10, 104], [26, 112]]) lvPillar(x, z, 2.2, 2.2, 0, 16, dark);
+    for (const [x, z] of [[24, 84], [8, 82], [38, 94]]) lvCrate(x, z, 0, 1.6);
+    c7Cable([6, 112, 11], [42, 79, 11]);
+    c7Panel(4, 80, 4, 100, 1.2, 5.5, [1, 0]);
+    c7Door("seal", "f05_turbine", 18, 76, 26, 76, 0, 4.5);
+    // ---- R2 the three timed bulkheads: west arm, ballistics lab, north arm
+    for (const [x, z] of [[14, 52], [30, 60], [16, 68], [36, 50]]) lvCrate(x, z, 0, 1.8);
+    lvPillar(24, 60, 2, 2, 0, 10, dark); c7Panel(4, 48, 4, 72, 1.2, 4.5, [1, 0]);
+    c7Door("seal", "f05_bh1", 18, 44, 26, 44, 0, 4.5);
+    for (const z of [14, 22, 30, 38]) lvDry(10, z, 40, z, 0, 2.6);
+    for (const z of [18, 26, 34]) lvCrate(40.6, z, 0, 1.2);
+    lvBench(7, 26, 0, 1.6, 30, 1.05); lvPedestal(7, 40, 0, "rail driver");
+    c7Door("seal", "f05_bh2", 44, 18, 44, 26, 0, 4.5);
+    lvWall(60, 4, 60, 14, 0, 1.4, panel); lvWall(60, 30, 60, 44, 0, 1.4, panel);
+    for (const [x, z] of [[52, 14], [68, 30], [52, 36], [68, 10]]) lvCrate(x, z, 0, 2.2);
+    lvDry(60, 14, 60, 30, 0, 1.4);
+    c7Door("seal", "f05_bh3", 76, 18, 76, 26, 0, 4.5);
+    // ---- R3 sliding racks: four racks on floor tracks; their long faces are wall-run panels that ride with them
+    for (const [i, z] of [[0, 12], [1, 20], [2, 28], [3, 36]]) {
+      lvSlider(90 + (i % 2) * 8, z, 14, 2, 80, 112, 0.18 + i * 0.03, i * 1.7); const S = LV.movers[LV.movers.length - 1];
+      if (typeof TRV !== "undefined" && TRV.addPanel) { try { TRV.addPanel(-7, -1.05, 7, -1.05, -0.7, 1.3, { follow: S.mesh }); TRV.addPanel(-7, 1.05, 7, 1.05, -0.7, 1.3, { follow: S.mesh }); } catch (err) { console.warn("c7 rack panel", err); } }
+      for (const s of [-1, 1]) for (const yy of [0.62, -0.62]) { const strip = new THREE.Mesh(new THREE.BoxGeometry(13.6, 0.08, 0.04), M.cyan); strip.position.set(0, yy, s * 1.03); S.mesh.add(strip); }
+      C7.lines.push({ k: "wallrun", rack: i });
+    }
+    for (const [x, z] of [[80, 6], [112, 42]]) lvCrate(x, z, 0, 1.6);
+    c7Door("seal", "f05_racks", 94, 44, 102, 44, 0, 4.5);
+    // ---- R4 freight lift: balconies at +6 and +12 along the arm's long walls, the counterweight, the gantry into the core at +16
+    lvSlab(82, 44, 110, 48.5, 6, steel, 0.35); lvRail(82, 48.5, 110, 48.5, 6); lvSlab(82, 71.5, 110, 76, 12, steel, 0.35); lvRail(82, 71.5, 110, 71.5, 12);
+    for (const x of [84, 96, 108]) { lvBox(LVX(x), 3, LVZ(48.3), 0.3, 6, 0.3, steel, { shadow: false }); lvBox(LVX(x), 6, LVZ(71.7), 0.3, 12, 0.3, steel, { shadow: false }); }
+    for (const [x, z] of [[91, 56], [101, 56], [91, 64], [101, 64]]) lvBox(LVX(x), 10, LVZ(z), 0.3, 20, 0.3, M.mullion, { shadow: false });
+    C7.cw = lvBox(LVX(112.5), 18, LVZ(60), 3, 4, 6, LV_FLOORMAT.hazard(), { shadow: true });
+    lvSlab(72, 57, 91, 63, 16, steel, 0.35); lvRail(76, 57, 91, 57, 16); lvRail(76, 63, 91, 63, 16);
+    c7Door("seal", "f05_lift", 88.6, 57, 88.6, 63, 16, 3.5);
+    c7Sling(112.5, 60, 20.6);
+    // ---- the sealed gallery (a secret behind the breakable panel in the lift arm): catwalk, pillars, a fragment, a stim
+    lvSlab(80, 80, 112, 86, 7, steel, 0.4); lvRail(80, 86, 112, 86, 7); lvRail(80, 80, 80, 86, 7); lvPad(78, 88.5, 0, 8.6);
+    for (const [x, z] of [[84, 94], [100, 100], [108, 92], [92, 108]]) lvPillar(x, z, 2.4, 2.4, 0, 14, dark);
+    lvFrag(110, 83, 7, "WARDEN (internal): Unit OKAFOR-REYES has requested a second chassis. Request denied. Request logged. Request remembered.");
+    stimBox(LVX(112), LVZ(112), 0, 0);
+    // ---- checkpoints
+    c7Rooms(5);
+  },
+  tick(t) { c7Tick(t); },
+};
+function c7DefsF05() {
+  const D = {};
+  D.f05_turbine = {
+    floor: 5, name: "Turbine Hall", kind: "intro", box: { x: 4, z: 76, w: 40, d: 40, h: 16, y: 0 }, cp: [48, 98, 0, Math.PI / 2],
+    entries: [{ id: "main", at: [44, 98], door: true }, { id: "show", at: [42, 79, 11], show: true }],
+    clear: { type: "purge" },
+    cast: [
+      { t: "brawler", at: [20, 98], yaw: Math.PI / 2, start: "guard", ram: true }, { t: "brawler", at: [30, 86], yaw: Math.PI / 2, start: "patrol", ram: true },
+      { t: "brawler", at: [12, 110], yaw: 0, start: "idle" }, { t: "brawler", at: [36, 108], yaw: Math.PI / 2, start: "patrol" }, { t: "brawler", at: [10, 84], yaw: Math.PI / 2, start: "idle" },
+    ],
+    slots: [{ allow: ["brawler", "shield"], at: [12, 110] }, { allow: ["brawler", "shield"], at: [36, 108] }],
+    lines: { cables: [[[6, 112, 11], [42, 79, 11]]], flip: [[16, 90], [32, 104]], wallrun: [[[4, 80], [4, 100]]] },
+    toys: [{ k: "fan", at: [16, 90, 14.2] }, { k: "fan", at: [32, 104, 14.2] }, { k: "breaker", at: [4.2, 90] }, { k: "breaker", at: [43.8, 104] }],
+    onPrime: (R) => c7Rams(R), onLive: () => lvSayLine("ARBITER: Rams. Don't stand in front of them. Stand over the fans and let them come to you."),
+    challenges: [{ k: "time", par: 30 }, { k: "allFinish" }, { k: "noDamage" }],
+    next: "f05_bh1",
+  };
+  D.f05_bh1 = {
+    floor: 5, name: "Bulkhead 1", kind: "lockdown", box: { x: 4, z: 44, w: 40, d: 32, h: 10, y: 0 }, cp: [22, 80, 0, 0],
+    entries: [{ id: "main", at: [22, 76] }],
+    clear: { type: "lockdown", time: 20 },
+    cast: [{ t: "turret", at: [12, 8.6, 60], yaw: Math.PI / 2, start: "guard" }, { t: "turret", at: [36, 8.6, 66], yaw: Math.PI, start: "guard" }, { t: "gunman", at: [30, 52], yaw: Math.PI, start: "guard" }],
+    lines: { wallrun: [[[4, 48], [4, 72]]] },
+    toys: [{ k: "bulkhead", at: [22, 44] }],
+    onLive: () => { alarm(0.5); lvSayLine("WARDEN: Twenty seconds."); },
+    challenges: [{ k: "time", par: 9 }, { k: "noDamage" }, { k: "noFloor" }],
+    next: "f05_bh2",
+  };
+  D.f05_bh2 = {
+    floor: 5, name: "Bulkhead 2", kind: "lockdown", box: { x: 4, z: 4, w: 40, d: 40, h: 10, y: 0 }, cp: [22, 47.5, 0, 0],
+    entries: [{ id: "main", at: [22, 44] }],
+    clear: { type: "lockdown", time: 15 },
+    cast: [{ t: "turret", at: [24, 8.6, 10], yaw: 0, start: "guard" }, { t: "gunman", at: [30, 18], yaw: 0, start: "guard" }, { t: "gunman", at: [16, 34], yaw: 0, start: "guard" }],
+    lines: {},
+    toys: [{ k: "lanes", at: [25, 26] }],
+    onLive: () => { alarm(0.5); lvSayLine("WARDEN: Fifteen."); },
+    challenges: [{ k: "time", par: 8 }, { k: "noDamage" }, { k: "oneWeapon" }],
+    next: "f05_bh3",
+  };
+  D.f05_bh3 = {
+    floor: 5, name: "Bulkhead 3", kind: "lockdown", box: { x: 44, z: 4, w: 32, d: 40, h: 10, y: 0 }, cp: [40, 22, 0, -Math.PI / 2],
+    entries: [{ id: "main", at: [44, 22] }],
+    clear: { type: "lockdown", time: 11 },
+    cast: [{ t: "turret", at: [60, 8.6, 10], yaw: 0, start: "guard" }, { t: "turret", at: [60, 8.6, 38], yaw: Math.PI, start: "guard" }, { t: "shield", at: [70, 22], yaw: -Math.PI / 2, start: "guard" }],
+    lines: {},
+    toys: [{ k: "breakable", at: [60, 22] }],
+    onLive: () => { alarm(0.5); lvSayLine("WARDEN: Eleven. Through the wall, if you must."); },
+    challenges: [{ k: "time", par: 6 }, { k: "noDamage" }, { k: "allFinish" }],
+    next: "f05_racks",
+  };
+  D.f05_racks = {
+    floor: 5, name: "Sliding Racks", kind: "test", box: { x: 76, z: 4, w: 40, d: 40, h: 10, y: 0 }, cp: [72, 22, 0, -Math.PI / 2],
+    entries: [{ id: "main", at: [76, 22], door: true }],
+    clear: { type: "purge" },
+    cast: [
+      { t: "bot", at: [86, 8], yaw: -Math.PI / 2, start: "patrol" }, { t: "bot", at: [108, 32], yaw: -Math.PI / 2, start: "patrol" },
+      { t: "gunman", at: [100, 16], yaw: -Math.PI / 2, start: "guard" }, { t: "gunman", at: [84, 24], yaw: -Math.PI / 2, start: "idle" }, { t: "gunman", at: [110, 40], yaw: Math.PI, start: "guard" },
+      { t: "shield", at: [96, 40], yaw: -Math.PI / 2, start: "guard" },
+    ],
+    slots: [{ allow: ["gunman", "bot"], at: [84, 24] }, { allow: ["shield", "brawler"], at: [96, 40] }],
+    lines: { wallrun: [["rack", 0], ["rack", 1], ["rack", 2], ["rack", 3]] },
+    toys: [{ k: "sliders", at: [96, 24] }],
+    onLive: () => lvSayLine("ARBITER: The racks are on rails. Run them, don't hide behind them."),
+    challenges: [{ k: "noFloor" }, { k: "time", par: 32 }, { k: "allFinish" }],
+    next: "f05_lift",
+  };
+  D.f05_lift = {
+    floor: 5, name: "Freight Lift", kind: "setpiece", box: { x: 76, z: 44, w: 40, d: 32, h: 20, y: 0 }, cp: [98, 40, 0, Math.PI],
+    entries: [{ id: "main", at: [98, 44], door: false }],
+    clear: { type: "lift", lift: { at: [96, 60], w: 10, d: 8, y0: 0, y1: 16, time: 28 } },
+    timeline: [
+      { t: 6, cast: [{ t: "gunman", at: [88, 6, 46.5] }, { t: "gunman", at: [104, 6, 46.5] }] },
+      { t: 12, cast: [{ t: "drone", at: [86, 9, 60] }, { t: "drone", at: [108, 11, 62] }] },
+      { t: 18, cast: [{ t: "gunman", at: [90, 12, 73.5] }, { t: "bot", at: [102, 12, 73.5] }] },
+    ],
+    cast: [],
+    lines: { sling: [[112.5, 60, 20.6]] },
+    toys: [{ k: "counterweight", at: [112.5, 60] }],
+    tick: (R, dt) => c7LiftTick(R, dt),
+    onLive: () => lvSayLine("WARDEN: The freight lift. Ride it, then. Everything on this floor knows where you are."),
+    onClear: () => lvSayLine("ARBITER: Gantry's open. The core is below you. Drop."),
+    challenges: [{ k: "noDamage" }, { k: "allFinish" }, { k: "gyre3" }],
+    next: "f05_core",
+  };
+  D.f05_core = {
+    floor: 5, name: "Bulwark", kind: "boss", box: { x: 44, z: 44, w: 32, d: 32, h: 20, y: 0 }, cp: [82, 60, 16, Math.PI / 2],
+    entries: [{ id: "gantry", at: [74, 60, 16], show: true }],
+    clear: { type: "boss" },
+    cast: [{ t: "boss", id: "bulwark", at: [60, 52] }],
+    lines: { anchors: [[48.1, 48.1, 14], [71.9, 48.1, 14], [48.1, 71.9, 14], [71.9, 71.9, 14]] },
+    onLive: () => { alarm(2); lvSayLine("WARDEN: Then come in. I have been waiting forty years for something worth stopping."); setObjective("Bring down the Bulwark"); },
+    challenges: [{ k: "time", par: 120 }, { k: "noDamage" }],
+    next: null,
+  };
+  return D;
+}
+// Rams: until the enemy brain's Ram exists, a brawler with more armour and a faster charge
+function c7Rams(R) {
+  const marks = R.def.cast.filter((c) => c.ram);
+  for (const c of marks) {
+    let best = null, bd = 1e9; for (const e of R.cast || []) { if (e.dead || e.c7ram) continue; const p = enemyPos(e); const d = Math.hypot(p.x - LVX(c.at[0]), p.z - LVZ(c.at[c.at.length - 1])); if (d < bd) { bd = d; best = e; } }
+    if (best && bd < 4) { best.c7ram = true; best.hp = 5; best.T = Object.assign(Object.create(best.T), { speed: 7.2, dmg: 28, label: "Ram" }); best.group.scale.setScalar(1.12); }
+  }
+}
+// the counterweight drops as the lift rises (it hangs on the same cable)
+function c7LiftTick(R) {
+  // the twist: the brakes slip at +9 and the platform drops 3 m before it bites again (everything not grounded floats a moment)
+  if (R.lift && !R.c7drop && R.lift.y > 9) { R.c7drop = true; R.lift.drop?.(3, 0.55); shake = Math.max(shake, 0.6); noise(0.8, "lowpass", 400, 0.6, 0.6); sfx.servo?.(); alarm(0.6); lvSayLine("WARDEN: Mind the brakes."); }
+  if (!C7.cw) return; const y = R.lift?.y ?? (R.state === "resolved" ? 16 : 0);
+  const cy = 18 - y; C7.cw.mesh.position.y = Math.max(2, cy); try { C7.cw.body?.setTranslation?.({ x: C7.cw.mesh.position.x, y: C7.cw.mesh.position.y, z: C7.cw.mesh.position.z }, true); } catch {}
+}
+
+// ---------- shared: register the rooms, the per-step toys, and the stand-in runtime when C1's isn't in the build ----------
+// every C7 room in one table (both floors), registered at load so the Floor select and the room system see them
+const C7_DEFS = { ...c7DefsF04(), ...c7DefsF05() };
+function c7RoomDefs() { return typeof rcDefs === "function" ? rcDefs() : typeof ROOM_DEFS !== "undefined" ? ROOM_DEFS : (globalThis.ROOM_DEFS ||= {}); }
+Object.assign(c7RoomDefs(), C7_DEFS);
+function c7Chain(n) { const out = []; for (let id = `f0${n}_${n === 4 ? "cubicles" : "turbine"}`; id; id = C7_DEFS[id].next) out.push(id); return out; }
+function c7Rooms(n) {
+  // fresh defs each build (their hooks keep per-run state on R, not on the def)
+  const defs = n === 4 ? c7DefsF04() : c7DefsF05(); Object.assign(C7_DEFS, defs); Object.assign(c7RoomDefs(), defs);
+  C7.defs = defs; C7.fb = null; C7.n = n; C7.started = false;
+  // one checkpoint at each room's door, numbered in chain order (checkpoint k restores to room k)
+  c7Chain(n).forEach((id, k) => { const [x, z, y = 0] = defs[id].cp; lvCheckpoint(x, z, y, k + 1); });
+  if (typeof roomsInit !== "function") c7FallbackInit(defs);
+}
+// with the room chain kit (C6) in: our stand-in runtime runs floors 04-05, so the kit's own fallback leaves them alone,
+// and its Floor select / room loader hands the room to us
+if (typeof rcAfterBuild === "function") { const _ab = rcAfterBuild; rcAfterBuild = function (n) { if ((n === 4 || n === 5) && C7.fb) { RC.list = []; return; } return _ab(n); }; }
+if (typeof rcAfterStart === "function") { const _as = rcAfterStart; rcAfterStart = function () { if (RC.load && C7_DEFS[RC.load] && C7.fb) { C7.load = RC.load; return; } return _as(); }; }
+if (typeof timeMod === "function") timeMod("halon", () => (C7.halonT > 0 ? 0.4 : 1));
+function c7Tick() {
+  if (C7.halonT > 0) C7.halonT -= DT;
+  if (!C7.started) {
+    C7.started = true;
+    if (C7.fb) {
+      // a room load or a checkpoint restore: everything before that room counts as done
+      const chain = c7Chain(C7.n); const cp = LV.cpPos && LV.cpFloor === LV.n ? LV.cpPos : null;
+      const to = C7.load || (cp && cp.n > 0 ? chain[cp.n - 1] : null); C7.load = null;
+      if (to) c7SkipTo(to); else c7PrimeNow(C7.fb.rooms[0]);
+    } else if (typeof roomsInit === "function" && typeof rcAfterBuild !== "function") { try { roomsInit(C7.n); } catch (err) { console.warn("c7 roomsInit", err); } }
+  }
+  c7FanStep(DT); c7HalonStep();
+  if (C7.fb) c7FallbackStep(DT);
+}
+// the first live-able room primes on the level's first frames, so its cast (and the androids' shadow programs) is drawn
+// inside the warm-up instead of compiling mid-play
+function c7PrimeNow(R) { if (R.state !== "dormant") return; R.state = "primed"; lvTrig(R.id); LV.spawnT = 0; later(() => { R.cast = c7Cast(R); R.def.onPrime?.(R); }, 100); }
+function c7SkipTo(id) {
+  for (const R of C7.fb.rooms) {
+    if (R.id === id) { c7PrimeNow(R); break; }
+    R.state = "resolved"; lvSetShutter(`seal:${R.id}`, true); lvSetShutter(`entry:${R.id}`, false);
+    for (const s of [...R.spawns, ...R.reinf, ...R.tl]) { s.done = true; LV.killed.add(s.id); }
+    if (R.lift) { R.lift.y = R.lift.L.y1; R.lift.on = true; R.lift.t = 1e3; R.lift.body.setNextKinematicTranslation({ x: R.lift.X, y: R.lift.y - 0.175, z: R.lift.Z }); R.lift.g.position.y = R.lift.y - 0.175; }
+  }
+}
+// ================= the stand-in room runtime (doc 2.2-2.3), used only when C1's roomsInit isn't in the build =================
+// Dormant > Primed (cast spawns when you're within 30 m or the previous room is Live) > Live (you're in the box; the entry shuts)
+// > Resolved (the seal opens, a short card). Purge, silence (spotter, alarm, reinforcement door), lockdown (the seal closes over
+// `time`; get through), lift (the platform rides, the timeline spawns), boss. Same def format and hooks as C1's.
+const _c7v = new THREE.Vector3();
+function c7Box(d, p, pad = 0) { const b = d.box, y = b.y || 0; return p.x > LVX(b.x) - pad && p.x < LVX(b.x + b.w) + pad && p.z > LVZ(b.z) - pad && p.z < LVZ(b.z + b.d) + pad && p.y > y - 1.5 && p.y < y + b.h + 2; }
+function c7At(c, d) { return c.at.length === 3 ? c.at : [c.at[0], d.box.y || 0, c.at[1]]; }
+function c7FallbackInit(defs) {
+  const rooms = [];
+  for (const id in defs) {
+    const d = defs[id]; const R = { id, def: d, state: "dormant", t: 0, cast: [], spawns: [], reinf: [], tl: [], dmg: 0, fin: 0 };
+    for (const c of d.cast || []) {
+      if (c.t === "boss") { R.boss = c; continue; }
+      const [x, y, z] = c7At(c, d); const s = lvEnemy(c.t === "spotter" ? "gunman" : c.t, x, z, y, { trig: id, wake: 999 }); if (!s) continue;
+      s.c7 = c; R.spawns.push(s); if (c.t === "spotter") R.spotS = s;
+    }
+    for (const c of d.clear.reinf || []) { const [x, y, z] = c7At(c, d); const s = lvEnemy(c.t, x, z, y, { trig: id + ":reinf", alert: true, wake: 999 }); if (s) R.reinf.push(s); }
+    (d.timeline || []).forEach((T, k) => { for (const c of T.cast) { const [x, y, z] = c7At(c, d); const s = lvEnemy(c.t, x, z, y, { trig: `${id}:t${k}`, alert: true, wake: 999 }); if (s) R.tl.push(s); } });
+    if (d.clear.type === "lift") R.lift = c7LiftBuild(d.clear.lift);
+    rooms.push(R);
+  }
+  rooms.forEach((R, i) => { R.prev = rooms.find((Q) => Q.def.next === R.id) || null; });
+  C7.fb = { rooms };
+}
+function c7Cast(R) { return [...R.spawns, ...R.reinf, ...R.tl].map((s) => s.e).filter(Boolean); }
+function c7FallbackStep(dt) {
+  if (!player || player.dead) return; const pp = lvP();
+  for (const R of C7.fb.rooms) {
+    const d = R.def;
+    if (R.state === "dormant" && (R.prev ? R.prev.state === "live" || R.prev.state === "resolved" : c7Box(d, pp, 30))) { R.state = "primed"; lvTrig(R.id); later(() => { R.cast = c7Cast(R); d.onPrime?.(R); }, 400); }
+    if (R.state === "primed" && c7Box(d, pp)) {
+      R.state = "live"; R.t = 0; R.hp0 = player.hp; R.cast = c7Cast(R);
+      if (R.boss) { lvBoss(R.boss.id, R.boss.at[0], R.boss.at[1], 0); lvTrig("boss"); }
+      later(() => lvSetShutter(`entry:${R.id}`, false), 900);
+      if (d.clear.type === "lockdown") { const S = LV.shutters.find((x) => x.id === `seal:${R.id}`); if (S) { S.want = 1; S.open = 1; lvShutterPose(S); R.lockS = S; } sfx.door(); }
+      if (typeof TRV !== "undefined") TRV.roomReset?.(); d.onLive?.(R); ev("roomLive", { id: R.id, floor: d.floor, name: d.name });
+    }
+    if (R.state !== "live") continue;
+    R.t += dt; R.cast = c7Cast(R); d.tick?.(R, dt);
+    if (d.twist && !R.twisted && R.cast.length && R.cast.filter((e) => e.dead).length * 2 >= R.cast.length) { R.twisted = true; if (typeof d.twist.do === "function") d.twist.do(R); }
+    const purged = R.t > 1 && lvClearOf(R.id) && (!R.alarmed || lvClearOf(R.id + ":reinf")) && R.cast.every((e) => e.dead || e.T.civ) && (!R.boss || (lvClearOf("boss") && LV.spawns.filter((s) => s.boss).every((s) => s.done)));
+    let done = false;
+    if (d.clear.type === "silence") {
+      const sp = R.spotS?.e;
+      if (sp && !sp.dead && sp.alert && !R.alarmT && !R.alarmed) R.alarmT = d.clear.delay || 6;
+      if (sp && sp.dead) R.alarmT = 0;
+      if (R.alarmT > 0 && (R.alarmT -= dt) <= 0 && !R.alarmed) { R.alarmed = true; alarm(2); lvSayLine("WARDEN: Alarm raised. Reinforcements to the floor."); later(() => { lvSetShutter(`reinf:${R.id}`, true); lvTrig(R.id + ":reinf"); }, 2000); ev("roomAlarm", { id: R.id }); }
+      done = purged;
+    } else if (d.clear.type === "lockdown") {
+      const S = R.lockS, T = d.clear.time || 15;
+      if (S && !R.shut) { S.want = S.open = Math.max(0, 1 - R.t / T); lvShutterPose(S); if (S.open <= 0) { R.shut = true; alarm(0.8); lvSayLine("WARDEN: Too slow. Now earn it."); } }
+      const nx = C7.fb.rooms.find((Q) => Q.id === d.next); if (!R.shut && nx && c7Box(nx.def, pp)) done = true;
+      if (R.shut && purged) done = true;
+    } else if (d.clear.type === "lift") {
+      done = c7LiftStep(R, dt);
+    } else done = purged;
+    if (done) {
+      R.state = "resolved"; lvSetShutter(`seal:${R.id}`, true); d.onClear?.(R);
+      for (const s of [...R.reinf, ...R.tl]) if (!s.e) { s.done = true; LV.killed.add(s.id); } // never called in: they don't hold the floor open
+      const secs = R.t.toFixed(1); flash(`${d.name} · ${secs}s`, "var(--cyan)"); sfx.pickup?.(); ev("roomClear", { id: R.id, secs: +secs });
+    }
+  }
+}
+// the freight platform: kinematic, carries you, rides y0 > y1 over `time` once you're standing on it, with the timeline spawns
+function c7LiftBuild(L) {
+  const X = LVX(L.at[0]), Z = LVZ(L.at[1]); const g = new THREE.Group(); levelGroup.add(g);
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(L.w, 0.35, L.d), LV_FLOORMAT.steel()); deck.receiveShadow = true; g.add(deck);
+  const edge = new THREE.Mesh(new THREE.BoxGeometry(L.w + 0.1, 0.12, L.d + 0.1), LV_FLOORMAT.hazard()); edge.position.y = -0.12; g.add(edge);
+  for (const [sx, sz] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.2, 1.1, 0.2), LV_FLOORMAT.steel()); p.position.set(sx * (L.w / 2 - 0.1), 0.55, sz * (L.d / 2 - 0.1)); g.add(p); }
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(L.w, 0.08, 0.08), LV_FLOORMAT.steel()); rail.position.set(0, 1.1, -L.d / 2 + 0.1); g.add(rail); const rail2 = rail.clone(); rail2.position.z = L.d / 2 - 0.1; g.add(rail2);
+  const body = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(X, L.y0 - 0.175, Z));
+  world.createCollider(RAPIER.ColliderDesc.cuboid(L.w / 2, 0.175, L.d / 2).setCollisionGroups(GROUPS.env), body);
+  g.position.set(X, L.y0 - 0.175, Z);
+  return { L, g, body, X, Z, y: L.y0, t: 0, on: false, dropT: 0, dropV: 0, y0: L.y0, y1: L.y1, drop(m, secs) { this.dropT = secs; this.dropV = m / secs; } };
+}
+function c7LiftStep(R, dt) {
+  const Lf = R.lift; if (!Lf) return true; const L = Lf.L; const pp = lvP();
+  const onIt = Math.abs(pp.x - Lf.X) < L.w / 2 && Math.abs(pp.z - Lf.Z) < L.d / 2 && pp.y > Lf.y && pp.y < Lf.y + 2.6;
+  if (!Lf.on && onIt) { Lf.on = true; sfx.servo?.(); noise(2, "lowpass", 160, 0.3); }
+  if (!Lf.on) return false;
+  const T = L.time || 24; let vy = (L.y1 - L.y0) / T;
+  Lf.t += dt;
+  (R.def.timeline || []).forEach((E, k) => { if (Lf.t >= E.t && !LV.trig.includes(`${R.id}:t${k}`)) { lvTrig(`${R.id}:t${k}`); alarm(0.3); } });
+  if (Lf.dropT > 0) { Lf.dropT -= dt; vy = -Lf.dropV; }
+  Lf.y = Math.min(L.y1, Lf.y + vy * dt);
+  Lf.body.setNextKinematicTranslation({ x: Lf.X, y: Lf.y - 0.175, z: Lf.Z }); Lf.g.position.set(Lf.X, Lf.y - 0.175, Lf.Z);
+  if (onIt) { const v = player.body.linvel(); if (vy > 0 && v.y < vy) player.body.setLinvel({ x: v.x, y: vy, z: v.z }, true); }
+  shake = Math.max(shake, 0.03);
+  return Lf.y >= L.y1 - 0.01 && Lf.t > T * 0.5;
+}
+
+// ---------- load one room (Floor select and the testing ground): build its floor, put you at its main entry, open what's behind ----------
+function c7LoadRoom(id) {
+  const d = C7_DEFS[id]; if (!d) return;
+  if (typeof rcLoadRoom === "function") return rcLoadRoom(id);
+  const F = FLOORS[d.floor], ox = (F.x0 + F.x1) / 2, oz = (F.z0 + F.z1) / 2; const [x, z, y = 0, yw = 0] = d.cp;
+  state.mode = "floor"; state.floor = d.floor; LV.killed = new Set(); LV.cpIdx = 0;
+  LV.cpPos = { x: x - ox, y, z: z - oz, n: 0, yaw: yw }; LV.cpFloor = d.floor; C7.load = id;
+  $("menu").hidden = true; restart(false); state.started = true; $("screen").hidden = true;
+}
+if (typeof TGM_EXT !== "undefined") TGM_EXT.push((sec, btns) => {
+  const s = sec("Floors 04-05 rooms");
+  const ids = ["f04_cubicles", "f04_servers", "f04_kitchen", "f04_pit", "f04_clean", "f05_turbine", "f05_bh1", "f05_bh2", "f05_bh3", "f05_racks", "f05_lift", "f05_core"];
+  const names = { f04_cubicles: "Cubicle Maze", f04_servers: "Server Aisle", f04_kitchen: "Executive Kitchen", f04_pit: "Trading Pit", f04_clean: "Clean Room", f05_turbine: "Turbine Hall", f05_bh1: "Bulkhead 1", f05_bh2: "Bulkhead 2", f05_bh3: "Bulkhead 3", f05_racks: "Sliding Racks", f05_lift: "Freight Lift", f05_core: "Bulwark" };
+  btns(s, ids.map((id) => [`${id.slice(1, 3)} · ${names[id]}`, () => c7LoadRoom(id)]));
+});
+// test hooks (window.__res is assigned later in this script)
+queueMicrotask(() => { if (window.__res) Object.assign(window.__res, { C7, c7LoadRoom, c7FanStep }); });
+
 // ---- end slot: floors ----
 
 // ---- slot: replay ----
