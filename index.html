@@ -15202,7 +15202,7 @@ timeMod("gyre", gyreTs);
 function gyreIn(vel) { if (GYRE.psOut !== 1) vel.divideScalar(GYRE.psOut); }
 function gyreOut(vel) { const ps = gyrePS(); GYRE.psOut = ps; return ps === 1 ? vel : _gyv.copy(vel).multiplyScalar(ps); }
 // Focus and Gyre share one budget per room
-function gyreFocusCap() { return GYRE.inf || TGM.gyInf ? FOCUS_MAX : Math.min(FOCUS_MAX, Math.max(0.5, GYRE.budget)); }
+function gyreFocusCap() { return GYRE.inf || TGM.gyInf || replayOn("endlessGyre") ? FOCUS_MAX : Math.min(FOCUS_MAX, Math.max(0.5, GYRE.budget)); }
 
 // ---------- audio: a low-pass on the master bus (800 Hz in the flip) ----------
 function gyreAudio(m) {
@@ -15217,7 +15217,7 @@ function gyrePress(vel) {
   if (GYRE.halo || MF.cur || state.fin || player.dead) return;
   if (GYRE.on) { gyreEnd("snap"); return; }
   if (player.climb || player.grapple || player.focus || player.grounded) return;
-  const inf = GYRE.inf || TGM.gyInf;
+  const inf = GYRE.inf || TGM.gyInf || replayOn("endlessGyre");
   if (!inf && (GYRE.n <= 0 || GYRE.budget < 0.25)) { tone("square", 220, 180, 0.05, 0.04); return; }
   gyreStart(vel);
 }
@@ -15225,7 +15225,7 @@ function gyreStart(vel) {
   const given = !!vel; if (!given) vel = new THREE.Vector3().copy(player.vel); // the perf gate starts one directly
   const w = keys.has("KeyW"), s = keys.has("KeyS"), a = keys.has("KeyA"), d = keys.has("KeyD");
   GYRE.dir = w && !s ? "front" : a && !d ? "left" : d && !a ? "right" : "back";
-  const inf = GYRE.inf || TGM.gyInf;
+  const inf = GYRE.inf || TGM.gyInf || replayOn("endlessGyre");
   if (!inf) GYRE.n--;
   Object.assign(GYRE, { on: true, t: 0, dur: inf ? GY.DUR : Math.min(GY.DUR, GYRE.budget), ang: 0, twist: 0, apex: false, beat: 0.4, kills: 0, rollFix: 0 });
   vel.y = Math.max(vel.y, 4); // the tuck pops you up a little
@@ -15251,7 +15251,7 @@ function gyreEnd(why = "time", quiet = false) {
 // ---------- per sim step, from stepPlayer (after the moves, before the body gets its speed) ----------
 function gyreStep(dt, vel, grounded) {
   if (GYRE.pl !== player) { gyreReset(); GYRE.pl = player; }
-  const inf = GYRE.inf || TGM.gyInf;
+  const inf = GYRE.inf || TGM.gyInf || replayOn("endlessGyre");
   if (GYRE.on) {
     GYRE.t += dt; if (!inf) GYRE.budget = Math.max(0, GYRE.budget - dt);
     GYRE.apex = GYRE.apex || vel.y <= 0;
@@ -15292,9 +15292,9 @@ function gyreReset() { Object.assign(GYRE, { on: false, halo: null, drop: null, 
 // events: kills in the flip refund a charge and are re-sent as gyreKill; rooms refill
 function gyreEv(name, d) {
   if (name === "kill" && (gyOn() || state.time < GYRE.killUntil)) {
-    GYRE.kills++; if (!(GYRE.inf || TGM.gyInf)) GYRE.n = Math.min(GYRE.max, GYRE.n + 1);
+    GYRE.kills++; if (!(GYRE.inf || TGM.gyInf || replayOn("endlessGyre"))) GYRE.n = Math.min(GYRE.max, GYRE.n + 1);
     ev("gyreKill", { ...d });
-  } else if (name === "focusEnd" && !(GYRE.inf || TGM.gyInf)) GYRE.budget = Math.max(0, GYRE.budget - (d.dur || 0));
+  } else if (name === "focusEnd" && !(GYRE.inf || TGM.gyInf || replayOn("endlessGyre"))) GYRE.budget = Math.max(0, GYRE.budget - (d.dur || 0));
   else if (name === "roomClear" || name === "sealOpen" || name === "roomLive") gyreRefill();
 }
 // fewer sparks while the flip is on (they live 5x longer in real time)
@@ -15342,7 +15342,7 @@ function gyreFrame(dt) {
   const show = state.started && player && !player.dead && !player.grounded && !state.fin && !MF.cur;
   gyPips.hidden = !show;
   if (show) {
-    const inf = GYRE.inf || TGM.gyInf; const ps = gyPips.children;
+    const inf = GYRE.inf || TGM.gyInf || replayOn("endlessGyre"); const ps = gyPips.children;
     ps[0].className = inf || GYRE.n >= 1 ? "on" : ""; ps[1].className = inf || GYRE.n >= 2 ? "on" : "";
     ps[2].textContent = TGM.gyShow && state.mode === "test" ? (gyOn() || GYRE.k < 1 ? GYRE.k.toFixed(2) + "x" : "") : "";
   }
