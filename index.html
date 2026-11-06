@@ -1253,7 +1253,7 @@ function updateCity(t, dt) {
 // the charging capsule UNIT-7 wakes up in; its doors slide apart during the boot sequence
 let pod = null;
 function buildPod(open) {
-  const X = -24.15, Z = 22, nc = { noCollide: true };
+  const X = globalThis.POD_AT?.x ?? -24.15, Z = globalThis.POD_AT?.z ?? 22, nc = { noCollide: true };
   fixedBox(X, 0.08, Z, 1.6, 0.16, 1.7, M.roboDark, nc);
   fixedBox(X - 0.78, 1.35, Z, 0.14, 2.7, 1.7, M.rack, nc);
   for (const sd of [-1, 1]) { fixedBox(X, 1.35, Z + sd * 0.82, 1.5, 2.7, 0.1, M.roboDark, nc); fixedBox(X - 0.05, 1.35, Z + sd * 0.765, 1.1, 2.2, 0.02, M.cyan, { noCollide: true, shadow: false }); }
@@ -2357,7 +2357,7 @@ function damagePlayer(n, src, blocked = false) {
 function killPlayer(msg) {
   player.focus = null; player.dead = true; player.grapple = null; state.over = true; setTime("normal", 0); glitch(1);
   document.exitPointerLock?.();
-  const cp = state.mode === "tut" ? "The module resets. Try it again." : state.mode === "floor" && (state.floor || 1) > 1 ? (LV.cpPos ? `Restoring from checkpoint ${LV.cpPos.n}.` : "Restarting the floor from the lift.") : state.checkpoint === 2 ? "Restoring from the armory checkpoint." : "Reloading UNIT-7 from backup.";
+  const cp = state.mode === "tut" ? "The module resets. Try it again." : lvBuiltN() ? (LV.cpPos ? `Restoring from checkpoint ${LV.cpPos.n}.` : "Restarting the floor from the lift.") : state.checkpoint === 2 ? "Restoring from the armory checkpoint." : "Reloading UNIT-7 from backup.";
   showScreen("Offline", "OFFLINE", msg, `ARBITER: Disappointing. ${cp}`, "Reboot", true);
 }
 
@@ -2444,7 +2444,7 @@ function updateTest(dt) {
 }
 function phaseCleared() {
   if (state.mode !== "floor") return;
-  if ((state.floor || 1) > 1) { lvCleared(); return; }
+  if (lvBuiltN()) { lvCleared(); return; }
   if (state.phase === 1) {
     state.phase = 1.5;
     setObjective("Take the sword from the armory");
@@ -3911,7 +3911,7 @@ function restart(fromScratch) {
   if (state.mode !== "tut") { sun.position.copy(TUT.sunHome); sun.target.position.set(0, 0, 0); TUT.rooms = []; }
   world = new RAPIER.World({ x: 0, y: -9.81 * 2.2, z: 0 }); physSafe(world);
   world.timestep = DT; propsReset(); goreReset(); mirReset(); tgmReset();
-  if (state.mode === "test") buildTestLevel(); else if (state.mode === "tut") buildTutLevel(); else if (state.mode === "floor" && (state.floor || 1) > 1) buildFloor(state.floor); else buildLevel();
+  if (state.mode === "test") buildTestLevel(); else if (state.mode === "tut") buildTutLevel(); else if (lvBuiltN()) buildFloor(state.floor || 1); else buildLevel();
   { try { finProps(); finDisc.visible = true; } catch {} const vis = [finRig.root, worldSparks.lines, tracers[0].m, ...moveWarm()]; for (const o of vis) o.visible = true; warmHidden(); WARMT.pending = 2; for (const o of vis) o.visible = false; if (finDisc) finDisc.visible = false; }
   Object.assign(state, { over: false, time: 0, runStart: 0 });
   setTime("normal", 0); hitstopT = 0; hookFx.state = "idle"; VM.attack = null; GL.spike = 0;
@@ -3923,7 +3923,7 @@ function restart(fromScratch) {
     spawnDummies(); updateCount();
     setObjective("Testing ground"); $("objl").textContent = "Grid 2200";
     hint("Dummies respawn 3 s after they die. Every combo in the book works here.");
-  } else if (state.mode === "floor" && (state.floor || 1) > 1) {
+  } else if (lvBuiltN()) {
     lvStart();
   } else if (state.checkpoint === 2) {
     player = createPlayer(new THREE.Vector3(0, 1.2, -24), 0);
@@ -4077,7 +4077,7 @@ $("mnav").addEventListener("click", (ev) => {
   else if (act === "book") openBook();
   else if (act === "settings") openSettings();
   else if (act === "skip") { if (state.mode !== "floor" || (state.floor || 1) !== 1) { state.mode = "floor"; state.floor = 1; state.pendingRestart = true; state.pendingFresh = true; } $("menu").hidden = true; begin(); }
-  else if (act === "floors") { const f = $("m-floors"); f.hidden = !f.hidden; if (!f.hidden) { f.innerHTML = [[1, "Arrival", "the lab and the hall"], ...[2, 3, 4, 5].map((n) => [n, FLOORS[n].name, FLOORS[n].sub])].map(([n, a, b]) => `<button type="button" data-floor="${n}"><b>${String(n).padStart(2, "0")}</b>${a}<span>${b}</span></button>`).join(""); f.querySelector("button").focus({ preventScroll: true }); } }
+  else if (act === "floors") { const f = $("m-floors"); f.hidden = !f.hidden; if (!f.hidden) { f.innerHTML = [[1, FLOORS[1]?.name || "Arrival", FLOORS[1]?.sub || "the lab and the hall"], ...[2, 3, 4, 5].map((n) => [n, FLOORS[n].name, FLOORS[n].sub])].map(([n, a, b]) => `<button type="button" data-floor="${n}"><b>${String(n).padStart(2, "0")}</b>${a}<span>${b}</span></button>`).join("") + rcRoomButtons(); f.querySelector("button").focus({ preventScroll: true }); } }
   else if (act === "controls") openMenuControls();
   else if (act === "test") { const f = $("m-code"); f.hidden = !f.hidden; if (!f.hidden) setTimeout(() => $("codein").focus(), 0); }
 });
@@ -8933,7 +8933,7 @@ function lvShutter(x1, z1, x2, z2, y0, h, id, closed = false, opts = {}) {
   DOORWAYS.push({ c: new THREE.Vector3(X, y0, Z), axis: alongX ? "x" : "z", w: Math.min(L, 6), h: Math.min(h, 4.5) });
   return S;
 }
-function lvShutterPose(S) { const y = S.y0 + S.h / 2 + S.open * S.lift; S.mesh.position.set(S.X, y, S.Z); S.body.setNextKinematicTranslation({ x: S.X, y, z: S.Z }); }
+function lvShutterPose(S) { if (S.hatch) return rcHatchPose(S); const y = S.y0 + S.h / 2 + S.open * S.lift; S.mesh.position.set(S.X, y, S.Z); S.body.setNextKinematicTranslation({ x: S.X, y, z: S.Z }); }
 function lvSetShutter(id, open) { for (const S of LV.shutters) if (S.id === id && S.want !== (open ? 1 : 0)) { S.want = open ? 1 : 0; sfx.door(); shake = Math.max(shake, open ? 0.05 : 0.25); } }
 // ---------- lifts: a cab with sliding doors and a floor counter ----------
 function lvCounterTex(txt) {
@@ -9274,7 +9274,7 @@ function lvClearOf(trig) {
   const list = LV.spawns.filter((s) => (trig ? s.trig === trig : !s.boss));
   return list.every((s) => s.done && (!s.e || s.e.dead || s.e.T.civ));
 }
-function lvPending() { return state.mode === "floor" && (state.floor || 1) > 1 && LV.spawns.some((s) => !s.done && !(s.type === "worker")); }
+function lvPending() { return lvBuiltN() && LV.spawns.some((s) => !s.done && !(s.type === "worker")); }
 function alarm(sec) { sfx.alarm?.(); glitch(0.25); shake = Math.max(shake, 0.12); LV.alarmT = Math.max(LV.alarmT || 0, sec); }
 // a ceiling under a raised slab: just the panel grid's lights, the slab's own underside is the ceiling
 function lvCeilUnder(x1, z1, x2, z2, y, lights = true) {
@@ -9352,7 +9352,7 @@ function lvSlider(x, z, sx, sz, xa, xb, speed, ph) {
 }
 // ---------- build ----------
 function buildFloor(n) {
-  const F = FLOORS[n]; LV.F = F; LV.n = n;
+  const F = FLOORS[n]; LV.F = F; LV.n = n; rcBuildReset();
   Object.assign(LV, { spawns: [], cps: [], lifts: [], shutters: [], pads: [], movers: [], fixtures: [], darks: [], frags: [], walk: [], trig: [], anchors: [], extra: [], flag: {}, t: 0, nextId: 0, cleared: false, shaft: null, alarmT: 0, exitL: null, arriveL: null });
   LV.ox = (F.x0 + F.x1) / 2; LV.oz = (F.z0 + F.z1) / 2;
   const hx = (F.x1 - F.x0) / 2, hz = (F.z1 - F.z0) / 2; globalThis.BND = { x0: -hx - 0.6, x1: hx + 0.6, z0: -hz - 0.6, z1: hz + 0.6 };
@@ -9360,9 +9360,9 @@ function buildFloor(n) {
   levelGroup = new THREE.Group(); scene.add(levelGroup);
   door = { opening: false, mesh: { position: { y: -9 } }, body: null }; sword = new THREE.Group();
   F.build();
-  const [ax, az, ay, af] = F.arrive; LV.arriveL = lvLift(ax, az, ay, af, "arrive", String(n).padStart(2, "0"));
+  if (F.arrive) { const [ax, az, ay, af] = F.arrive; LV.arriveL = lvLift(ax, az, ay, af, "arrive", String(n).padStart(2, "0")); }
   const [ex, ez, ey, ef] = F.exit; LV.exitL = lvLift(ex, ez, ey, ef, "exit", String(n + 1).padStart(2, "0"));
-  lvFlushPanels(); LV.batched = lvBatch();
+  lvFlushPanels(); LV.batched = lvBatch(); rcAfterBuild(n);
   // the tower below and above this floor
   const top = Math.max(...LV.walk.map((w) => w.y), 8) + 30;
   fixedBox(0, -30.5, 0, hx * 2 + 1, 59, hz * 2 + 1, M.tower, { shadow: false, noCollide: true });
@@ -9392,7 +9392,7 @@ const _lvv = new THREE.Vector3();
 function lvStep(dt) {
   const tst = state.mode === "test";
   if ((state.mode !== "floor" && !tst) || !player || player.dead) return;
-  if (!tst && (state.floor || 1) === 1) { lvStepLift(dt); return; }
+  if (!tst && !lvBuiltN()) { lvStepLift(dt); return; }
   LV.t += dt; const pp = lvP();
   // spawns: by trigger, or when you come near
   if (!tst && (LV.spawnT = (LV.spawnT || 0) - dt) <= 0) {
@@ -9447,7 +9447,7 @@ function lvStep(dt) {
   for (const x of LV.extra) if (x.kind === "plinth") { x.holo.rotation.y += dt * 1.2; if (!x.got && Math.hypot(pp.x - x.x, pp.z - x.z) < 1.6 && Math.abs(pp.y - 1 - x.y) < 1.5) { x.got = true; x.holo.material = M.rackLed; player.stims = Math.min(3, player.stims + 1); flash(`${x.name} cache · stim +1`, "var(--cyan)"); sfx.pickup?.(); } }
   else if (x.kind === "ticker") x.tex.offset.x += dt * 0.02;
   // floor beats, then the lifts
-  LV.F.tick?.(LV.t);
+  LV.F.tick?.(LV.t); rcStep(dt);
   // a safety net: if nothing is left awake or waiting, the floor is clear even without a final kill
   if (!LV.cleared && (LV.clrT = (LV.clrT || 0) - dt) <= 0) { LV.clrT = 0.5; if (LV.t > 4 && !state.fin && alive().length === 0 && !lvPending()) lvCleared(); }
   lvStepLift(dt);
@@ -9534,7 +9534,7 @@ function lvFrame(dt) {
   lvLightsInit();
   const floorN = state.mode === "floor" ? state.floor || 1 : 0;
   lvCheckExit();
-  if (floorN < 2 || !player) { if (LVL.moved) { LVL.pool.forEach((l, i) => { l.position.copy(LVL.home[i].p); l.color.copy(LVL.home[i].c); l.distance = LVL.home[i].d; l.userData.f = null; }); LVL.moved = false; } return; }
+  if (floorN < (FLOORS[1]?.build ? 1 : 2) || !player) { if (LVL.moved) { LVL.pool.forEach((l, i) => { l.position.copy(LVL.home[i].p); l.color.copy(LVL.home[i].c); l.distance = LVL.home[i].d; l.userData.f = null; }); LVL.moved = false; } return; }
   LVL.moved = true;
   const pp = camOrigin();
   // the six real lights go to the six fixtures nearest you (dark ones only flicker red); they fade in where they land
@@ -9775,8 +9775,8 @@ function bossBlind(sec) {
 function bossSpawnEntry(kind, x, z, y) {
   const type = { gatekeeper: "gatekeeper", corona: "coronaHub", bulwark: "bulwark" }[kind];
   const s = lvEnemy(type, x, z, y, { trig: "boss", alert: true }); if (s) { s.boss = true; s.wake = 999; }
-  const adds = { gatekeeper: [["S", -6, -5, 0], ["S", -6, 5, 0], ["G", -12, -34, 8], ["G", 6, 34, 8]], corona: [["G", 30, -10, 40], ["G", -30, -20, 48]], bulwark: [] }[kind] || [];
-  for (const [k, dx, dz, yy] of adds) { const a = lvEnemy(k, x + dx, z + dz, yy, { trig: "boss", alert: true }); if (a) a.boss = true; }
+  const rel = LV.bossAdds?.[kind]; const adds = rel || { gatekeeper: [["S", -6, -5, 0], ["S", -6, 5, 0], ["G", -12, -34, 8], ["G", 6, 34, 8]], corona: [["G", 30, -10, 40], ["G", -30, -20, 48]], bulwark: [] }[kind] || [];
+  for (const [k, dx, dz, yy] of adds) { const a = lvEnemy(k, x + dx, z + dz, rel ? y + yy : yy, { trig: "boss", alert: true }); if (a) a.boss = true; }
 }
 function bossSetup(e) {
   e.zone = null; e.alert = true; e.cool = 1e9; BOSSES.queue.push(e);
@@ -14648,6 +14648,741 @@ perfUi();
 // ---- end slot: mfvariants ----
 
 // ---- slot: floors ----
+// ==== room chain kit (C6) ====
+// Shared by the floor modules (C6 floors 01-03, C7 floors 04-05). Floors are written in blueprint metres, like the lv* builder.
+// - Doors: rcSeal / rcEntry / rcReinf build the lvShutters the room system (C1) opens and closes by id.
+// - Lines, in the colour language of doc 3.6: amber anchors, red sling points, cyan wall-run strips, white chevrons on
+//   flip pads and cable starts. Wall-run panels and cables are handed to the traversal pack (C3, TRV) when it is in.
+// - rcAfterBuild(n) hands the floor's ROOM_DEFS to roomsInit (C1). Until C1 is merged a small fallback runner keeps the
+//   floors playable (purge, lockdown, script, lift, boss; silence counts as purge).
+const RC = { list: [], items: [], rings: [], falls: [], cpRoom: {}, load: null, armedFrom: null, floorRooms: 0 };
+function rcDefs() { return typeof ROOM_DEFS !== "undefined" ? ROOM_DEFS : (globalThis.ROOM_DEFS ||= {}); }
+function rcDef(id, def) { def.id = id; rcDefs()[id] = def; return def; }
+const rcW = (x, z) => [LVX(x), LVZ(z)];
+// rooms of a floor in chain order: start from the room nothing points at, follow next
+function rcChain(n) {
+  const all = Object.entries(rcDefs()).filter(([, d]) => d.floor === n).map(([id, d]) => ((d.id = id), d));
+  const pointed = new Set(all.map((d) => d.next)); const head = all.find((d) => !pointed.has(d.id)) || all[0];
+  const out = []; const seen = new Set();
+  for (let d = head; d && !seen.has(d.id); d = rcDefs()[d.next]) { if (d.floor !== n) break; out.push(d); seen.add(d.id); }
+  for (const d of all) if (!seen.has(d.id)) out.push(d);
+  return out;
+}
+// ---------- doors ----------
+function rcSeal(id, x1, z1, x2, z2, y0 = 0, h = 4.5) { return lvShutter(x1, z1, x2, z2, y0, h, "seal:" + id, true); }
+function rcEntry(id, x1, z1, x2, z2, y0 = 0, h = 4.5) { return lvShutter(x1, z1, x2, z2, y0, h, "entry:" + id, false); }
+function rcReinf(id, x1, z1, x2, z2, y0 = 0, h = 3.6) { return lvShutter(x1, z1, x2, z2, y0, h, "reinf:" + id, true); }
+// a horizontal seal: a red laser net over a void, or a steel plate over an updraft hole. It slides open toward -x.
+function rcHatch(id, x1, z1, x2, z2, y, closed = true, kind = "plate") {
+  const sx = Math.abs(x2 - x1), sz = Math.abs(z2 - z1); const X = LVX((x1 + x2) / 2), Z = LVZ((z1 + z2) / 2);
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, kind === "net" ? 0.06 : 0.3, sz), kind === "net" ? M.laser : LV_FLOORMAT.steel());
+  if (kind === "net") mesh.renderOrder = 3; else { mesh.castShadow = true; mesh.receiveShadow = true; }
+  levelGroup.add(mesh);
+  if (kind !== "net") { const st = new THREE.Mesh(new THREE.BoxGeometry(sx + 0.02, 0.05, 0.3), LV_FLOORMAT.hazard()); st.position.y = 0.16; mesh.add(st); }
+  const body = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(X, y, Z));
+  world.createCollider(RAPIER.ColliderDesc.cuboid(sx / 2, 0.15, sz / 2).setCollisionGroups(GROUPS.env), body);
+  const S = { id, mesh, body, X, Z, y0: y, h: 0.3, L: sx, sx, sz, hatch: true, open: closed ? 0 : 1, want: closed ? 0 : 1, speed: 1.2, cycle: 0, ph: 0, lift: 0 };
+  rcHatchPose(S); LV.shutters.push(S); return S;
+}
+function rcHatchPose(S) {
+  const k = S.open; const x = S.X - S.sx * k / 2;
+  S.mesh.scale.x = Math.max(0.002, 1 - k); S.mesh.position.set(x, S.y0, S.Z);
+  S.body.setNextKinematicTranslation({ x: S.X, y: k > 0.5 ? -400 : S.y0, z: S.Z });
+}
+// ---------- lines ----------
+function rcAnchor(x, z, y, top) { lvAnchor(x, z, y, top); }
+// a red sling point: a ring on a short bracket. Sling at it to throw yourself along the line it faces.
+function rcSling(x, z, y) {
+  const [X, Z] = rcW(x, z);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.07, 8, 18), M.red); ring.position.set(X, y, Z); levelGroup.add(ring);
+  const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(X, y, Z)); world.createCollider(RAPIER.ColliderDesc.ball(0.5).setCollisionGroups(GROUPS.env), body);
+  LV.anchors.push(new THREE.Vector3(X, y, Z));
+}
+// a wall-run panel on a wall face from (x1,z1) to (x2,z2), heights y0..y1: cyan strips top and bottom on both faces
+function rcWallRun(x1, z1, x2, z2, y0 = 0.8, y1 = 5.5, faces = 2) {
+  const alongX = Math.abs(x2 - x1) > Math.abs(z2 - z1); const L = alongX ? Math.abs(x2 - x1) : Math.abs(z2 - z1);
+  const cx = LVX((x1 + x2) / 2), cz = LVZ((z1 + z2) / 2);
+  for (const s of faces === 2 ? [-1, 1] : [faces]) {
+    const ox = alongX ? 0 : s * 0.19, oz = alongX ? s * 0.19 : 0;
+    for (const yy of [y0, y1]) lvBox(cx + ox, yy, cz + oz, alongX ? L : 0.03, 0.09, alongX ? 0.03 : L, M.cyan, { noCollide: true, shadow: false });
+    for (const e of [-1, 1]) lvBox(cx + ox + (alongX ? e * L / 2 : 0), (y0 + y1) / 2, cz + oz + (alongX ? 0 : e * L / 2), 0.05, y1 - y0, 0.05, M.cyan, { noCollide: true, shadow: false });
+  }
+  if (typeof TRV !== "undefined" && TRV.addPanel) TRV.addPanel(LVX(x1), LVZ(z1), LVX(x2), LVZ(z2), y0, y1);
+}
+// a white chevron on the floor (or a cable mast) pointing along yaw
+function rcChevron(X, y, Z, yaw, s = 0.6) {
+  const g = new THREE.Group(); g.position.set(X, y, Z); g.rotation.y = yaw;
+  for (const sd of [-1, 1]) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.03, s), M.light); b.position.set(sd * s * 0.28, 0, 0); b.rotation.y = sd * 0.7; g.add(b); }
+  levelGroup.add(g); return g;
+}
+// a cable ride between two points (blueprint x/z, real y). Rider hangs 1.4 m below it.
+function rcCable(ax, ay, az, bx, by, bz) {
+  const [AX, AZ] = rcW(ax, az), [BX, BZ] = rcW(bx, bz);
+  const a = new THREE.Vector3(AX, ay, AZ), b = new THREE.Vector3(BX, by, BZ); const L = a.distanceTo(b);
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, L, 5), M.mullion); m.position.copy(a).add(b).multiplyScalar(0.5);
+  m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize()); levelGroup.add(m);
+  const yawAB = Math.atan2(b.x - a.x, b.z - a.z);
+  for (const [p, yw] of [[a, yawAB], [b, yawAB + Math.PI]]) {
+    lvBox(p.x, p.y + 0.6, p.z, 0.18, 1.6, 0.18, LV_FLOORMAT.steel(), { noCollide: true, shadow: false });
+    rcChevron(p.x, p.y - 0.9, p.z, yw, 0.5);
+  }
+  if (typeof TRV !== "undefined" && TRV.addCable) return TRV.addCable(AX, ay, AZ, BX, by, BZ);
+  return null;
+}
+// a flip pad: an updraft vent with white chevrons instead of the cyan lift-pad ring
+function rcFlip(x, z, y, top, r = 1.2, yaw = 0) {
+  lvPad(x, z, y, top, r); const P = LV.pads[LV.pads.length - 1]; P.ring.material = M.light; P.flip = true;
+  rcChevron(P.x, y + 0.1, P.z, yaw, r * 0.9); return P;
+}
+// a glass floor or walkway: real panes, about 3 m square, that the ground slam (C3) breaks
+function rcGlassFloor(x1, z1, x2, z2, y, pane = 3) {
+  const nx = Math.max(1, Math.round(Math.abs(x2 - x1) / pane)), nz = Math.max(1, Math.round(Math.abs(z2 - z1) / pane));
+  const wx = Math.abs(x2 - x1) / nx, wz = Math.abs(z2 - z1) / nz; const x0 = Math.min(x1, x2), z0 = Math.min(z1, z2);
+  for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) { const p = glassPane(LVX(x0 + (i + 0.5) * wx), y - 0.04, LVZ(z0 + (j + 0.5) * wz), wx - 0.06, 0.08, wz - 0.06); p.floor = true; }
+  for (let i = 0; i <= nx; i++) lvBox(LVX(x0 + i * wx), y - 0.1, LVZ((z1 + z2) / 2), 0.14, 0.12, Math.abs(z2 - z1), M.mullion, { shadow: false });
+  LV.walk.push({ x1: LVX(x0), x2: LVX(x0 + nx * wx), z1: LVZ(z0), z2: LVZ(z0 + nz * wz), y });
+}
+// a hanging ring that can start to turn (the Art Installation twist). Grapple points on it are carried round with it.
+function rcRing(x, z, y, r, top) {
+  const [X, Z] = rcW(x, z);
+  const g = new THREE.Group(); g.position.set(X, y, Z); levelGroup.add(g);
+  const mesh = new THREE.Mesh(new THREE.TorusGeometry(r, 0.35, 10, 48), LV_FLOORMAT.brass()); mesh.rotation.x = Math.PI / 2; mesh.castShadow = true; g.add(mesh);
+  const glow = new THREE.Mesh(new THREE.TorusGeometry(r, 0.06, 6, 48), M.amber); glow.rotation.x = Math.PI / 2; glow.position.y = -0.36; g.add(glow);
+  for (let k = 0; k < 4; k++) { const a = k * Math.PI / 2; const c = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, top - y, 4), M.mullion); c.position.set(Math.cos(a) * r, (top - y) / 2, Math.sin(a) * r); g.add(c); }
+  const n = 16; const segs = [];
+  for (let k = 0; k < n; k++) { const a = (k / n) * Math.PI * 2; const b = world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(X + Math.cos(a) * r, y, Z + Math.sin(a) * r)); world.createCollider(RAPIER.ColliderDesc.ball(0.45).setCollisionGroups(GROUPS.env), b); segs.push({ b, a }); }
+  const R = { g, X, Z, y, r, segs, ang: 0, w: 0, wWant: 0 }; RC.rings.push(R); return R;
+}
+function rcRingStep(R, dt) {
+  R.w += (R.wWant - R.w) * Math.min(1, dt * 0.6); if (Math.abs(R.w) < 1e-4) return;
+  const da = R.w * dt; R.ang += da; R.g.rotation.y = -R.ang;
+  for (const s of R.segs) s.b.setNextKinematicTranslation({ x: R.X + Math.cos(s.a + R.ang) * R.r, y: R.y, z: R.Z + Math.sin(s.a + R.ang) * R.r });
+  const G = player?.grapple; if (!G?.point) return;
+  const dx = G.point.x - R.X, dz = G.point.z - R.Z;
+  if (Math.abs(G.point.y - R.y) < 1 && Math.abs(Math.hypot(dx, dz) - R.r) < 1) { const c = Math.cos(da), s = Math.sin(da); G.point.x = R.X + dx * c - dz * s; G.point.z = R.Z + dx * s + dz * c; }
+}
+// falling below y inside a room puts you back at a ledge for a little damage (the Floor 03 rule: falls cost height)
+function rcFall(box, yMin, at, dmg = 10) { RC.falls.push({ box, yMin, at, dmg }); }
+// ---------- pickups ----------
+// a protocol chip (the replay layer reads res.chips; C8 turns them into protocols)
+function rcChip(x, z, y, id, label) {
+  const [X, Z] = rcW(x, z);
+  const m = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.05, 0.24), M.red); m.position.set(X, y + 1.05, Z); levelGroup.add(m);
+  const halo = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.02, 6, 24), M.red); halo.position.copy(m.position); levelGroup.add(halo);
+  RC.items.push({ kind: "chip", m, halo, id, label, x: X, y, z: Z, got: false });
+}
+// a plinth that does something when you walk into it (Floor 01's sword: the armory grants everything)
+function rcGrant(x, z, y, mesh, fn) {
+  const [X, Z] = rcW(x, z);
+  const g = lvAssemble([[LVG.cyl(0.6, 0.7, 0.9, 16), LV_FLOORMAT.black(), 0, 0.45, 0], [LVG.cyl(0.5, 0.5, 0.03, 16), M.cyan, 0, 0.92, 0]]); g.position.set(X, y, Z); levelGroup.add(g);
+  const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(X, y + 0.45, Z)); world.createCollider(RAPIER.ColliderDesc.cylinder(0.45, 0.65).setCollisionGroups(GROUPS.env), body);
+  if (mesh) { mesh.position.set(X, y + 1.6, Z); levelGroup.add(mesh); }
+  RC.items.push({ kind: "grant", m: mesh, x: X, y, z: Z, fn, got: false });
+}
+// ---------- per-room checkpoints: a flag just outside each fight room's main entry ----------
+function rcCheckpoints(n) {
+  let k = 0;
+  for (const d of rcChain(n)) { if (!d.cp) continue; k++; const [x, z, y = 0] = d.cp; lvCheckpoint(x, z, y, k); RC.cpRoom[k] = d.id; }
+}
+// ---------- after a floor builds ----------
+function rcAfterBuild(n) {
+  RC.list = rcChain(n); RC.floorRooms = RC.list.length;
+  if (!RC.list.length) return;
+  if (typeof roomsInit === "function") { RCF.on = false; roomsInit(n); return; }
+  rcFbInit(n);
+}
+function rcAfterStart() {
+  if (!RC.list.length) return;
+  const cp = LV.cpPos && LV.cpFloor === LV.n ? LV.cpPos : null;
+  const to = RC.load || (cp && RC.cpRoom[cp.n]);
+  if (!to) return;
+  if (typeof roomsSkipTo === "function" && !RCF.on) roomsSkipTo(to); else rcFbSkipTo(to);
+}
+function rcAllResolved() {
+  if (!RC.list.length) return true;
+  if (RCF.on) return RCF.list.every((R) => R.state === "resolved");
+  if (typeof RM !== "undefined" && RM.rooms) return RC.list.every((d) => RM.rooms.get(d.id)?.state === "resolved");
+  return true;
+}
+function rcRoomState(id) { if (RCF.on) return RCF.byId.get(id)?.state; if (typeof RM !== "undefined") return RM.rooms?.get(id)?.state; return null; }
+function rcResolve(id) { if (RCF.on) { const R = RCF.byId.get(id); if (R) R.scripted = true; } else if (typeof roomResolve === "function") roomResolve(id); }
+function rcInBox(b, p, pad = 0) {
+  const x0 = LVX(b.x), z0 = LVZ(b.z), y0 = b.y || 0;
+  return p.x > x0 - pad && p.x < x0 + b.w + pad && p.z > z0 - pad && p.z < z0 + b.d + pad && p.y > y0 - 1 && p.y < y0 + (b.h || 8) + 1;
+}
+// ---------- per step (called from lvStep on built floors) ----------
+const _rcv = new THREE.Vector3();
+function rcStep(dt) {
+  if (!player || player.dead) return;
+  const pp = lvP();
+  for (const R of RC.rings) rcRingStep(R, dt);
+  for (const it of RC.items) {
+    if (it.got) continue;
+    if (it.m && it.kind === "chip") { it.m.rotation.y += dt * 1.6; it.halo.rotation.x += dt; }
+    if (Math.hypot(pp.x - it.x, pp.z - it.z) < 1.6 && Math.abs(pp.y - 1 - it.y) < 1.5) {
+      it.got = true; sfx.pickup?.();
+      if (it.kind === "chip") { it.m.visible = it.halo.visible = false; flash(`Protocol chip · ${it.label}`, "var(--blood)"); try { const s = new Set(JSON.parse(localStorage.getItem("res.chips") || "[]")); s.add(it.id); localStorage.setItem("res.chips", JSON.stringify([...s])); } catch {} ev("protocolChip", { id: it.id }); }
+      else if (it.kind === "grant") it.fn(it);
+    }
+  }
+  for (const F of RC.falls) if (pp.y < F.yMin && rcInBox({ ...F.box, y: F.yMin - 40, h: 80 }, pp)) {
+    const [x, z, y] = F.at; player.body.setTranslation({ x: LVX(x), y: y + 1.2, z: LVZ(z) }, true); player.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+    player.hp = Math.max(1, player.hp - F.dmg); flash("Fall · height lost", "var(--amber)"); glitch(0.4); shake = Math.max(shake, 0.2);
+  }
+  if (RCF.on) rcFbStep(dt);
+  if (!LV.cleared && RC.list.length && rcAllResolved()) lvCleared();
+}
+// the floor's exit opens only when every room on it is resolved
+{
+  const _lvCleared = lvCleared;
+  lvCleared = function () { if (RC.list.length && LV.n === RC.list[0].floor && !rcAllResolved()) return; return _lvCleared(); };
+}
+// floors that have a start() of their own (Floor 01 starts in the capsule) use it; every floor then skips to its room
+{
+  const _lvStart = lvStart;
+  lvStart = function () {
+    if (RC.load) { const d = rcDefs()[RC.load]; if (d?.cp) { const [x, z, y = 0, yw = 0] = d.cp; LV.cpPos = { x: LVX(x), y, z: LVZ(z), n: 0, yaw: yw }; LV.cpFloor = d.floor; } }
+    if (LV.F?.start) LV.F.start(); else _lvStart();
+    rcAfterStart(); RC.load = null;
+  };
+}
+// built floors: Floor 01 is a room chain too when FLOORS[1] exists
+function lvBuiltN() { return state.mode === "floor" && (state.floor || 1) >= (FLOORS[1]?.build ? 1 : 2); }
+
+// ---------- fallback room runner (only until the room system, C1, is merged) ----------
+const RCF = { on: false, list: [], byId: new Map() };
+function rcAt(c, d) { const a = c.at; return a.length === 3 ? [a[0], a[1], a[2]] : [a[0], d.box?.y || 0, a[1]]; }
+function rcFbInit(n) {
+  RCF.on = true; RCF.byId = new Map();
+  RCF.list = RC.list.map((d) => { const R = { id: d.id, def: d, state: "dormant", t: 0, cast: [] }; RCF.byId.set(d.id, R); return R; });
+  for (const R of RCF.list) {
+    const d = R.def; const add = (c, trig) => { if (c.t === "boss") return; const [x, y, z] = rcAt(c, d); const s = lvEnemy(c.t === "spotter" ? "gunman" : c.t, x, z, y, { trig, alert: !!c.alert }); if (s) R.cast.push(s); };
+    for (const c of d.cast || []) add(c, "rc:" + R.id);
+    if (d.clear?.type === "lift") { (d.clear.timeline || []).forEach((step, i) => step.cast.forEach((c) => add({ ...c, alert: true }, `rc:${R.id}:${i}`))); const L = d.clear.lift; lvPad(L.at[0], L.at[1], L.y0, L.y1 + 1.6, 2.2); }
+    if (d.clear?.type === "silence" && d.clear.reinf) d.clear.reinf.forEach((c) => add({ ...c, alert: true }, `rc:${R.id}:reinf`));
+  }
+}
+function rcFbSkipTo(id) {
+  for (const R of RCF.list) {
+    if (R.id === id) break;
+    R.state = "resolved"; lvSetShutter("seal:" + R.id, true); for (const s of R.cast) { s.done = true; LV.killed.add(s.id); }
+    R.def.onSkip?.(R);
+  }
+}
+function rcFbLive(R) {
+  R.state = "live"; R.t = 0; const d = R.def; lvTrig("rc:" + R.id);
+  if (d.clear?.type === "lockdown") lvSetShutter("seal:" + R.id, true);
+  for (const c of d.cast || []) if (c.t === "boss") { const [x, y, z] = rcAt(c, d); lvBoss(c.id, x, z, y); lvTrig("boss"); }
+  if (d.obj) setObjective(d.obj);
+  if (typeof TRV !== "undefined") TRV.roomReset?.();
+  ev("roomLive", { id: R.id, floor: d.floor, name: d.name }); d.onLive?.(R);
+}
+function rcFbResolve(R) {
+  R.state = "resolved"; lvSetShutter("seal:" + R.id, true);
+  for (const s of R.cast) if (!s.done) { s.done = true; LV.killed.add(s.id); } // reinforcements never called, unused timeline steps
+  if (R.def.kind !== "breath") flash(`${R.def.name} · clear`, "var(--cyan)");
+  ev("roomClear", { id: R.id, secs: R.t }); R.def.onClear?.(R);
+}
+function rcFbStep(dt) {
+  const pp = lvP();
+  RCF.list.forEach((R, i) => {
+    const d = R.def; if (R.state === "resolved") return;
+    const prev = RCF.list[i - 1];
+    if (R.state !== "live") { if ((!prev || prev.state !== "dormant") && rcInBox(d.box, pp)) rcFbLive(R); return; }
+    R.t += dt; d.tick?.(R, dt);
+    if (R.t > 1.5 && !R.entryShut) { const S = LV.shutters.find((s) => s.id === "entry:" + R.id); if (!S || pp.distanceTo(_rcv.set(S.X, pp.y, S.Z)) > 2.5) { R.entryShut = true; lvSetShutter("entry:" + R.id, false); } }
+    const trig = "rc:" + R.id; const own = R.cast.filter((s) => s.trig === trig);
+    if (d.twist && !R.twisted) {
+      const down = own.filter((s) => s.done && (!s.e || s.e.dead)).length; const at = d.twist.at;
+      if (at === "live" || (at === "half" && down >= own.length / 2) || (typeof at === "number" && R.t >= at)) { R.twisted = true; if (typeof d.twist.do === "function") d.twist.do(R); }
+    }
+    const ty = d.clear?.type || "purge"; let done = false;
+    if (ty === "script") done = !!R.scripted;
+    else if (ty === "lockdown") {
+      const next = RCF.list[i + 1];
+      if (!R.shut && R.t > (d.clear.time || 15)) { R.shut = true; lvSetShutter("seal:" + R.id, false); alarm(0.6); }
+      done = (!R.shut && next && rcInBox(next.def.box, pp)) || (R.shut && R.t > 2 && lvClearOf(trig));
+    } else if (ty === "lift") {
+      (d.clear.timeline || []).forEach((st, k) => { if (R.t >= st.t) lvTrig(`${trig}:${k}`); });
+      done = R.t > (d.clear.lift.time || 20) && R.cast.every((s) => s.done && (!s.e || s.e.dead || s.e.T.civ));
+    } else if (ty === "boss") done = R.t > 2 && lvClearOf("boss") && lvClearOf(trig);
+    else done = R.t > 0.5 && lvClearOf(trig);
+    if (done) rcFbResolve(R);
+  });
+}
+
+// ---------- Floor select: every room in ROOM_DEFS that has a floor gets a button ----------
+function rcRoomButtons() {
+  const by = {}; for (const [id, d] of Object.entries(rcDefs())) if (d.floor && d.cp) (by[d.floor] ||= []).push(id);
+  let h = "";
+  for (const n of Object.keys(by).sort()) {
+    const ids = rcChain(+n).map((d) => d.id).filter((id) => by[n].includes(id));
+    h += `<div class="rcrooms"><i>${String(n).padStart(2, "0")} rooms</i>${ids.map((id) => `<button type="button" data-room="${id}">${rcDefs()[id].name}</button>`).join("")}</div>`;
+  }
+  return h;
+}
+function rcLoadRoom(id) {
+  const d = rcDefs()[id]; if (!d) return;
+  stopVoice(); RC.load = id; LV.killed = new Set(); LV.cpIdx = 0;
+  state.mode = "floor"; state.floor = d.floor; state.checkpoint = 1; state.pendingRestart = true; state.pendingFresh = true;
+  $("m-floors").hidden = true; $("menu").hidden = true; begin();
+}
+{
+  const st = document.createElement("style");
+  st.textContent = `#m-floors .rcrooms{display:flex;flex-wrap:wrap;gap:4px;align-items:baseline;padding:2px 0 6px}#m-floors .rcrooms i{font-style:normal;font-size:10px;letter-spacing:.14em;color:var(--amber,#ffb547);text-transform:uppercase;min-width:6.5em}
+#m-floors .rcrooms button{padding:4px 8px;font-size:10px;letter-spacing:.08em;border-color:rgba(217,226,234,0.12)}`;
+  document.head.appendChild(st);
+  $("m-floors").addEventListener("click", (e) => { const id = e.target.closest("button")?.dataset.room; if (id) { e.stopPropagation(); rcLoadRoom(id); } });
+}
+// clear the kit's lists whenever a level is rebuilt
+{
+  const _lvReset = lvReset;
+  lvReset = function () { rcBuildReset(); return _lvReset(); };
+}
+function rcBuildReset() { RC.items = []; RC.rings = []; RC.falls = []; RC.cpRoom = {}; RC.list = []; RCF.on = false; RCF.list = []; LV.bossAdds = null; globalThis.POD_AT = null; }
+
+// ==== floors 01-03 as room chains (C6) ====
+// Doc sections 3-5. Each floor is the blueprint's shell cut into rooms with seals; every room is a ROOM_DEFS entry
+// (doc 12.1 + box.y). Coordinates are blueprint metres; cast yaw uses the player's convention (0 faces -z / north).
+const RCF_YAW = { n: 0, s: Math.PI, e: -Math.PI / 2, w: Math.PI / 2 };
+// a gondola / window-washer cradle: deck, rails, two hangers up to the rail
+function rcGondola(x1, z1, x2, z2, y, hang = 10.5) {
+  lvSlab(x1, z1, x2, z2, y, LV_FLOORMAT.steel(), 0.3); lvEdgeRails(x1, z1, x2, z2, y);
+  for (const x of [x1 + 0.3, x2 - 0.3]) lvBox(LVX(x), (y + hang) / 2, LVZ((z1 + z2) / 2), 0.06, hang - y, 0.06, M.mullion, { noCollide: true, shadow: false });
+}
+
+// ======================================================================== FLOOR 01 ACTIVATION (96 x 64)
+FLOORS[1] = {
+  name: "Activation", sub: "Lab 7 · the armory · the gantry · the hall", x0: 4, x1: 100, z0: 12, z1: 76,
+  exit: [50, 61, 0, "s"],
+  objective: "Clear the cold lab with your hands",
+  build() {
+    const stone = LV_FLOORMAT.stone(), conc = LV_FLOORMAT.concrete(), carpet = LV_FLOORMAT.carpet(), dark = LV_FLOORMAT.panelDark(), panel = LV_FLOORMAT.panel(), steel = LV_FLOORMAT.steel();
+    LV.darks.push({ x1: LVX(4), x2: LVX(28), z1: LVZ(12), z2: LVZ(52) });
+    // ground, with the armory pit cut out (x 38..56, the full depth of the armory)
+    lvSlab(4, 12, 38, 76, 0, conc, 1); lvSlab(56, 12, 100, 76, 0, stone, 1); lvSlab(38, 32, 56, 76, 0, carpet, 1);
+    lvSlab(38, 12, 56, 32, -6, LV_FLOORMAT.darkstone(), 0.5);
+    lvWall(38, 12, 38, 32, -6, 0, dark); lvWall(56, 12, 56, 32, -6, 0, dark); lvWall(38, 12, 56, 12, -6, 0, dark); lvWall(38, 32, 56, 32, -6, 0, dark);
+    // ceilings
+    lvCeil(4, 52, 28, 76, 6, true, 6); lvCeil(4, 12, 28, 52, 6, true, 8); lvCeil(28, 12, 60, 32, 10, true, 8); lvCeil(60, 12, 72, 32, 10, false);
+    lvCeil(72, 12, 100, 42, 7, true, 7); lvCeil(72, 42, 100, 76, 10, true, 7); lvCeil(28, 32, 72, 76, 12, true, 8);
+    // shell: west and south walls, the north facade (glass where the rooms look out, spandrel above), the sealed east wing
+    lvWall(4, 12, 4, 76, 0, 12, dark); lvWall(4, 76, 100, 76, 0, 12, dark);
+    lvGlass(4, 12, 28, 12, 0, 6, { ext: true }); lvWall(4, 12, 28, 12, 6, 12, dark);
+    lvGlass(28, 12, 56, 12, 0, 10, { ext: true }); lvWall(28, 12, 56, 12, 10, 12, dark);
+    lvWall(56, 12, 60, 12, 4, 12, dark); lvWall(60, 12, 100, 12, 0, 12, dark);
+    lvWall(100, 12, 100, 26, 0, 12, dark); lvWall(100, 26, 100, 30, 3.5, 12, dark); lvWall(100, 30, 100, 38, 0, 12, dark);
+    lvWall(100, 38, 100, 42, 0, 3, dark); lvWall(100, 38, 100, 42, 6.6, 12, dark); lvWall(100, 42, 100, 76, 0, 12, dark);
+    // -------- 1 Cradle (breath) x4..12 z66..76: the capsule faces east into the lab
+    globalThis.POD_AT = { x: LVX(6.2), z: LVZ(71) }; buildPod(!state.boot);
+    lvWall(4, 66, 12, 66, 0, 6, panel);
+    lvGlass(12, 66, 12, 69, 0, 3.2); lvGlass(12, 72, 12, 76, 0, 3.2); lvWall(12, 66, 12, 76, 3.2, 6, panel);
+    rcEntry("cold_lab_f01", 12, 69, 12, 72, 0, 3.2);
+    // -------- 2 Cold Lab x4..28 z52..76
+    lvWall(4, 52, 20, 52, 0, 6, panel); lvWall(26, 52, 28, 52, 0, 6, panel); lvWall(20, 52, 26, 52, 4, 6, panel); rcSeal("cold_lab_f01", 20, 52, 26, 52, 0, 4);
+    lvWall(28, 52, 28, 76, 0, 12, dark);
+    lvRack(5, 58, 0, 1.2, 8, 2.6); lvRack(27, 70, 0, 1, 8, 2.6); lvRack(16, 75, 0, 6, 1, 2.2);
+    lvDesk(16, 60, 0, 0, { w: 2.2, lamp: true }); lvDesk(22, 69, 0, Math.PI, { w: 2.2 }); lvDesk(10, 56, 0, 0);
+    lvCrate(24, 56, 0, 1.4); lvCrate(14, 66, 0, 1.2); stimBox(LVX(25.5), LVZ(73.5), 0, Math.PI);
+    // -------- 3 Charging Bays (breath, dark) x4..28 z12..52
+    for (const z of [16, 24, 32, 40]) { lvRack(9, z, 0, 4, 3, 2.4); lvRack(23, z, 0, 4, 3, 2.4); }
+    stimBox(LVX(16), LVZ(46), 0, 0);
+    lvFrag(6, 14.5, 0, "OKAFOR-REYES (bay log): They charge you in the dark so you don't count the others. There were eleven of you. You're the one that woke.");
+    lvWall(28, 12, 28, 20, 0, 10, dark); lvWall(28, 26, 28, 32, 0, 10, dark); lvWall(28, 20, 28, 26, 4, 10, dark); lvWall(28, 32, 28, 52, 0, 12, dark);
+    rcEntry("armory_f01", 28, 20, 28, 26, 0, 4);
+    // -------- 4 Armory x28..60 z12..32: supply shelf and the sword on the west ledge, the pit, the window seal on the east ledge
+    lvWall(28, 32, 72, 32, 0, 12, dark);
+    lvWall(60, 12, 60, 26, 0, 10, dark); lvDry(60, 26, 60, 30, 0, 2.6); lvWall(60, 26, 60, 30, 2.6, 10, dark); lvWall(60, 30, 60, 32, 0, 10, dark);
+    lvRack(30, 13.5, 0, 6, 1, 2.4); lvRack(30, 30.5, 0, 6, 1, 2.4); lvCrate(35.5, 29.8, 0, 1.2);
+    const sw = buildSwordMesh(); sw.rotation.set(0, 0, Math.PI / 2 - 0.2);
+    rcGrant(33, 22, 0, sw, (it) => { levelGroup.remove(it.m); FLOORS[1].arm(true); rcResolve("armory_f01"); });
+    rcAnchor(42, 22, 8.4, 10); rcAnchor(47, 17, 8.8, 10); rcAnchor(52, 26, 8.4, 10);
+    lvPad(39.4, 22, -6, 1.4, 1.1);
+    rcSeal("armory_f01", 56, 12, 60, 12, 0, 4);
+    // the tool crib behind the drywall: a dead end with a reason (rule 9)
+    stimBox(LVX(66), LVZ(22), 0, 0); lvCrate(68, 15, 0, 1.6); lvRack(70, 26, 0, 1, 6, 2.4);
+    lvWall(72, 12, 72, 34, 0, 12, dark); lvWall(72, 37, 72, 42, 0, 12, dark); lvWall(72, 34, 72, 37, 0, 4, dark); lvWall(72, 34, 72, 37, 6.5, 12, dark);
+    // -------- 5 Gantry Rail (outside): balcony, the amber rail at +10.5, gondolas, the NE davit platform, the breach landing
+    lvSlab(52, 6, 64, 12, 0, conc, 0.5); lvRail(52, 6, 64, 6, 0); lvRail(52, 6, 52, 12, 0); lvRail(64, 6, 64, 12, 0);
+    fixedBox(LVX(71.5), 10.5, LVZ(5), 71, 0.35, 0.35, M.amber, { shadow: false });
+    fixedBox(LVX(107), 10.5, LVZ(24.5), 0.35, 0.35, 39, M.amber, { shadow: false });
+    for (const [x, z] of [[36, 5], [107, 5], [107, 44], [72, 5]]) fixedBox(LVX(x), 15, LVZ(z), 0.25, 9, 0.25, M.mullion, { noCollide: true });
+    rcGondola(65.5, 6, 70.5, 8, 3); rcGondola(85.5, 6, 90.5, 8, 3);
+    lvSlab(101, -1, 109, 7, 6, LV_FLOORMAT.steel(), 0.3); lvEdgeRails(101, -1, 109, 7, 6, "nsew");
+    lvSlab(100.3, 25, 106.5, 31, 0, conc, 0.5); lvEdgeRails(100.3, 25, 106.5, 31, 0, "nse");
+    rcGondola(100.4, 37, 106.4, 43, 3);
+    rcWallRun(73, 12, 99, 12, 2.6, 7.6, -1);
+    rcSling(80, 3.5, 12.5); rcSling(96, 3.5, 12.5);
+    rcCable(105, 10.2, 6, 103.5, 4.6, 27.5);
+    stimBox(LVX(105.5), LVZ(29.5), 0, Math.PI);
+    rcSeal("gantry_f01", 100.2, 26, 100.2, 30, 0, 3.5); rcReinf("gantry_f01", 100.2, 38, 100.2, 42, 3, 3.6);
+    if (typeof TRV !== "undefined" && TRV.addDoor) TRV.addDoor(LVX(99.8), LVZ(28), "z", 4, 3.5);
+    // -------- 6 Breach Corridor (east wing and server room): offices either side of a corridor, then the server aisle
+    rcEntry("breach_f01", 99.4, 26, 99.4, 30, 0, 3.5);
+    lvDry(80, 24, 86, 24, 0, 3); lvDry(88, 24, 99.8, 24, 0, 3); lvDry(80, 32, 92, 32, 0, 3); lvDry(94, 32, 99.8, 32, 0, 3);
+    for (const [x, z, r] of [[84, 17, 0], [90, 17, 0], [96, 17, 0], [84, 37, Math.PI], [90, 37, Math.PI], [96, 37, Math.PI]]) lvDesk(x, z, 0, r, { w: 1.8 });
+    lvCrate(74.5, 35.5, 0, 2); lvCrate(74.5, 35.5, 2, 1.4);
+    lvWall(72, 42, 76, 42, 0, 10, dark); lvWall(80, 42, 100, 42, 0, 10, dark); lvWall(76, 42, 80, 42, 4, 10, dark);
+    lvRack(83, 59, 0, 1.2, 30, 3.2); rcWallRun(82.4, 45, 82.4, 73, 0.6, 3.0, -1);
+    for (const z of [50, 56, 62, 68]) lvRack(92, z, 0, 12, 1.6, 2.6);
+    lvBox(LVX(77), 1.25, LVZ(54), 10, 0.4, 0.5, LV_FLOORMAT.steel(), { shadow: true });
+    rcFlip(77, 60, 0, 9.2, 1.2, RCF_YAW.w);
+    lvWall(72, 42, 72, 56, 0, 12, dark); lvWall(72, 56, 72, 62, 0, 7, dark); lvWall(72, 56, 72, 62, 9.5, 12, dark); lvWall(72, 62, 72, 64, 0, 12, dark);
+    lvWall(72, 64, 72, 70, 4.5, 12, dark); lvWall(72, 70, 72, 76, 0, 12, dark);
+    rcSeal("breach_f01", 72, 64, 72, 70, 0, 4.5);
+    // -------- 7 Desk Farm (the hall, 44 x 44, ceiling 12): catwalk, vent ledge and the cable, pods, the lift core
+    rcEntry("desk_farm_f01", 71.4, 64, 71.4, 70, 0, 4.5);
+    lvSlab(28, 32, 72, 38, 4, steel, 0.4); lvRail(28, 38, 72, 38, 4); lvPad(66, 40, 0, 5.4, 1.2);
+    lvSlab(68, 56, 72, 62, 7, steel, 0.3); lvEdgeRails(68, 56, 72, 62, 7, "nsw");
+    rcCable(69.5, 9.6, 59, 31, 7.4, 41);
+    rcAnchor(40, 52, 10.8, 12); rcAnchor(60, 66, 10.8, 12);
+    for (const [x, z] of [[36, 46], [64, 46], [36, 68], [64, 68]]) lvPillar(x, z, 1.2, 1.2, 0, 12, LV_FLOORMAT.concrete());
+    for (const x of [32, 35.5, 39]) { lvDesk(x, 44, 0, 0); lvDesk(x, 46.4, 0, Math.PI); }
+    for (const x of [56, 59.5]) { lvDesk(x, 44, 0, 0); lvDesk(x, 46.4, 0, Math.PI); }
+    for (const x of [38, 41.5, 45]) lvDesk(x, 72.5, 0, Math.PI); for (const x of [55, 58.5, 62]) lvDesk(x, 72.5, 0, Math.PI);
+    // glass meeting pods with walkable roofs (sling up to them)
+    for (const [a, b] of [[30, 58], [62, 49]]) { lvGlass(a, b, a + 6, b, 0, 3); lvGlass(a, b + 6, a + 6, b + 6, 0, 3); lvGlass(a, b, a, b + 6, 0, 3); lvGlass(a + 6, b, a + 6, b + 2, 0, 3); lvGlass(a + 6, b + 4, a + 6, b + 6, 0, 3); lvSlab(a, b, a + 6, b + 6, 3.2, steel, 0.2); lvDesk(a + 3, b + 3, 0, 0, { w: 2.4, d: 1.2, monitor: false }); }
+    rcSling(33, 61, 5.8);
+    for (const s of [[50, 40, 50, 45], [57, 64, 57, 70], [40, 56, 44, 56]]) lvDry(...s);
+    for (const [x, z, s] of [[31, 39.8, 1.6], [54, 66, 1.4], [44, 51, 1.2]]) lvCrate(x, z, 0, s);
+    stimBox(LVX(31), LVZ(74), 0, 0); stimBox(LVX(70), LVZ(46), 0, -Math.PI / 2);
+    lvPillar(50, 57.45, 7, 3.9, 0, 12, LV_FLOORMAT.concrete()); lvPillar(47.5, 61, 1.2, 3, 0, 12, LV_FLOORMAT.concrete()); lvPillar(52.5, 61, 1.2, 3, 0, 12, LV_FLOORMAT.concrete());
+    lvBox(LVX(50), 7.8, LVZ(61), 3.8, 8.4, 3, LV_FLOORMAT.concrete());
+    rcCheckpoints(1);
+  },
+  // the armory grants everything (Kavin's Floor 01 rule): blade + grapple, pistol, disc and the arsenal
+  arm(fresh) {
+    player.ownsSword = true; player.ownsPistol = true; player.ownsDisc = true; giveArsenal(); player.ammo = GUN.mag; player.weapon = "sword"; state.phase = 2; setViewModel();
+    if (!fresh) return;
+    sfx.pickup(); flash("Armory unlocked · blade, pistol, disc and the arsenal (4–8)", "var(--cyan)"); glitch(0.7);
+    setObjective("Swing across the pit on the amber anchors");
+    log("ARBITER: The blade carries a grapple. Look at an amber anchor and hold E. Let go at the top of the swing.");
+    later(() => log("Tip: press 3 for the steam pistol, Q for the disc. Keys 4–8 are the arsenal.", "tip"), 2600);
+  },
+  start() {
+    const cp = LV.cpPos && LV.cpFloor === 1 ? LV.cpPos : null;
+    const order = RC.list.map((d) => d.id); const at = cp ? (RC.load || RC.cpRoom[cp.n]) : null;
+    const armed = at && order.indexOf(at) > order.indexOf("armory_f01");
+    if (cp) player = createPlayer(new THREE.Vector3(cp.x, cp.y + 1.2, cp.z), cp.yaw);
+    else player = createPlayer(new THREE.Vector3(POD_AT.x + 0.15, 1.2, POD_AT.z), -Math.PI / 2);
+    state.phase = 1; player.stims = Math.max(1, LV.stims ?? 1); setViewModel();
+    if (armed) this.arm(false);
+    updateCount(); setObjective(armed ? "Find the next room" : this.objective); $("objl").textContent = "Floor 01 · Activation";
+    for (const c of LV.cps) if (cp && c.n <= LV.cpIdx) { c.hit = true; c.flag.material = M.rackLed; }
+    if (cp) { lvFade(0); log(RC.load ? `Room loaded · ${rcDefs()[RC.load]?.name}` : `Checkpoint ${cp.n} restored.`, "tip"); return; }
+    const d0 = state.boot ? BOOT_END * 1000 + 300 : 0;
+    later(() => log("ARBITER: Your chassis has no weapons yet. The lab staff do not know that. Use your hands."), 300 + d0);
+    later(() => log("Tip: LMB punches. Every fourth hit is an uppercut. Hold RMB to block, tap it as a fist lands to parry.", "tip"), 2600 + d0);
+    later(() => log("Tip: when an enemy staggers, F does a mini finisher. You can't be hurt while it plays.", "tip"), 6000 + d0);
+  },
+  tick() {},
+};
+rcDef("cradle_f01", { floor: 1, name: "Cradle", kind: "breath", box: { x: 4, z: 66, w: 8, d: 10, h: 6 }, clear: { type: "purge" }, cast: [], next: "cold_lab_f01" });
+rcDef("cold_lab_f01", {
+  floor: 1, name: "Cold Lab", kind: "intro", box: { x: 12, z: 52, w: 16, d: 24, h: 6 }, cp: [8.5, 70.5, 0, RCF_YAW.e],
+  entries: [{ id: "main", at: [12, 70.5], door: true }, { id: "glass", at: [12, 67.5] }],
+  clear: { type: "purge" }, obj: "Clear the cold lab with your hands",
+  cast: [{ t: "worker", at: [16, 59.4], yaw: RCF_YAW.n, start: "desk" }, { t: "worker", at: [22, 69.6], yaw: RCF_YAW.s, start: "desk" }, { t: "worker", at: [10, 56.5], yaw: RCF_YAW.n, start: "idle" }, { t: "brawler", at: [20, 63], yaw: RCF_YAW.w, start: "patrol" }],
+  slots: [{ allow: ["brawler", "gunman"], at: [20, 63] }],
+  lines: { anchors: [], sling: [], wallrun: [], cables: [], flip: [] }, toys: [{ k: "rack", at: [5, 58] }, { k: "rack", at: [27, 70] }],
+  challenges: [{ k: "time", par: 20 }, { k: "allFinish" }, { k: "noDamage" }], next: "bays_f01",
+});
+rcDef("bays_f01", {
+  floor: 1, name: "Charging Bays", kind: "breath", box: { x: 4, z: 12, w: 24, d: 40, h: 6 }, clear: { type: "purge" }, cast: [], next: "armory_f01",
+  onLive() { later(() => log("OKAFOR-REYES (on a dead channel): The bays. Don't look at the other cradles. Go east, the armory is through the supply door.", "okafor"), 600); },
+});
+rcDef("armory_f01", {
+  floor: 1, name: "Armory", kind: "intro", box: { x: 28, z: 12, w: 32, d: 20, h: 10 }, cp: [24, 23, 0, RCF_YAW.e],
+  entries: [{ id: "main", at: [28, 23], door: true }],
+  clear: { type: "script" }, obj: "Take the sword from the supply shelf", cast: [],
+  lines: { anchors: [[42, 8.4, 22], [47, 8.8, 17], [52, 8.4, 26]], sling: [], wallrun: [], cables: [], flip: [] }, toys: [{ k: "pit", at: [47, 22] }],
+  challenges: [{ k: "time", par: 18 }, { k: "noDamage" }, { k: "oneWeapon" }], next: "gantry_f01",
+  onClear() { setObjective("Out the window. The gantry rail runs to the east wing"); },
+});
+rcDef("gantry_f01", {
+  floor: 1, name: "Gantry Rail", kind: "test", box: { x: 52, z: -4, w: 60, d: 16, h: 20 }, cp: [58, 19, 0, RCF_YAW.n],
+  entries: [{ id: "main", at: [58, 12], door: true }, { id: "show", at: [74, 11, 5], show: true }],
+  clear: { type: "silence", delay: 6, reinf: [{ t: "gunman", at: [102.5, 3, 39.5] }, { t: "gunman", at: [104.5, 3, 41.5] }] }, obj: "Silence the spotter at the end of the gantry",
+  cast: [{ t: "gunman", at: [68, 3, 7], yaw: RCF_YAW.e, start: "guard" }, { t: "gunman", at: [88, 3, 7], yaw: RCF_YAW.e, start: "guard" }, { t: "gunman", at: [103, 6, 1], yaw: RCF_YAW.n, start: "idle" }, { t: "gunman", at: [107, 6, 4], yaw: RCF_YAW.e, start: "idle" }, { t: "spotter", at: [103.4, 3, 40], yaw: RCF_YAW.e, start: "guard" }],
+  slots: [{ allow: ["gunman", "drone"], at: [88, 3, 7] }],
+  lines: { anchors: [], sling: [[80, 12.5, 3.5], [96, 12.5, 3.5]], wallrun: [[[73, 12], [99, 12]]], cables: [[[105, 10.2, 6], [103.5, 4.6, 27.5]]], flip: [] },
+  toys: [{ k: "rail", at: [71, 5] }],
+  challenges: [{ k: "silence" }, { k: "noFloor" }, { k: "time", par: 30 }], next: "breach_f01",
+});
+rcDef("breach_f01", {
+  floor: 1, name: "Breach Corridor", kind: "twist", box: { x: 72, z: 12, w: 28, d: 64, h: 10 }, cp: [103.5, 28, 0, RCF_YAW.w],
+  entries: [{ id: "main", at: [100, 28], door: true }],
+  clear: { type: "lockdown", time: 15 }, obj: "Breach the east wing. The far seal closes in 15 seconds",
+  cast: [{ t: "gunman", at: [90, 18], yaw: RCF_YAW.n, start: "desk" }, { t: "gunman", at: [86, 38], yaw: RCF_YAW.s, start: "desk" }, { t: "bot", at: [92, 59], yaw: RCF_YAW.e, start: "guard" }],
+  lines: { anchors: [], sling: [], wallrun: [[[82.4, 45], [82.4, 73]]], cables: [], flip: [[77, 0, 60]] }, toys: [{ k: "rack", at: [83, 59] }],
+  challenges: [{ k: "time", par: 11 }, { k: "noDamage" }, { k: "allFinish" }], next: "desk_farm_f01",
+});
+rcDef("desk_farm_f01", {
+  floor: 1, name: "Desk Farm", kind: "arena", box: { x: 28, z: 32, w: 44, d: 44, h: 12 }, cp: [76, 67, 0, RCF_YAW.w],
+  entries: [{ id: "main", at: [72, 67], door: true }, { id: "catwalk", at: [72, 4, 35.5] }, { id: "show", at: [72, 7, 59], show: true }],
+  clear: { type: "purge" }, obj: "Clear the hall. The freight lift is in the core",
+  cast: [{ t: "gunman", at: [35.5, 44.8], yaw: RCF_YAW.w, start: "desk" }, { t: "gunman", at: [59.5, 45.6], yaw: RCF_YAW.w, start: "desk" }, { t: "gunman", at: [58.5, 71.8], yaw: RCF_YAW.w, start: "desk" },
+    { t: "gunman", at: [46, 4, 35], yaw: RCF_YAW.w, start: "guard" }, { t: "brawler", at: [44, 62], yaw: RCF_YAW.w, start: "patrol" }, { t: "brawler", at: [33, 54], yaw: RCF_YAW.s, start: "patrol" }],
+  slots: [{ allow: ["gunman", "shield"], at: [59.5, 45.6] }, { allow: ["brawler", "bot"], at: [44, 62] }],
+  lines: { anchors: [[40, 10.8, 52], [60, 10.8, 66]], sling: [[33, 5.8, 61]], wallrun: [], cables: [[[69.5, 9.6, 59], [31, 7.4, 41]]], flip: [] },
+  toys: [{ k: "pod", at: [33, 61] }, { k: "pod", at: [65, 52] }, { k: "dry", at: [50, 42] }],
+  challenges: [{ k: "time", par: 30 }, { k: "showoff" }, { k: "allFinish" }],
+});
+
+// ======================================================================== FLOOR 02 LOBBY PROTOCOL (128 x 74, plus the north annex)
+FLOORS[2] = {
+  name: "Lobby Protocol", sub: "Security concourse · Grand lobby · the express shaft", x0: 4, x1: 132, z0: -56, z1: 80, city: 1,
+  arrive: [7.5, 36, 0, "e"], exit: [128, -35, 32, "w"],
+  objective: "Get through the security concourse",
+  lines: ["ARBITER: The tower's security floor. They can out-range you here. Slide while you shoot.", "Tip: every room has a faster way in. Look up."],
+  build() {
+    const stone = LV_FLOORMAT.stone(), conc = LV_FLOORMAT.concrete(), dstone = LV_FLOORMAT.darkstone(), dark = LV_FLOORMAT.panelDark(), steel = LV_FLOORMAT.steel(), panel = LV_FLOORMAT.panel();
+    LV.bossAdds = { gatekeeper: [["S", -6, -5, 0], ["S", -6, 5, 0], ["G", -20, -14, 6], ["G", 20, 14, 6]] };
+    // ground and ceilings of the original floor; the bay ceiling has a hatch for the showoff crawl
+    lvSlab(4, 30, 22, 56, 0, conc, 1); lvSlab(22, 6, 74, 80, 0, stone, 1); lvSlab(74, 6, 132, 80, 0, dstone, 1);
+    lvCeil(4, 30, 22, 50, 8, true, 6); lvCeil(4, 50, 10, 56, 8, false); lvCeil(14, 50, 22, 56, 8, false); lvCeil(10, 54, 14, 56, 8, false);
+    lvCeil(22, 17, 74, 69, 16, true, 7); lvCeil(22, 6, 74, 17, 16, false); lvCeil(22, 69, 74, 80, 16, false); lvCeil(74, 6, 132, 80, 24, true, 9);
+    lvWall(4, 30, 22, 30, 0, 8); lvWall(4, 56, 22, 56, 0, 8); lvWall(4, 30, 4, 56, 0, 8);
+    lvWall(22, 6, 22, 38, 0, 16); lvWall(22, 48, 22, 50, 0, 16); lvWall(22, 54, 22, 80, 0, 16); lvWall(22, 38, 22, 48, 8, 16); lvWall(22, 50, 22, 54, 0, 8.4); lvWall(22, 50, 22, 54, 10.6, 16);
+    lvWall(22, 6, 74, 6, 0, 16, dark); lvWall(22, 80, 74, 80, 0, 16, dark);
+    lvWall(74, 6, 80, 6, 0, 24, dark); lvWall(84, 6, 132, 6, 0, 24, dark); lvWall(80, 6, 84, 6, 4, 24, dark);
+    lvWall(74, 6, 74, 80, 16, 24, dark);
+    lvGlass(132, 6, 132, 80, 0, 24, { ext: true }); lvGlass(74, 80, 132, 80, 0, 24, { ext: true });
+    // -------- 1 Revolving Doors (the bay): turnstiles with a slide gap, the ceiling hatch crawl
+    for (const z of [34, 39, 47, 52]) lvBench(15, z, 0, 0.6, 3, 1.05);
+    lvBox(LVX(15), 1.3, LVZ(43), 0.3, 0.3, 5, steel); for (const z of [40.5, 45.5]) lvPillar(15, z, 0.3, 0.3, 0, 1.45, steel);
+    rcFlip(12, 52, 0, 10, 1.1, RCF_YAW.e);
+    lvSlab(10, 50, 22, 54, 8.4, steel, 0.3, { walk: false }); lvWall(10, 50, 22, 50, 8.4, 10.6, dark); lvWall(10, 54, 22, 54, 8.4, 10.6, dark); lvSlab(10, 50, 22, 54, 10.8, dark, 0.2, { walk: false });
+    rcSeal("revolving_f02", 22, 38, 22, 48, 0, 8);
+    // -------- 2 Security Desk (concourse): the ring, benches, the showoff ledge over the bay door
+    rcEntry("security_f02", 22.6, 38, 22.6, 48, 0, 8);
+    lvSlab(22, 48, 28, 56, 8.4, steel, 0.4); lvEdgeRails(22, 48, 28, 56, 8.4, "nse");
+    for (const [a, b, c, d] of [[22, 6, 74, 17], [22, 69, 74, 80], [74, 6, 132, 12], [74, 74, 132, 80]]) { lvSlab(a, b, c, d, 8, stone, 0.5); lvCeilUnder(a, b, c, d, 7.5); }
+    lvRail(22, 17, 34, 17, 8); lvRail(38, 17, 52, 17, 8); lvRail(70, 17, 74, 17, 8); lvRail(74, 12, 100, 12, 8); lvRail(106, 12, 132, 12, 8);
+    lvRail(22, 69, 28, 69, 8); lvRail(46, 69, 58, 69, 8); lvRail(62, 69, 74, 69, 8); lvRail(74, 74, 100, 74, 8); lvRail(106, 74, 124, 74, 8);
+    lvWall(52, 6, 52, 9, 8, 16); lvWall(52, 12.5, 52, 17, 8, 16); lvWall(64, 6, 64, 9, 8, 16); lvWall(64, 12.5, 64, 17, 8, 16);
+    lvGlass(52, 17, 64, 17, 8, 11.5); lvWall(52, 17, 64, 17, 11.5, 16, dark);
+    lvGlass(28, 69, 44, 69, 8, 11.5); lvWall(28, 69, 46, 69, 11.5, 16, dark); lvWall(46, 69, 46, 73, 8, 16); lvWall(46, 77, 46, 80, 8, 16); lvWall(46, 73, 46, 77, 11.6, 16);
+    rcReinf("security_f02", 46, 73, 46, 77, 8, 3.6);
+    lvDesk(37, 75, 8, Math.PI, { w: 2.2, d: 1, lamp: true }); lvBench(30, 78.5, 8, 3, 0.8, 0.45);
+    for (const [x, z] of [[56, 9], [61, 9]]) lvRack(x, z, 8, 3, 0.8, 2.2);
+    for (let z = 20; z < 68; z += 6) lvPillar(64, z + 3, 1.2, 1.2, 0, 3.2, steel);
+    lvCounterRing(42, 43, 8, 5, 0, -Math.PI / 2, 0.45);
+    for (const [x, z] of [[30, 26], [54, 26], [30, 60], [54, 60]]) lvBench(x, z, 0, 6, 1.4);
+    for (const [x, z, s] of [[58, 20, 1.8], [61, 21, 1.4], [58, 66, 1.8], [35, 34, 1.4], [50, 52, 1.4]]) lvCrate(x, z, 0, s);
+    for (const [x, z] of [[26, 40], [56, 46], [26, 64]]) lvPlanter(x, z, 0, 1.1);
+    lvPad(36, 19.5, 0, 9.6); lvPad(58, 66.5, 0, 9.6);
+    rcSling(42, 43, 12); rcWallRun(22.2, 58, 22.2, 68, 1, 6, 1);
+    // the seal is the whole gate line at x 68, floor to ceiling, mezzanines included
+    rcSeal("security_f02", 68, 6, 68, 80, 0, 16);
+    // -------- 3 Lobby Atrium: four cores with wall-run faces, bridges, the ring, the lockdown shutters (twist)
+    rcEntry("lobby_f02", 69, 6, 69, 80, 0, 16);
+    lvPad(103, 14.5, 0, 9.6); lvPad(103, 71.5, 0, 9.6); lvPad(77, 47.5, 0, 17.6);
+    for (const [x, z] of [[90, 28], [90, 58], [116, 28], [116, 58]]) { lvPillar(x, z, 7, 7, 0, 24, dark); lvAnchor(x, z + (z < 43 ? -3.9 : 3.9), 20); rcWallRun(x - 3.4, z + (z < 43 ? 3.5 : -3.5), x + 3.4, z + (z < 43 ? 3.5 : -3.5), 1, 9, z < 43 ? 1 : -1); }
+    lvSlab(74, 41, 132, 45, 16, stone, 0.5); lvRail(80, 41, 132, 41, 16); lvRail(74, 45, 132, 45, 16);
+    lvSlab(101, 12, 105, 74, 12, stone, 0.5); lvRail(101, 12, 101, 41, 12); lvRail(105, 12, 105, 41, 12); lvRail(101, 45, 101, 74, 12); lvRail(105, 45, 105, 74, 12);
+    lvHangRing(103, 43, 20, 6.5, 24);
+    for (const [x, z] of [[82, 20], [82, 66], [124, 20], [124, 66]]) lvBench(x, z, 0, 5, 1.4);
+    rcCable(78, 13, 10, 128, 11.5, 70);
+    lvShutter(93.5, 43, 112.5, 43, 0, 8, "lock:lobby_f02", false); lvShutter(119.5, 43, 132, 43, 0, 8, "lock:lobby_f02", false); lvShutter(74, 43, 86.5, 43, 0, 8, "lock:lobby_f02", false);
+    for (const [x, z, y] of [[26, 9, 8], [66, 76, 8], [110, 9, 8], [122, 77, 8], [8, 43, 0]]) stimBox(LVX(x), LVZ(z), y, 0);
+    lvFrag(31, 72.5, 8, "OKAFOR-REYES (log 2189-03): They asked me for a guard that never sleeps. I gave them a sword that can leave.");
+    rcSeal("lobby_f02", 80, 6, 84, 6, 0, 4);
+    // -------- north annex at ground: 4 Mail Room (breath), 5 Elevator Bank (the express shaft, a lift room)
+    lvSlab(74, -14, 132, 6, 0, conc, 1);
+    lvCeil(76, -6, 92, 6, 5, true, 5);
+    lvWall(76, -6, 76, 6, 0, 5, panel); lvWall(76, -6, 92, -6, 0, 5, panel); lvWall(92, -6, 92, -2, 0, 5, panel); lvWall(92, 2, 92, 6, 0, 5, panel); lvWall(92, -2, 92, 2, 3.6, 5, panel);
+    for (const x of [79, 83, 87]) lvRack(x, -5, 0, 3, 0.8, 2.2); lvBench(84, 1, 0, 6, 1.2, 0.9);
+    rcChip(80, -3, 0.9, "bigheads", "Big Heads"); stimBox(LVX(90), LVZ(4.5), 0, Math.PI);
+    // the shaft x 92..108, z -14..4, floor 0 to the boss level at +32; landings on both sides where they wait
+    lvWall(92, -14, 108, -14, 0, 32, dark); lvWall(108, -14, 108, 4, 0, 46, dark); lvWall(92, 4, 108, 4, 0, 46, dark);
+    lvWall(92, -14, 92, -6, 0, 46, dark); lvWall(92, -6, 92, -2, 5, 46, dark); lvWall(92, 2, 92, 4, 5, 46, dark); lvWall(92, -2, 92, 2, 5, 46, dark);
+    for (const y of [8, 16, 24]) { lvSlab(105, -12, 108, 2, y, steel, 0.4); lvRail(105, -12, 105, 2, y); }
+    for (const y of [12, 20]) { lvSlab(92, -12, 95, 2, y, steel, 0.4); lvRail(95, -12, 95, 2, y); }
+    for (const [x, z, y] of [[106.5, -9, 8.8], [93.5, 0, 16.8], [106.5, 0, 24.8]]) rcSling(x, z, y);
+    rcSeal("mail_f02", 92, -2, 92, 2, 0, 3.6);
+    // -------- 6 Gatekeeper (boss level at +32): 56 x 42, balconies at +6 for the adds, the exit lift on the east wall
+    fixedBox(LVX(104), 15.8, LVZ(-35), 56, 31.6, 42, M.tower, { shadow: false, noCollide: true });
+    lvSlab(76, -56, 132, -14, 32, dstone, 0.6); lvCeil(76, -56, 132, -14, 46, true, 9);
+    lvGlass(76, -56, 132, -56, 32, 46, { ext: true }); lvGlass(132, -56, 132, -14, 32, 46, { ext: true }); lvWall(76, -56, 76, -14, 32, 46, dark);
+    lvWall(76, -14, 97, -14, 32, 46, dark); lvWall(103, -14, 132, -14, 32, 46, dark); lvWall(97, -14, 103, -14, 36.5, 46, dark);
+    lvSlab(92, -14, 108, 4, 32, steel, 0.3, { walk: false }); // the shaft's roof, above the car's top stop
+    rcSeal("elevator_f02", 97, -14, 103, -14, 32, 4.5);
+    rcEntry("gatekeeper_f02", 97, -14.6, 103, -14.6, 32, 4.5);
+    lvSlab(78, -54, 90, -46, 38, steel, 0.4); lvEdgeRails(78, -54, 90, -46, 38, "se"); lvPad(84, -44.5, 32, 39.6);
+    lvSlab(118, -22, 130, -16, 38, steel, 0.4); lvEdgeRails(118, -22, 130, -16, 38, "nw"); lvPad(116.5, -19, 32, 39.6);
+    for (const [x, z] of [[92, -30], [116, -40]]) { lvPillar(x, z, 2, 2, 32, 46, dark); rcAnchor(x, z + 1.6, 43, 46); }
+    for (const [x, z] of [[96, -46], [112, -26]]) lvBench(x, z, 32, 4, 1.4);
+    rcCheckpoints(2);
+  },
+  tick() {},
+};
+rcDef("revolving_f02", {
+  floor: 2, name: "Revolving Doors", kind: "intro", box: { x: 4, z: 30, w: 18, d: 26, h: 8 },
+  entries: [{ id: "main", at: [7.5, 36], door: false }], clear: { type: "purge" }, obj: "Clear the security bay. Slide the turnstile gap",
+  cast: [{ t: "gunman", at: [19, 34], yaw: RCF_YAW.e, start: "guard" }, { t: "gunman", at: [19, 52], yaw: RCF_YAW.e, start: "guard" }, { t: "brawler", at: [17, 43], yaw: RCF_YAW.e, start: "idle" }],
+  lines: { anchors: [], sling: [], wallrun: [], cables: [], flip: [[12, 0, 52]] }, toys: [{ k: "turnstile", at: [15, 43] }],
+  challenges: [{ k: "time", par: 14 }, { k: "noDamage" }, { k: "oneWeapon" }], next: "security_f02",
+});
+rcDef("security_f02", {
+  floor: 2, name: "Security Desk", kind: "test", box: { x: 22, z: 6, w: 46, d: 74, h: 16 }, cp: [18, 43, 0, RCF_YAW.e],
+  entries: [{ id: "main", at: [22, 43], door: true }, { id: "show", at: [24, 8.4, 52], show: true }],
+  clear: { type: "silence", delay: 6, reinf: [{ t: "gunman", at: [42, 8, 75] }, { t: "shield", at: [38, 8, 76] }] }, obj: "Silence the spotter in the arsenal booth",
+  cast: [{ t: "spotter", at: [58, 8, 11], yaw: RCF_YAW.n, start: "guard" }, { t: "gunman", at: [30, 22], yaw: RCF_YAW.n, start: "desk" }, { t: "gunman", at: [54, 30], yaw: RCF_YAW.e, start: "guard" },
+    { t: "gunman", at: [32, 64], yaw: RCF_YAW.s, start: "idle" }, { t: "gunman", at: [44, 8, 12], yaw: RCF_YAW.n, start: "patrol" }, { t: "shield", at: [42, 50], yaw: RCF_YAW.e, start: "guard" }],
+  slots: [{ allow: ["gunman", "shield"], at: [54, 30] }],
+  lines: { anchors: [], sling: [[42, 12, 43]], wallrun: [[[22.2, 58], [22.2, 68]]], cables: [], flip: [] }, toys: [{ k: "ring", at: [42, 43] }],
+  challenges: [{ k: "silence" }, { k: "showoff" }, { k: "time", par: 35 }], next: "lobby_f02",
+});
+rcDef("lobby_f02", {
+  floor: 2, name: "Lobby Atrium", kind: "arena", box: { x: 68, z: 6, w: 64, d: 74, h: 24 }, cp: [64, 43, 0, RCF_YAW.e],
+  entries: [{ id: "main", at: [68, 43], door: true }, { id: "north", at: [68, 8, 12] }, { id: "south", at: [68, 8, 75] }],
+  clear: { type: "purge" }, obj: "Take the grand lobby. Get above them",
+  twist: { at: "half", do: () => { lvSetShutter("lock:lobby_f02", false); alarm(1.2); say("arbiter", "Lockdown shutters. The floor is cut in half. Go over."); } },
+  cast: [{ t: "shield", at: [78, 36], yaw: RCF_YAW.e, start: "guard" }, { t: "shield", at: [78, 50], yaw: RCF_YAW.e, start: "guard" }, { t: "gunman", at: [84, 39], yaw: RCF_YAW.e, start: "idle" }, { t: "gunman", at: [84, 47], yaw: RCF_YAW.e, start: "idle" },
+    { t: "gunman", at: [103, 12, 18], yaw: RCF_YAW.s, start: "patrol" }, { t: "gunman", at: [121, 16, 43], yaw: RCF_YAW.e, start: "guard" }, { t: "gunman", at: [126, 8, 9], yaw: RCF_YAW.n, start: "idle" }, { t: "gunman", at: [84, 8, 77], yaw: RCF_YAW.s, start: "idle" },
+    { t: "shield", at: [120, 67], yaw: RCF_YAW.e, start: "guard" }, { t: "bot", at: [126, 36], yaw: RCF_YAW.e, start: "guard" }, { t: "bot", at: [126, 50], yaw: RCF_YAW.e, start: "guard" }],
+  slots: [{ allow: ["bot", "shield"], at: [126, 36] }],
+  lines: { anchors: [[90, 20, 24.1], [90, 20, 61.9], [116, 20, 24.1], [116, 20, 61.9]], sling: [], wallrun: [[[86.6, 31.5], [93.4, 31.5]], [[86.6, 54.5], [93.4, 54.5]], [[112.6, 31.5], [119.4, 31.5]], [[112.6, 54.5], [119.4, 54.5]]], cables: [[[78, 13, 10], [128, 11.5, 70]]], flip: [] },
+  toys: [{ k: "ring", at: [103, 43] }],
+  challenges: [{ k: "time", par: 45 }, { k: "noFloor" }, { k: "gyre3" }], next: "mail_f02",
+});
+rcDef("mail_f02", {
+  floor: 2, name: "Mail Room", kind: "breath", box: { x: 76, z: -6, w: 16, d: 12, h: 5 }, cp: [82, 9, 0, RCF_YAW.n], clear: { type: "purge" }, cast: [], next: "elevator_f02",
+  onLive() { later(() => log("OKAFOR-REYES: The mail room. There's a chip in the sorting rack. I left it for you. It changes the rules a little.", "okafor"), 500); },
+});
+rcDef("elevator_f02", {
+  floor: 2, name: "Elevator Bank", kind: "lift", box: { x: 92, z: -14, w: 16, d: 18, h: 32 }, cp: [89, 0, 0, RCF_YAW.e],
+  entries: [{ id: "main", at: [92, 0], door: true }],
+  clear: { type: "lift", lift: { at: [100, -5], w: 10, d: 8, y0: 0, y1: 32, time: 22 },
+    timeline: [{ t: 3, cast: [{ t: "gunman", at: [106.5, 8, -8] }, { t: "gunman", at: [106.5, 8, -1] }] }, { t: 8, cast: [{ t: "gunman", at: [93.5, 12, -4] }] },
+      { t: 12, cast: [{ t: "shield", at: [106.5, 16, -5] }] }, { t: 15, cast: [{ t: "gunman", at: [93.5, 20, -9] }, { t: "drone", at: [100, 26, -5] }] }, { t: 18, cast: [{ t: "gunman", at: [106.5, 24, -3] }] }] },
+  obj: "Ride the express car up. Hold it", cast: [],
+  lines: { anchors: [], sling: [[106.5, 8.8, -9], [93.5, 16.8, 0], [106.5, 24.8, 0]], wallrun: [], cables: [], flip: [] },
+  challenges: [{ k: "noDamage" }, { k: "allFinish" }, { k: "gyre3" }], next: "gatekeeper_f02",
+});
+rcDef("gatekeeper_f02", {
+  floor: 2, name: "Gatekeeper", kind: "boss", box: { x: 76, z: -56, w: 56, d: 42, h: 14, y: 32 }, cp: [100, -11, 32, RCF_YAW.n],
+  entries: [{ id: "main", at: [100, 32, -14], door: true }], clear: { type: "boss" }, obj: "Captain Hask. Break the shield",
+  cast: [{ t: "boss", id: "gatekeeper", at: [104, 32, -38] }],
+  challenges: [{ k: "noDamage" }, { k: "time", par: 90 }, { k: "allFinish" }],
+});
+
+// ======================================================================== FLOOR 03 ATRIUM RUN (76 x 80 x 64, plus the Drop shaft and the bridge)
+FLOORS[3] = {
+  name: "Atrium Run", sub: "The Drop · eight tiers of glass · the skybridge", x0: 4, x1: 110, z0: 4, z1: 96, city: 1,
+  arrive: [96, 14.5, 48, "s"], exit: [42, 7, 56, "s"],
+  objective: "Drop down the shaft",
+  lines: ["ARBITER: A shaft, forty-eight metres down. Jump. Press Space again in the air and the world slows for you.", "Tip: falling in this tower costs height, not your life."],
+  build() {
+    const stone = LV_FLOORMAT.stone(), dstone = LV_FLOORMAT.darkstone(), dark = LV_FLOORMAT.panelDark(), carpet = LV_FLOORMAT.carpet(), steel = LV_FLOORMAT.steel();
+    LV.bossAdds = { corona: [["G", 30, -10, 0], ["G", -30, -20, 0]] };
+    // the atrium (original): shell, tiers, curtain wall
+    lvSlab(4, 4, 80, 88, 0, dstone, 1); lvCeil(4, 4, 80, 88, 64, true, 11);
+    lvWall(4, 4, 80, 4, 0, 64, dark); lvWall(4, 4, 4, 84, 0, 64, dark);
+    lvWall(80, 4, 80, 32, 0, 64, dark); lvWall(80, 38, 80, 84, 0, 64, dark); lvWall(80, 32, 80, 38, 4, 64, dark);
+    lvGlass(4, 84, 10, 84, 0, 64, { ext: true }); lvGlass(14, 84, 20, 84, 0, 64, { ext: true }); lvGlass(10, 84, 14, 84, 0, 40, { ext: true }); lvGlass(10, 84, 14, 84, 44, 64, { ext: true });
+    lvGlass(64, 84, 70, 84, 0, 64, { ext: true }); lvGlass(74, 84, 80, 84, 0, 64, { ext: true }); lvGlass(70, 84, 74, 84, 0, 48, { ext: true }); lvGlass(70, 84, 74, 84, 52, 64, { ext: true });
+    lvGlass(20, 86, 64, 86, 0, 64, { ext: true }); lvWall(20, 84, 20, 86, 0, 64, dark); lvWall(64, 84, 64, 86, 0, 64, dark);
+    for (let y = 8; y <= 56; y += 8) {
+      const m = y % 16 ? stone : carpet;
+      lvSlab(4, 4, 80, 20, y, m, 0.5); lvSlab(4, 20, 20, 80, y, m, 0.5); lvSlab(7.5, 80, 20, 84, y, m, 0.5); lvSlab(64, 20, 80, 80, y, m, 0.5); lvSlab(64, 80, 76.5, 84, y, m, 0.5);
+      lvRail(20, 20, 64, 20, y); lvRail(20, 20, 20, 84, y); lvRail(64, 20, 64, 84, y);
+      lvCeilUnder(4, 4, 80, 20, y - 0.5); lvCeilUnder(4, 20, 20, 84, y - 0.5); lvCeilUnder(64, 20, 80, 84, y - 0.5);
+    }
+    // the corner updraft shafts, cut into one pad per room band; plates seal the holes at +24 and +48
+    for (const x of [5.75, 78.25]) { lvPad(x, 82, 0, 24.6, 1.5); lvPad(x, 82, 24, 48.6, 1.5); lvPad(x, 82, 48, 60, 1.5); }
+    rcHatch("seal:walkways_f03", 4, 80, 7.5, 84, 23.8); rcHatch("seal:walkways_f03", 76.5, 80, 80, 84, 23.8);
+    rcHatch("seal:art_f03", 4, 80, 7.5, 84, 47.8); rcHatch("seal:art_f03", 76.5, 80, 80, 84, 47.8);
+    // the void seals: a red laser net under the +24 and +48 tiers
+    rcHatch("seal:walkways_f03", 20, 20, 64, 84, 23.6, true, "net"); rcHatch("seal:art_f03", 20, 20, 64, 84, 47.6, true, "net");
+    for (const y of [0, 16, 32, 48, 56]) for (const x of [10, 24, 38, 52, 66, 74]) lvDesk(x, 12, y, 0, { w: 1.8 });
+    for (const y of [0, 8, 24, 40]) for (const z of [26, 56, 66]) { lvBench(10, z, y, 1.2, 4); lvBench(74, z, y, 1.2, 4); }
+    // -------- 1 The Drop: a 30 x 30 shaft east of the atrium, top vestibule at +48, anchors on alternating walls, glass walkways
+    lvSlab(80, 4, 110, 20, 48, steel, 0.5); lvCeil(80, 4, 110, 20, 54, true, 8); lvRail(80, 20, 93, 20, 48); lvRail(99, 20, 110, 20, 48);
+    lvWall(80, 4, 110, 4, 48, 54, dark); lvWall(110, 4, 110, 20, 48, 54, dark);
+    lvSlab(80, 20, 110, 50, 0, dstone, 1); lvCeil(80, 20, 110, 50, 58, false);
+    lvWall(110, 20, 110, 50, 0, 58, dark); lvWall(80, 50, 110, 50, 0, 58, dark); lvWall(80, 20, 110, 20, 54, 58, dark);
+    for (const [x, z, y] of [[83, 30, 42], [107, 26, 34], [83, 42, 26], [107, 38, 18], [95, 47, 10]]) rcAnchor(x, z, y, 58);
+    rcGlassFloor(80, 33, 110, 37, 36); rcGlassFloor(80, 40, 110, 44, 20);
+    rcSeal("drop_f03", 80, 32, 80, 38, 0, 4);
+    // -------- 2 Glass Walkways (tiers 0..16): a new glass span at +8, the escalator bridge at +16
+    rcEntry("walkways_f03", 79.4, 32, 79.4, 38, 0, 4);
+    rcGlassFloor(20, 60, 64, 63, 8); lvRail(20, 60, 64, 60, 8); lvRail(20, 63, 64, 63, 8);
+    lvSlab(20, 32.25, 64, 35.75, 16, stone, 0.5); lvRail(20, 32.25, 64, 32.25, 16); lvRail(20, 35.75, 64, 35.75, 16);
+    for (const [x, z, r] of [[26, 63, 2.5], [36, 74, 1.8], [52, 70, 2.2], [44, 50, 1.6], [30, 48, 2]]) lvPlanter(x, z, 0, r);
+    lvPedestal(30, 72, 0, "disc"); stimBox(LVX(8), LVZ(70), 0, 0); stimBox(LVX(76), LVZ(46), 16, 0);
+    rcFlip(16, 34, 8, 17.4, 1.1, RCF_YAW.e);
+    // -------- 3 Art Installation (tiers 24..40): the Meridian mobile, rings you can swing, one that turns; the glass lift
+    lvSlab(20, 27, 64, 29, 28, steel, 0.4); lvRail(20, 27, 64, 27, 28); lvRail(20, 29, 64, 29, 28);
+    lvHangRing(42, 50, 20, 7, 64); RC.artRing = rcRing(42, 50, 36, 5.5, 64);
+    lvRack(6, 38, 24, 1, 4, 2.2); lvRack(6, 46, 24, 1, 4, 2.2); lvPedestal(12, 42, 24, "arc lance");
+    lvWall(4, 32, 16, 32, 24, 32); lvWall(4, 50, 16, 50, 24, 32); lvWall(18, 32, 20, 32, 24, 32); lvWall(18, 50, 20, 50, 24, 32);
+    lvGlassLift(60, 24, 24, 40); stimBox(LVX(8), LVZ(22), 32, 0);
+    for (const [x, y] of [[28, 24], [56, 40]]) { lvSlab(x - 3, 86.3, x + 3, 88.3, y, steel, 0.3); lvRail(x - 3, 88.3, x + 3, 88.3, y); lvAnchor(x, 87.3, y + 6, y + 14); }
+    lvFrag(76, 74, 32, "OKAFOR-REYES (voice memo): If it ever reads this, it should know the atrium was my idea. Somewhere to look out.");
+    rcSeal("art_f03", 10, 84.2, 14, 84.2, 40, 4);
+    // -------- 4 Glass Bridge (outside the curtain wall at +40): west landing, the 44 m glass deck, east landing, flip pad up to +48
+    rcEntry("bridge_f03", 10, 85, 14, 85, 40, 4);
+    lvSlab(4, 84.4, 20, 94, 40, steel, 0.5); lvEdgeRails(4, 84.4, 20, 94, 40, "sw");
+    rcGlassFloor(20, 89, 64, 93, 40); lvRail(20, 89, 64, 89, 40); lvRail(20, 93, 64, 93, 40);
+    lvSlab(64, 84.4, 80, 94, 40, steel, 0.5); lvEdgeRails(64, 84.4, 80, 94, 40, "se");
+    lvWall(22, 95.5, 62, 95.5, 41, 45, LV_FLOORMAT.steel(), 0.2); rcWallRun(22, 95.5, 62, 95.5, 41.4, 44.6, 2);
+    rcGondola(39, 97, 45, 99, 46, 56); rcSling(42, 98, 49);
+    rcGondola(6, 95, 14, 98, 46, 56);
+    lvSlab(66, 84.4, 78, 87, 48, steel, 0.4); lvEdgeRails(66, 84.4, 78, 87, 48, "sew");
+    rcFlip(72, 90, 40, 49.6, 1.2, RCF_YAW.n);
+    rcFall({ x: 0, z: 84.4, w: 84, d: 20 }, 30, [12, 88, 40], 12);
+    rcSeal("bridge_f03", 70, 84.2, 74, 84.2, 48, 4);
+    // -------- 5 Corona (the top tiers, +48..64): the ridable ring
+    rcEntry("corona_f03", 70, 83.6, 74, 83.6, 48, 4);
+    stimBox(LVX(76), LVZ(16), 48, 0);
+    rcCheckpoints(3);
+  },
+  tick() {},
+};
+rcDef("drop_f03", {
+  floor: 3, name: "The Drop", kind: "intro", box: { x: 80, z: 20, w: 30, d: 30, h: 56 }, cp: [96, 17, 48, RCF_YAW.s],
+  entries: [{ id: "main", at: [96, 48, 20] }], clear: { type: "purge" }, obj: "Drop down the shaft. Space in the air slows the fall",
+  cast: [{ t: "drone", at: [90, 40, 28], start: "patrol" }, { t: "drone", at: [100, 26, 44], start: "patrol" }, { t: "gunman", at: [86, 36, 35], yaw: RCF_YAW.w, start: "guard" }, { t: "gunman", at: [104, 20, 42], yaw: RCF_YAW.e, start: "guard" }],
+  lines: { anchors: [[83, 42, 30], [107, 34, 26], [83, 26, 42], [107, 18, 38], [95, 10, 47]], sling: [], wallrun: [], cables: [], flip: [] }, toys: [{ k: "glassFloor", at: [95, 35] }, { k: "glassFloor", at: [95, 42] }],
+  challenges: [{ k: "gyre3" }, { k: "noFloor" }, { k: "time", par: 25 }], next: "walkways_f03",
+});
+rcDef("walkways_f03", {
+  floor: 3, name: "Glass Walkways", kind: "test", box: { x: 4, z: 4, w: 76, d: 84, h: 23.5 }, cp: [84, 35, 0, RCF_YAW.w],
+  entries: [{ id: "main", at: [80, 35], door: true }], clear: { type: "purge" }, obj: "Clear the lower tiers. The disc bounces off glass",
+  cast: [{ t: "drone", at: [40, 6, 68], start: "patrol" }, { t: "drone", at: [47, 10, 75], start: "patrol" }, { t: "drone", at: [30, 12, 50], start: "patrol" },
+    { t: "gunman", at: [72, 16, 40], yaw: RCF_YAW.w, start: "guard" }, { t: "gunman", at: [72, 16, 30], yaw: RCF_YAW.n, start: "idle" }, { t: "gunman", at: [12, 8, 62], yaw: RCF_YAW.w, start: "guard" }],
+  lines: { anchors: [], sling: [], wallrun: [], cables: [], flip: [[16, 8, 34]] }, toys: [{ k: "glassFloor", at: [42, 61.5] }],
+  challenges: [{ k: "time", par: 35 }, { k: "allFinish" }, { k: "noDamage" }], next: "art_f03",
+});
+rcDef("art_f03", {
+  floor: 3, name: "Art Installation", kind: "twist", box: { x: 4, z: 4, w: 76, d: 84, h: 20, y: 24 }, cp: [74, 82, 24, RCF_YAW.n],
+  entries: [{ id: "east", at: [78.25, 24, 82] }, { id: "west", at: [5.75, 24, 82] }], clear: { type: "purge" }, obj: "The mobile is moving. Swing it",
+  twist: { at: "half", do: () => { if (RC.artRing) RC.artRing.wWant = 0.45; say("arbiter", "The mobile's motors are live. It turns. Use it."); shake = Math.max(shake, 0.15); } },
+  cast: [{ t: "drone", at: [30, 30, 44], start: "patrol" }, { t: "drone", at: [46, 40, 40], start: "patrol" }, { t: "drone", at: [58, 38, 52], start: "patrol" },
+    { t: "gunman", at: [72, 40, 60], yaw: RCF_YAW.w, start: "guard" }, { t: "gunman", at: [14, 32, 24], yaw: RCF_YAW.n, start: "idle" }, { t: "shield", at: [12, 40, 80], yaw: RCF_YAW.s, start: "guard" }],
+  lines: { anchors: [[42, 36, 50]], sling: [], wallrun: [], cables: [], flip: [] }, toys: [{ k: "mobile", at: [42, 50] }],
+  challenges: [{ k: "noFloor" }, { k: "time", par: 40 }, { k: "gyre3" }], next: "bridge_f03",
+});
+rcDef("bridge_f03", {
+  floor: 3, name: "Glass Bridge", kind: "arena", box: { x: 4, z: 84.4, w: 76, d: 16, h: 16, y: 40 }, cp: [12, 80, 40, RCF_YAW.s],
+  entries: [{ id: "main", at: [12, 40, 84.4], door: true }], clear: { type: "purge" }, obj: "Cross the skybridge. They're at both ends",
+  cast: [{ t: "gunman", at: [70, 40, 88], yaw: RCF_YAW.e, start: "guard" }, { t: "gunman", at: [76, 40, 92], yaw: RCF_YAW.e, start: "guard" }, { t: "gunman", at: [67, 40, 92], yaw: RCF_YAW.s, start: "idle" }, { t: "shield", at: [65, 40, 90], yaw: RCF_YAW.w, start: "guard" },
+    { t: "gunman", at: [8, 46, 96.5], yaw: RCF_YAW.s, start: "idle" }, { t: "gunman", at: [12, 46, 96.5], yaw: RCF_YAW.s, start: "idle" }, { t: "drone", at: [42, 44, 100], start: "patrol" }],
+  slots: [{ allow: ["shield", "bot"], at: [65, 40, 90] }],
+  lines: { anchors: [], sling: [[42, 49, 98]], wallrun: [[[22, 95.5], [62, 95.5]]], cables: [], flip: [[72, 40, 90]] }, toys: [{ k: "glassFloor", at: [42, 91] }],
+  challenges: [{ k: "time", par: 30 }, { k: "noDamage" }, { k: "allFinish" }], next: "corona_f03",
+});
+rcDef("corona_f03", {
+  floor: 3, name: "Corona", kind: "boss", box: { x: 4, z: 4, w: 76, d: 84, h: 16, y: 48 }, cp: [72, 85.6, 48, RCF_YAW.n],
+  entries: [{ id: "main", at: [72, 48, 84], door: true }], clear: { type: "boss" }, obj: "Corona. Ride the ring",
+  cast: [{ t: "boss", id: "corona", at: [42, 48, 50] }],
+  challenges: [{ k: "noDamage" }, { k: "time", par: 120 }, { k: "allFinish" }],
+});
+
+globalThis.__c6 = { RC, RCF, rcLoadRoom, rcDefs, rcChain, lvBuiltN };
+// ---- C7 floors 04-05 go below this line ----
 // ---- end slot: floors ----
 
 // ---- slot: replay ----
