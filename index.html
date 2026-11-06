@@ -401,7 +401,7 @@ body.nosubs #subs { display: none; }
 <div class="hud" id="flash" hidden></div>
 <div class="hud" id="prompt" hidden></div>
 <div class="hud" id="objective"><span class="lbl" id="objl">Objective</span><b id="objv">—</b><ol id="steps"></ol>
-  <div id="legend" hidden><span><kbd>N</kbd>finisher</span><span><kbd>J</kbd>live hostiles</span><span><kbd>L</kbd>reset dummies, boxes, stims</span><span><kbd>H</kbd>god mode</span><span><kbd>K</kbd>combo book</span><span><kbd>M</kbd>call a car</span><span><kbd>I</kbd>idle animation</span><span><kbd>F</kbd>melee · finisher · pick up a body</span><span><kbd>W</kbd><kbd>Space</kbd><kbd>LMB</kbd>head grab</span><span><kbd>T</kbd>inspect · pistol spin</span><span><kbd>U</kbd>office corner (everything breaks)</span><span><kbd>B</kbd>boss pen</span><span><kbd>P</kbd>skip boss phase</span><span><kbd>O</kbd>clear pen</span></div>
+  <div id="legend" hidden><span><kbd>N</kbd>finisher</span><span><kbd>J</kbd>live hostiles</span><span><kbd>L</kbd>reset dummies, boxes, stims</span><span><kbd>H</kbd>god mode</span><span><kbd>K</kbd>combo book</span><span><kbd>M</kbd>movement course</span><span><kbd>Shift</kbd><kbd>M</kbd>call a car</span><span><kbd>I</kbd>idle animation</span><span><kbd>F</kbd>melee · finisher · pick up a body</span><span><kbd>W</kbd><kbd>Space</kbd><kbd>LMB</kbd>head grab</span><span><kbd>T</kbd>inspect · pistol spin</span><span><kbd>U</kbd>office corner (everything breaks)</span><span><kbd>B</kbd>boss pen</span><span><kbd>P</kbd>skip boss phase</span><span><kbd>O</kbd>clear pen</span></div>
 </div>
 <div class="hud" id="targets">Hostiles<b id="tcount">0</b></div>
 <div class="hud" id="vitals">
@@ -620,9 +620,9 @@ const rt = new THREE.WebGLRenderTarget(rtSize().x, rtSize().y, { type: THREE.Hal
 const postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 const postMat = new THREE.ShaderMaterial({
   depthTest: false, depthWrite: false,
-  uniforms: { tDiffuse: { value: rt.texture }, uTime: { value: 0 }, uAmt: { value: 0 }, uGray: { value: 0 }, uKeep: { value: 0 }, uTherm: { value: 0 }, uCel: { value: 0.7 }, uRes: { value: rtSize() } },
+  uniforms: { tDiffuse: { value: rt.texture }, uTime: { value: 0 }, uAmt: { value: 0 }, uGray: { value: 0 }, uKeep: { value: 0 }, uTherm: { value: 0 }, uCel: { value: 0.7 }, uGyre: { value: 0 }, uRes: { value: rtSize() } },
   vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
-  fragmentShader: `uniform sampler2D tDiffuse; uniform float uTime, uAmt, uGray, uKeep, uTherm, uCel; uniform vec2 uRes; varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float uTime, uAmt, uGray, uKeep, uTherm, uCel, uGyre; uniform vec2 uRes; varying vec2 vUv;
     float h1(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
     float h2(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     void main() {
@@ -638,7 +638,7 @@ const postMat = new THREE.ShaderMaterial({
       uv += tear * vec2(h2(blk * 1.7 + t) - 0.5, (h2(blk + 3.0 + t) - 0.5) * 0.2) * 0.09 * a;
       // rgb split, stronger toward the edges
       vec2 q = vUv - 0.5;
-      vec2 off = vec2(0.0012 + 0.016 * a, 0.0) * (0.5 + length(q) * 1.6);
+      vec2 off = vec2(0.0012 + 0.016 * a + 0.0045 * uGyre * length(q), 0.0) * (0.5 + length(q) * 1.6);
       vec3 c;
       c.r = texture2D(tDiffuse, uv + off).r;
       c.g = texture2D(tDiffuse, uv).g;
@@ -656,7 +656,7 @@ const postMat = new THREE.ShaderMaterial({
       // cel: light falls into soft flat bands, and hard edges in the picture get an ink line
       float cel = uCel * (1.0 - uTherm);
       if (cel > 0.001) {
-        vec3 W3 = vec3(0.2126, 0.7152, 0.0722); vec2 px = 1.2 / uRes;
+        vec3 W3 = vec3(0.2126, 0.7152, 0.0722); vec2 px = (1.2 + 0.12 * uGyre) / uRes;
         float tn = dot(texture2D(tDiffuse, uv + vec2(0.0, px.y)).rgb, W3), ts = dot(texture2D(tDiffuse, uv - vec2(0.0, px.y)).rgb, W3);
         float te = dot(texture2D(tDiffuse, uv + vec2(px.x, 0.0)).rgb, W3), tw = dot(texture2D(tDiffuse, uv - vec2(px.x, 0.0)).rgb, W3);
         tn /= 1.0 + tn; ts /= 1.0 + ts; te /= 1.0 + te; tw /= 1.0 + tw;
@@ -666,7 +666,7 @@ const postMat = new THREE.ShaderMaterial({
         float tq = (floor(f) + smoothstep(0.32, 0.68, fract(f))) / 5.0; float t1 = mix(t0, tq, 0.75 * cel);
         c *= (t1 / max(1.0 - t1, 0.02)) / lc;
         c = mix(vec3(dot(c, W3)), c, 1.0 + 0.2 * cel);
-        c *= 1.0 - inkL * 0.8 * cel;
+        c *= 1.0 - inkL * (0.8 + 0.08 * uGyre) * cel;
       }
       // scanlines, grain and a dark vignette
       float scan = 0.5 + 0.5 * sin(gl_FragCoord.y * 3.14159 * 0.5);
@@ -884,7 +884,7 @@ let actx = null, noiseBuf = null, master = null;
 function initAudio() {
   if (actx) return;
   try {
-    actx = new AudioContext(); master = actx.createGain(); master.gain.value = SET.vol; master.connect(actx.destination);
+    actx = new AudioContext(); master = actx.createGain(); master.gain.value = SET.vol; gyreAudio(master);
     noiseBuf = actx.createBuffer(1, actx.sampleRate, actx.sampleRate);
     const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   } catch { actx = null; }
@@ -1011,8 +1011,8 @@ addEventListener("contextmenu", (e) => e.preventDefault());
 addEventListener("wheel", (e) => { if (locked && Math.abs(e.deltaY) > 4) pressed.add("Swap"); }, { passive: true });
 addEventListener("mousemove", (e) => {
   if (!locked || state.boot) return;
-  const k = 0.0022 * SET.sens; yaw -= e.movementX * k; pitch -= e.movementY * k * (SET.invert ? -1 : 1);
-  pitch = Math.max(-1.55, Math.min(1.55, pitch));
+  const k = 0.0022 * SET.sens; yaw -= e.movementX * k * gyreYawSign(); pitch -= e.movementY * k * (SET.invert ? -1 : 1);
+  pitch = gyrePitch(pitch);
 });
 document.addEventListener("pointerlockchange", () => {
   locked = document.pointerLockElement === renderer.domElement;
@@ -1729,8 +1729,8 @@ function killEnemy(e, hitPoint, dir, force) {
   world.removeRigidBody(e.body);
   levelGroup.remove(e.group);
   if (e.T.die) e.T.die(e, hitPoint, dir, force); else spawnRagdoll(e, hitPoint, dir, force);
-  if ((state.fin || MF.cur || e.finishing) && e.rd && ragdolls.includes(e.rd)) try { goreKill(e.rd, hitPoint, dir); } catch (err) { console.warn(err); }
-  if (e.and) try { andKillFx(e, hitPoint, dir, !!(state.fin || MF.cur || e.finishing)); } catch (err) { console.warn(err); }
+  if ((state.fin || MF.cur || e.finishing || GYRE.halo) && e.rd && ragdolls.includes(e.rd)) try { goreKill(e.rd, hitPoint, dir); } catch (err) { console.warn(err); }
+  if (e.and) try { andKillFx(e, hitPoint, dir, !!(state.fin || MF.cur || e.finishing || GYRE.halo)); } catch (err) { console.warn(err); }
   sfx.kill();
   if (e.dummy && state.mode === "test") TEST.respawn.push({ type: e.type, x: e.home.x, z: e.home.z, y: e.home.y, t: 3 });
   for (const b of bolts) if (b.owner === e) b.owner = null;
@@ -1908,9 +1908,9 @@ function groundCheck() {
 }
 function stepPlayer(dt) {
   carryInput();
-  if (mfLock(dt)) return;
+  if (mfLock(dt) || gyreLock(dt)) return;
   if (player.dead) return;
-  const v = player.body.linvel(); const vel = new THREE.Vector3(v.x, v.y, v.z);
+  const v = player.body.linvel(); const vel = new THREE.Vector3(v.x, v.y, v.z); gyreIn(vel);
   const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
   const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
   const wish = new THREE.Vector3();
@@ -1920,6 +1920,7 @@ function stepPlayer(dt) {
   const grounded = groundCheck();
   if (grounded && !player.grounded && !player.climb) ev("ground");
   if (grounded) { player.coyote = 0.1; if (player.breach && !player.grapple && state.time - player.lastGrapple > 0.3) player.breach = false; } else player.coyote -= dt;
+  travPre(dt, vel, grounded, fwd, wish);
   const crouchKey = keys.has("ControlLeft") || keys.has("ControlRight") || keys.has("KeyC");
   const crouchPressed = pressed.has("ControlLeft") || pressed.has("ControlRight") || pressed.has("KeyC");
   const hspeed = Math.hypot(vel.x, vel.z);
@@ -1938,7 +1939,7 @@ function stepPlayer(dt) {
   if (crouchKey && grounded && !player.sliding && hspeed > 5 && !player.climb) {
     player.sliding = true; player.slideHits = new Set();
     const boost = Math.min(hspeed * 1.25, 21) / Math.max(hspeed, 0.001);
-    vel.x *= boost; vel.z *= boost; sfx.dash(); ev("slide");
+    vel.x *= boost; vel.z *= boost; travSlideCarry(vel); sfx.dash(); ev("slide");
   }
   if (!crouchKey || hspeed < 3) player.sliding = false;
 
@@ -1959,7 +1960,7 @@ function stepPlayer(dt) {
 
   let gScale = 1; if (!grounded && keys.has("Space") && Math.abs(vel.y) < 2.5) gScale = 0.6;
   if (player.thrustT > 0) gScale = 0.2;
-  vel.y += P.gravity * gScale * dt;
+  vel.y += P.gravity * gScale * dt * gyrePS();
   if (grounded && vel.y < 0) vel.y = Math.max(vel.y, -2);
 
   // jump, or jump off the grapple (the sling line keeps Space for focus instead)
@@ -1968,8 +1969,9 @@ function stepPlayer(dt) {
     if (player.grapple) { releaseGrapple(); vel.y = Math.max(vel.y, 0) + 7.5; vel.addScaledVector(fwd, 5); player.jumpHeld = true; player.grapLock = true; }
     else if (player.coyote > 0) {
       vel.y = P.jump; player.coyote = 0; player.jumpHeld = true; ev("jump");
-      if (player.sliding) { vel.x *= 1.08; vel.z *= 1.08; player.sliding = false; }
+      if (player.sliding) { travSlideJump(vel); player.sliding = false; }
     }
+    else { player.jumpHeld = true; gyrePress(vel); }
   }
   if (!keys.has("Space")) player.jumpHeld = false;
 
@@ -2009,15 +2011,15 @@ function stepPlayer(dt) {
     const F = player.focus; F.t += dt;
     if (F.t > F.beat) { F.beat += Math.max(0.42, 0.85 - F.t * 0.1); sfx.heart(); }
     const g = player.grapple, live = g && g.mode === "sling" && g.phase === "attached";
-    if (!live || !keys.has("Space") || F.t >= FOCUS_MAX) {
+    if (!live || !keys.has("Space") || F.t >= gyreFocusCap()) {
       endFocus();
       if (live) { g.charge = 1; releaseGrapple(); slingLaunch(vel, g); fovKick = Math.max(fovKick, 24); impactFrame(45); glitch(0.5); shake = Math.max(shake, 0.3); }
     }
   }
   if (player.grapple && !eDown && player.grapple.mode === "sling") {
     const g = player.grapple; const attached = g.phase === "attached"; releaseGrapple();
-    if (attached) slingLaunch(vel, g);
-  } else if (player.grapple && !eDown) {
+    if (!travYank(g, vel, attached) && attached) slingLaunch(vel, g);
+  } else if (player.grapple && !eDown && player.grapple.mode !== "cable") {
     const attached = player.grapple.phase === "attached"; releaseGrapple();
     if (attached) {
       // fling: keep the swing's speed, add a little more, and pop off the anchor if you were hanging still
@@ -2040,7 +2042,7 @@ function stepPlayer(dt) {
       if (player.focus) { vel.multiplyScalar(Math.pow(0.0003, dt)); vel.y -= P.gravity * gScale * dt; } // hanging still in the air
       else { vel.multiplyScalar(Math.pow(0.06, dt)); vel.y += -P.gravity * 0.9 * dt; } // braced on the taut line
     }
-  } else if (player.grapple) {
+  } else if (player.grapple && player.grapple.mode !== "cable") {
     const g = player.grapple; const pp = playerPos();
     const to = g.point.clone().sub(pp); const dist = to.length(); to.divideScalar(Math.max(dist, 1e-3));
     player.lastGrapple = state.time;
@@ -2104,8 +2106,8 @@ function stepPlayer(dt) {
   updateTest(dt); updateTut(dt);
   mfKeys(dt);
 
-  stepMoves(dt, vel, grounded, fwd, wish);
-  player.body.setLinvel(vel, true);
+  stepMoves(dt, vel, grounded, fwd, wish); gyreStep(dt, vel, grounded);
+  player.body.setLinvel(gyreOut(vel), true);
   player.vel.copy(vel); player.grounded = grounded;
 
   if (state.time - player.lastHurt > (BOSSES.active && !BOSSES.active.dead ? 4 : 2.5) && player.hp < 100) player.hp = Math.min(100, player.hp + 30 * dt);
@@ -2407,7 +2409,7 @@ function buildTestLevel() {
   door = { mesh: new THREE.Object3D(), opening: false, y: 0 }; sword = new THREE.Group();
   const tl = new THREE.PointLight(0x4ff0ff, 0, 9, 1.8); tl.position.set(0, -50, 0); levelGroup.add(tl); sword.userData.light = tl; // borrowed by the finisher
   TEST.respawn = []; TEST.spots = [];
-  lvTestYard();
+  lvTestYard(); travCourse(); gyreYard();
   buildCity();
 }
 const DUMMY_SPOTS = [["brawler", -12, -24], ["brawler", -8, -24], ["gunman", -4, -24], ["gunman", 0, -24], ["bot", 4, -24], ["bot", 9, -24],
@@ -2427,13 +2429,13 @@ function spawnDummies() {
 function updateTest(dt) {
   if (state.mode !== "test") return;
   for (let i = TEST.respawn.length - 1; i >= 0; i--) { const r = TEST.respawn[i]; r.t -= dt; if (r.t <= 0) { TEST.respawn.splice(i, 1); spawnDummy(r.type, r.x, r.z, r.y || 0); updateCount(); } }
-  if (pressed.has("KeyL")) { for (const r of TEST.respawn) r.t = 0; for (const b of STIM.boxes) if (b.open) b.respawn = 0.01; player.stims = 3; flash("Dummies, boxes and stims reset", "var(--amber)"); }
+  if (pressed.has("KeyL")) { for (const r of TEST.respawn) r.t = 0; for (const b of STIM.boxes) if (b.open) b.respawn = 0.01; player.stims = 3; travCourseReset(); flash("Dummies, boxes and stims reset", "var(--amber)"); }
   if (pressed.has("KeyN") && player.ownsSword) {
     const pp = playerPos(); const tgt = finisherTarget() || alive().filter((x) => !x.T.boss).sort((a, b) => enemyPos(a).distanceTo(pp) - enemyPos(b).distanceTo(pp))[0];
     if (tgt) startFinisher(tgt); else flash("No target", "var(--dim)");
   }
   bossPenKeys(); p5TestKeys(); tgmStep();
-  if (pressed.has("KeyM")) carxForce();
+  if (pressed.has("KeyM")) { if (keys.has("ShiftLeft") || keys.has("ShiftRight")) carxForce(); else travCourseTp(); }
   if (pressed.has("KeyI")) { idleCancel(); IDLE.cur = null; idleStart(); }
   if (pressed.has("KeyK")) { document.exitPointerLock?.(); setTimeout(openBook, 60); }
   if (pressed.has("KeyH")) { player.god = !player.god; flash(player.god ? "God mode on" : "God mode off", "var(--amber)"); }
@@ -2750,6 +2752,7 @@ const worldSparks = (() => {
   return { lines, pos, col, p: Array.from({ length: WSPARK_N }, () => ({ life: 0, max: 1, x: new THREE.Vector3(), v: new THREE.Vector3(), c: 0 })), i: 0 };
 })();
 function emitWorldSparks(at, dir, n, color = 0, speed = 9) {
+  n = gyreN(n);
   // color: 0 warm (orange), 1 cyan, 2 white-hot
   const S = worldSparks;
   for (let i = 0; i < n; i++) {
@@ -3830,7 +3833,7 @@ function updateCamera(dt) {
   // idle breathing sway when standing still
   CAM.sway += dt; const idle = 1 - CAM.bobAmt;
   const swayP = Math.sin(CAM.sway * 1.1) * 0.0025 * idle, swayY = Math.sin(CAM.sway * 0.7) * 0.002 * idle;
-  camera.rotation.set(pitch + CAM.kick * 0.03 + swayP - 0.012 * CAM.sprint + MV.pitch, yaw + swayY, roll + CAM.roll * 0.03 + MV.roll, "YXZ");
+  camera.rotation.set(pitch + CAM.kick * 0.03 + swayP - 0.012 * CAM.sprint + MV.pitch, yaw + swayY, roll + CAM.roll * 0.03 + MV.roll + gyreCamRoll(dt), "YXZ");
   fovKick *= Math.pow(0.05, dt);
   const charge = player.grapple?.mode === "sling" && player.grapple.phase === "attached" ? player.grapple.charge : 0;
   const fov = SET.fov + Math.min(16, Math.max(0, hs - 9) * 0.9) + fovKick + 6 * CAM.sprint - 7 * charge - 20 * (player.hasPistol || (arsOn() && WDEF[player.weapon]?.aims) ? VM.aim || 0 : 0) - (ARS.fovPull || 0);
@@ -3846,7 +3849,7 @@ function updateCamera(dt) {
   updateRig(dt);
   updateSlashes(dt);
   updateSpeedLines(dt, hs);
-  updateSelfBody(dt);
+  updateSelfBody(dt); gyreBody(dt);
   updateRope(dt);
   updateGunFx(dt); updateArsenalFx(dt);
   updateWorldSparks(dt * Math.max(0.05, timeVis()));
@@ -4327,6 +4330,7 @@ function landKick(vel) {
     if (rd.stuck) continue;
     for (const p of rd.parts) { const t = p.body.translation(); if (Math.hypot(t.x - at.x, t.y - at.y, t.z - at.z) < 1.1) { const k = 14 * p.body.mass(); p.body.applyImpulse({ x: dir.x * k, y: dir.y * k + 2, z: dir.z * k }, true); landed = true; } }
   }
+  if (travKickDoor(at, flat)) landed = true;
   if (!landed) return;
   if (kicked.length) ev("kick", { hits: kicked, alive: kicked.filter((e) => !e.dead), air });
   sfx.kickHit(); hitstop(0.1); shake = Math.max(shake, 0.42); CAM.kickV += 3.2; fovKick -= 6; impactFrame(50); glitch(0.25);
@@ -4911,6 +4915,7 @@ function stepMoves(dt, vel, grounded, fwd, wish) {
     if (!grounded && vel.y < 5) tryLedge(pos, f, vel, false);
     else if (grounded && player.sprinting) tryLedge(pos, f, vel, true);
   }
+  travPost(dt, vel, grounded, fwd, wish);
 }
 // world time: called from simStep
 function stepWorldMoves(dtw) {
@@ -4963,7 +4968,7 @@ function climbArm(P0, s, k, ang) {
 }
 function movePoses(R, L, dt) {
   const sword = player.hasSword, pistol = player.hasPistol; let sl = false, sr = false;
-  idleUpdate(dt); idlePose(R, L); carryPose(L); mfPose(R, L, dt); scopeUpdate(dt); mfFx(dt);
+  idleUpdate(dt); idlePose(R, L); carryPose(L); mfPose(R, L, dt); travPose(R, L, dt); gyrePose(R, L, dt); scopeUpdate(dt); mfFx(dt);
   const al = (state.alpha || 0) * DT;
   if (player.kick) KICK_ARMS(R, L, ckey(KICK_W, player.kick.t + al)[0], sword, pistol);
   const C = player.climb;
@@ -5009,6 +5014,7 @@ function updateMoveCam(dt) {
     else { pitchT += ckey([[0, 0], [0.12, 0.06], [0.4, -0.14], [0.68, -0.3], [0.9, -0.08], [1, 0]], k)[0]; rollT += Math.sin(k * Math.PI * 2) * 0.05 * C.side; }
   }
   if (IDLE.cur) { const [ip, ir] = idleCam(); pitchT += ip; rollT += ir; }
+  rollT += travCam();
   { const mc = mfCam(); if (mc) { pitchT += mc[0]; rollT += mc[1]; eyeT += mc[2]; backT += mc[3]; fast = true; } }
   if (player.stimUse) {
     const t = player.stimUse.t + al;
@@ -5066,6 +5072,7 @@ function updateMoveHud() {
   $("stimbar").hidden = !player.stimFx; if (player.stimFx) $("stimbar").firstChild.style.transform = `scaleX(${Math.max(0, 1 - player.stimFx.t / STIM_FX)})`;
 }
 function resetMoves() {
+  try { travReset(); } catch {}
   try { carxReset(); } catch {} try { r4Reset(); } catch {} CARRY.rd = null; IDLE.cur = null; IDLE.still = 0; if (IDLE.props) { IDLE.props.phone.visible = IDLE.props.banana.visible = false; }
   DISC.state = "held"; discMesh.visible = false; discTrail.visible = false;
   for (const c of CARS) { c.state = "idle"; c.g.visible = false; c.rd = null; }
@@ -5089,10 +5096,11 @@ function ev(name, d = {}) {
   d.t = state.time;
   if (state.mode === "tut") tutEvent(name, d);
   comboEvent(name, d);
+  gyreEv(name, d);
 }
 function weaponOf(kind) {
   if (player.sling) return "sling";
-  return { punch: "fists", heavy: "fists", slash: "sword", thrust: "sword", finisher: "sword", breach: "sword", deflect: "sword", shot: "pistol", disc: "disc", kick: "kick", breacher: "breacher", lance: "lance", lightning: "lance", wire: "wire", gauntlet: "gauntlet", rail: "rail" }[kind] || "other";
+  return { punch: "fists", heavy: "fists", slash: "sword", thrust: "sword", finisher: "sword", breach: "sword", deflect: "sword", shot: "pistol", disc: "disc", kick: "kick", breacher: "breacher", lance: "lance", lightning: "lance", wire: "wire", gauntlet: "gauntlet", rail: "rail", stolen: "stolen", thrown: "thrown", slam: "slam" }[kind] || "other";
 }
 
 // ---------- voice: ARBITER and Okafor-Reyes speak through the browser's speech engine, with subtitles ----------
@@ -9571,6 +9579,7 @@ function lvSpawnEnemy(s) {
 function lvReset() {
   Object.assign(LV, { F: null, n: 0, ox: 0, oz: 0, spawns: [], cps: [], lifts: [], shutters: [], pads: [], movers: [], fixtures: [], darks: [], frags: [], walk: [], trig: [], anchors: [], extra: [], flag: {}, t: 0, nextId: 0, cleared: false, shaft: null, alarmT: 0, exitL: null, arriveL: null, ride: null });
   if (typeof bossReset === "function") bossReset();
+  try { travReset(); } catch {}
 }
 function lvTestYard() {
   // a strip of the new floor finish so the tiles, panels and desks can be seen side by side
@@ -11348,6 +11357,7 @@ const MF_KIND = { pistol: "whip", rail: "ram", wire: "lasso" };
 function mfKeys(dt) {
   if (pressed.has("KeyT")) { if (player.weapon === "pistol" && !VM.gunAnim && !VM.gunSpin) pistolSpin(); else startInspect(); }
   if (MF.cur || state.fin || player.dead) { MF.hold = 0; return; }
+  if (GYRE.on && pressed.has("KeyF") && gyreHaloTry()) return;
   if (CARRY.rd) { if (pressed.has("KeyF")) carryPick(); return; }
   if (arsIs("lance") && ARS.W.lance.state === "held") {
     const W = ARS.W.lance;
@@ -13734,7 +13744,7 @@ function tgmRender() {
   const s5 = sec("Boss pen");
   btns(s5, [["Next boss", () => pressed.add("KeyB")], ["Skip boss phase", () => pressed.add("KeyP")], ["Clear the pen", () => pressed.add("KeyO")]]);
   // the keys, folded
-  const d = document.createElement("details"); d.innerHTML = `<summary>All keys</summary><div class="tg-keys">${[["Tab", "this menu"], ["N", "sword finisher"], ["J", "live hostiles"], ["L", "reset dummies, boxes, stims"], ["H", "god mode"], ["K", "combo book"], ["M", "call a car"], ["I", "idle animation"], ["F", "melee · mini finisher · pick up a body"], ["W Space LMB", "head grab"], ["T", "inspect · pistol spin"], ["U", "office corner"], ["B", "boss pen"], ["P", "skip boss phase"], ["O", "clear pen"], ["X", "stim (also while sprinting or sliding)"]].map(([k, t]) => `<span>${k.split(" ").map((x) => `<kbd>${x}</kbd>`).join("")}${t}</span>`).join("")}</div>`;
+  const d = document.createElement("details"); d.innerHTML = `<summary>All keys</summary><div class="tg-keys">${[["Tab", "this menu"], ["N", "sword finisher"], ["J", "live hostiles"], ["L", "reset dummies, boxes, stims"], ["H", "god mode"], ["K", "combo book"], ["M", "movement course (and back)"], ["Shift M", "call a car"], ["I", "idle animation"], ["F", "melee · mini finisher · pick up a body"], ["W Space LMB", "head grab"], ["T", "inspect · pistol spin"], ["U", "office corner"], ["B", "boss pen"], ["P", "skip boss phase"], ["O", "clear pen"], ["X", "stim (also while sprinting or sliding)"]].map(([k, t]) => `<span>${k.split(" ").map((x) => `<kbd>${x}</kbd>`).join("")}${t}</span>`).join("")}</div>`;
   B.append(d);
 }
 function tgmSettings(g) {
@@ -14639,9 +14649,985 @@ perfUi();
 // ---- end slot: rooms ----
 
 // ---- slot: gyre ----
+// ================= Gyre: the slow-motion flip, the Halo air finisher, Drop Spike (C2) =================
+// In the air, Space again tucks UNIT-7 into a flip while the world drops to 20% for up to 1.6 real seconds. The camera
+// stays on the mouse through all 360 degrees (look past your feet, behind you, upside down) and every weapon keeps its
+// real-time fire rate. The body does the flip (shadow, mirrors). 2 charges per room, a kill in the flip refunds one,
+// and the flip shares a 4 s budget with Focus. F at the top over an enemy is Halo; Ctrl in the flip is Drop Spike.
+// Pack B (C5) and traversal (C3) plug in through GYRE_HOOK, gyreSeq, gyreEnd and gyreDropSpike.
+const GY = { DUR: 1.6, K: 0.2, IN: 0.08, OUT: 0.15, BUDGET: 4, CHARGES: 2, ROLL: 0.105 };
+const GYRE = { on: false, t: 0, dur: GY.DUR, dir: "back", ang: 0, twist: 0, apex: false, n: GY.CHARGES, max: GY.CHARGES, budget: GY.BUDGET,
+  k: 1, psOut: 1, halo: null, drop: null, endT: -9, killUntil: -9, rollFix: 0, landT: -9, groundT: 0, beat: 0, fx: 0, pl: null, kills: 0,
+  lp: null, inf: false, show: false,
+  left() { return this.on ? Math.max(0, this.dur - this.t) : 0; } };
+// per weapon replaceable: each returns true when it handled the move. w is the weapon in hand.
+const GYRE_HOOK = { halo: (e, w) => gyreHaloDefault(e, w), drop: (e, w) => gyreDropDefault(e, w) };
+const _gyv = new THREE.Vector3(), _gyv2 = new THREE.Vector3(), _gyq = new THREE.Quaternion(), _gyq2 = new THREE.Quaternion(), _gye = new THREE.Euler();
+const _gyX = new THREE.Vector3(1, 0, 0), _gyY = new THREE.Vector3(0, 1, 0), _gyZ = new THREE.Vector3(0, 0, 1);
+const gyOn = () => GYRE.on || !!GYRE.halo;
+// the player keeps a little more speed than the world so the flip still drifts: 0.2x world is 0.3x player
+const gyrePS = () => 1 - (1 - GYRE.k) * 0.875;
+
+// ---------- time: Gyre is one source of the C0 clock (TIME); the slowest source wins ----------
+function gyreTs() {
+  const want = gyOn() ? GY.K : 1;
+  if (GYRE.k > want) GYRE.k = Math.max(want, GYRE.k - DT * (1 - GY.K) / GY.IN);
+  else if (GYRE.k < want) GYRE.k = Math.min(want, GYRE.k + DT * (1 - GY.K) / GY.OUT);
+  return GYRE.k;
+}
+timeMod("gyre", gyreTs);
+// stepPlayer reads the body's speed back as the player's own (unslowed) speed, and writes it out slowed
+function gyreIn(vel) { if (GYRE.psOut !== 1) vel.divideScalar(GYRE.psOut); }
+function gyreOut(vel) { const ps = gyrePS(); GYRE.psOut = ps; return ps === 1 ? vel : _gyv.copy(vel).multiplyScalar(ps); }
+// Focus and Gyre share one budget per room
+function gyreFocusCap() { return GYRE.inf || TGM.gyInf ? FOCUS_MAX : Math.min(FOCUS_MAX, Math.max(0.5, GYRE.budget)); }
+
+// ---------- audio: a low-pass on the master bus (800 Hz in the flip) ----------
+function gyreAudio(m) {
+  try { const lp = actx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 20000; lp.Q.value = 0.7; m.connect(lp); lp.connect(actx.destination); GYRE.lp = lp; }
+  catch { m.connect(actx.destination); }
+}
+function gyreLP(f, tc) { try { if (GYRE.lp) GYRE.lp.frequency.setTargetAtTime(f, actx.currentTime, tc); } catch {} }
+
+// ---------- input ----------
+// Space pressed in the air (not on a line, not in a scene): start the flip, or snap out of one
+function gyrePress(vel) {
+  if (GYRE.halo || MF.cur || state.fin || player.dead) return;
+  if (GYRE.on) { gyreEnd("snap"); return; }
+  if (player.climb || player.grapple || player.focus || player.grounded) return;
+  const inf = GYRE.inf || TGM.gyInf;
+  if (!inf && (GYRE.n <= 0 || GYRE.budget < 0.25)) { tone("square", 220, 180, 0.05, 0.04); return; }
+  gyreStart(vel);
+}
+function gyreStart(vel) {
+  const given = !!vel; if (!given) vel = new THREE.Vector3().copy(player.vel); // the perf gate starts one directly
+  const w = keys.has("KeyW"), s = keys.has("KeyS"), a = keys.has("KeyA"), d = keys.has("KeyD");
+  GYRE.dir = w && !s ? "front" : a && !d ? "left" : d && !a ? "right" : "back";
+  const inf = GYRE.inf || TGM.gyInf;
+  if (!inf) GYRE.n--;
+  Object.assign(GYRE, { on: true, t: 0, dur: inf ? GY.DUR : Math.min(GY.DUR, GYRE.budget), ang: 0, twist: 0, apex: false, beat: 0.4, kills: 0, rollFix: 0 });
+  vel.y = Math.max(vel.y, 4); // the tuck pops you up a little
+  if (player.sliding) player.sliding = false;
+  gyreLP(800, 0.025);
+  tone("sine", 62, 38, 0.5, 0.26); tone("sawtooth", 900, 260, 0.22, 0.035); noise(0.35, "lowpass", 700, 0.35, 0.8, 140);
+  CAM.kickV -= 1.5; glitch(0.15);
+  if (!given) player.body.setLinvel(vel, true);
+  ev("gyre", { dir: GYRE.dir });
+}
+// why: "time", "land", "snap", "drop", "halo", "scene"
+function gyreEnd(why = "time", quiet = false) {
+  if (!GYRE.on) return;
+  GYRE.on = false; GYRE.endT = state.time; GYRE.killUntil = state.time + 0.15;
+  // coming out upside down: the same view, turned the right way up, and the horizon rolls back level
+  if (Math.cos(pitch) < 0) { yaw += Math.PI; pitch = pitch > 0 ? Math.PI - pitch : -Math.PI - pitch; GYRE.rollFix = Math.PI * (Math.sin(GYRE.ang) >= 0 ? 1 : -1); }
+  pitch = Math.max(-1.55, Math.min(1.55, pitch));
+  if (!GYRE.halo) gyreLP(20000, 0.05);
+  if (!quiet) { noise(0.07, "highpass", 2600, 0.55, 0.7); tone("square", 320, 70, 0.09, 0.09); tone("sine", 140, 50, 0.18, 0.18); fovKick += 4; }
+  ev("gyreEnd", { why, dur: GYRE.t, kills: GYRE.kills });
+}
+
+// ---------- per sim step, from stepPlayer (after the moves, before the body gets its speed) ----------
+function gyreStep(dt, vel, grounded) {
+  if (GYRE.pl !== player) { gyreReset(); GYRE.pl = player; }
+  const inf = GYRE.inf || TGM.gyInf;
+  if (GYRE.on) {
+    GYRE.t += dt; if (!inf) GYRE.budget = Math.max(0, GYRE.budget - dt);
+    GYRE.apex = GYRE.apex || vel.y <= 0;
+    // the flip: one full turn, eased, over most of the window; a held direction adds a corkscrew
+    const k = Math.min(1, GYRE.t / Math.min(GYRE.dur, 1.25)); GYRE.ang = Math.PI * 2 * smooth(k);
+    const tw = (keys.has("KeyA") ? 1 : 0) - (keys.has("KeyD") ? 1 : 0) + (GYRE.dir === "left" || GYRE.dir === "right" ? (keys.has("KeyW") ? 1 : 0) - (keys.has("KeyS") ? 1 : 0) : 0);
+    GYRE.twist += tw * dt * Math.PI * 1.6;
+    // a heartbeat-like servo pulse
+    if (GYRE.t > GYRE.beat) { GYRE.beat += 0.42; tone("sine", 52, 38, 0.16, 0.2); noise(0.06, "lowpass", 300, 0.2); }
+    // enemy bolts that slip past you whoosh
+    for (const b of bolts) if (!b.friendly && !b.gyW && b.pos.distanceTo(camera.position) < 1.5) { b.gyW = true; noise(0.3, "bandpass", 1700, 0.4, 2, 500); glitch(0.12); }
+    if (grounded && GYRE.t > 0.1) { gyreEnd("land"); GYRE.landT = state.time; gyreRoll(vel, true); }
+    else if (player.grapple || player.climb || MF.cur || state.fin || player.dead) gyreEnd("scene");
+    else if (GYRE.t >= GYRE.dur) gyreEnd("time");
+    // Drop Spike: Ctrl in the flip. Traversal (TRV) owns Ctrl once it exists; until then a small fallback drop.
+    else if (typeof TRV === "undefined" && (pressed.has("ControlLeft") || pressed.has("ControlRight") || pressed.has("KeyC"))) {
+      gyreEnd("drop"); GYRE.drop = { t: state.time }; vel.x *= 0.25; vel.z *= 0.25; vel.y = -30; tone("sawtooth", 200, 60, 0.3, 0.08); fovKick += 6;
+    }
+  }
+  if (GYRE.drop) {
+    vel.y = Math.min(vel.y, -30);
+    if (grounded) { const pp = playerPos(); let best = null, bd = 1.8; for (const e of alive()) { const p = enemyPos(e); const d = Math.hypot(p.x - pp.x, p.z - pp.z); if (d < bd && Math.abs(p.y - pp.y) < 2.6) { bd = d; best = e; } } GYRE.drop = null; gyreDropSpike(best); }
+    else if (state.time - GYRE.drop.t > 2.5) GYRE.drop = null;
+  }
+  // landing after a flip: inside 0.3 s you roll and keep your speed, later you lose 30%
+  if (!GYRE.on && grounded && !player.grounded && GYRE.endT > GYRE.landT && state.time - GYRE.endT < 3) { GYRE.landT = state.time; gyreRoll(vel, state.time - GYRE.endT <= 0.3); }
+  // charges: a room's seal refills them; with no room system yet, standing on the floor for 4 s does
+  if (grounded && !GYRE.on && typeof ROOM_DEFS === "undefined") { GYRE.groundT += dt; if (GYRE.groundT > 4 && (GYRE.n < GYRE.max || GYRE.budget < GY.BUDGET)) gyreRefill(); }
+  else GYRE.groundT = 0;
+}
+function gyreRoll(vel, keep) {
+  if (keep) { CAM.kickV -= 2.5; CAM.rollV += (Math.random() < 0.5 ? -1 : 1) * 3; noise(0.25, "lowpass", 500, 0.5, 0.8, 120); tone("sine", 90, 50, 0.15, 0.15); }
+  else { vel.x *= 0.7; vel.z *= 0.7; }
+  ev("gyreLand", { roll: keep });
+}
+function gyreRefill() { GYRE.n = GYRE.max; GYRE.budget = GY.BUDGET; GYRE.groundT = 0; }
+function gyreReset() { Object.assign(GYRE, { on: false, halo: null, drop: null, k: 1, psOut: 1, n: GYRE.max, budget: GY.BUDGET, rollFix: 0, endT: -9, landT: -9, killUntil: -9 }); gyreLP(20000, 0.02); }
+// events: kills in the flip refund a charge and are re-sent as gyreKill; rooms refill
+function gyreEv(name, d) {
+  if (name === "kill" && (gyOn() || state.time < GYRE.killUntil)) {
+    GYRE.kills++; if (!(GYRE.inf || TGM.gyInf)) GYRE.n = Math.min(GYRE.max, GYRE.n + 1);
+    ev("gyreKill", { ...d });
+  } else if (name === "focusEnd" && !(GYRE.inf || TGM.gyInf)) GYRE.budget = Math.max(0, GYRE.budget - (d.dur || 0));
+  else if (name === "roomClear" || name === "sealOpen" || name === "roomLive") gyreRefill();
+}
+// fewer sparks while the flip is on (they live 5x longer in real time)
+const gyreN = (n) => (GYRE.k < 0.9 ? Math.ceil(n * 0.5) : n);
+// mouse: free pitch through the flip; upside down, left and right stay left and right on screen
+function gyrePitch(p) {
+  if (!GYRE.on) return Math.max(-1.55, Math.min(1.55, p));
+  return p > Math.PI ? p - Math.PI * 2 : p < -Math.PI ? p + Math.PI * 2 : p;
+}
+const gyreYawSign = () => (GYRE.on && Math.cos(pitch) < 0 ? -1 : 1);
+// camera roll: a 6 degree sway in the flip (Settings > Comfort), and the horizon righting itself after
+function gyreCamRoll(dt) {
+  if (GYRE.rollFix) { const s = Math.sign(GYRE.rollFix); GYRE.rollFix -= s * Math.min(Math.abs(GYRE.rollFix), dt * Math.PI / 0.28); }
+  const side = GYRE.dir === "left" ? 1 : GYRE.dir === "right" ? -1 : 0.5;
+  return GYRE.rollFix + (GYRE.on && SET.gyreRoll !== false ? Math.sin(GYRE.ang) * GY.ROLL * side : 0);
+}
+
+// ---------- render rate: the body flips, the picture sharpens, the pips ----------
+function gyreBody(dt) {
+  const on = GYRE.on;
+  GYRE.fx += ((on ? 1 : 0) - GYRE.fx) * (1 - Math.exp(-dt * (on ? 30 : 12)));
+  if (!on && GYRE.fx < 0.02) { if (GYRE.bodyOn) { GYRE.bodyOn = false; selfBody.rotation.set(0, yaw, 0); } return; }
+  GYRE.bodyOn = true;
+  // out of the flip the body finishes the turn it is closest to, it never unwinds backwards
+  if (!on) { const kk = 1 - Math.exp(-dt * 14), T = Math.PI * 2; GYRE.ang += ((GYRE.ang > Math.PI ? T : 0) - GYRE.ang) * kk; GYRE.twist += (Math.round(GYRE.twist / T) * T - GYRE.twist) * kk; }
+  const a = GYRE.ang;
+  const axis = GYRE.dir === "left" || GYRE.dir === "right" ? _gyZ : _gyX;
+  const sgn = GYRE.dir === "front" || GYRE.dir === "right" ? -1 : 1;
+  _gyq.setFromAxisAngle(_gyY, yaw).multiply(_gyq2.setFromAxisAngle(axis, sgn * a)).multiply(_gyq2.setFromAxisAngle(_gyY, GYRE.twist));
+  selfBody.quaternion.copy(_gyq);
+  // tuck: knees to the chest, and the body sits a little lower so it never clips the eye
+  const tk = Math.sin(Math.min(1, GYRE.fx) * Math.PI / 2);
+  selfBody.position.y -= 0.35 * tk * Math.abs(Math.sin(a / 2));
+  for (const L of selfLegs) { L.hip.rotation.x += (1.75 - L.hip.rotation.x) * tk; L.knee.rotation.x += (-2.2 - L.knee.rotation.x) * tk; }
+}
+const gyPips = (() => {
+  const d = document.createElement("div"); d.id = "gypips"; d.className = "hud"; d.hidden = true;
+  d.innerHTML = "<i></i><i></i><b></b>"; document.body.appendChild(d);
+  const st = document.createElement("style");
+  st.textContent = "#gypips{left:50%;top:50%;transform:translate(-50%,19px);display:flex;gap:6px;align-items:center}#gypips i{width:5px;height:5px;border:1px solid rgba(217,226,234,.8);transform:rotate(45deg)}#gypips i.on{background:var(--cyan);border-color:var(--cyan)}#gypips b{font:600 10px/1 inherit;color:var(--cyan);letter-spacing:.1em;margin-left:4px}";
+  document.head.appendChild(st); return d;
+})();
+function gyreFrame(dt) {
+  const u = postMat.uniforms.uGyre; if (u) u.value += (GYRE.fx - u.value) * Math.min(1, dt * 20);
+  const show = state.started && player && !player.dead && !player.grounded && !state.fin && !MF.cur;
+  gyPips.hidden = !show;
+  if (show) {
+    const inf = GYRE.inf || TGM.gyInf; const ps = gyPips.children;
+    ps[0].className = inf || GYRE.n >= 1 ? "on" : ""; ps[1].className = inf || GYRE.n >= 2 ? "on" : "";
+    ps[2].textContent = TGM.gyShow && state.mode === "test" ? (gyOn() || GYRE.k < 1 ? GYRE.k.toFixed(2) + "x" : "") : "";
+  }
+}
+
+// ---------- air scenes: a scripted arc over an enemy (Halo and pack B's air minis) ----------
+// gyreSeq(e, { dur, land, kind, cues: [[t, fn(F)]], pose(F, k, R, L), step(F, k, dt), look(F) }): the player rides an
+// arc from where they are, over the enemy, to `land` (default 1.5 m past it) in dur real seconds, at 0.2x world time.
+function gyreSeq(e, o = {}) {
+  if (GYRE.halo || MF.cur || state.fin || !e || e.dead) return null;
+  const pp = playerPos(), ep = enemyPos(e);
+  const dir = _gyv2.set(player.vel.x, 0, player.vel.z); if (dir.lengthSq() < 1) dir.set(ep.x - pp.x, 0, ep.z - pp.z); if (dir.lengthSq() < 1e-4) dir.set(-Math.sin(yaw), 0, -Math.cos(yaw)); dir.normalize();
+  const land = o.land || new THREE.Vector3(ep.x, e.floorY + P.half + P.radius + 0.05, ep.z).addScaledVector(dir, 1.5);
+  const top = Math.max(pp.y, e.floorY + 1.9 + 1.1, land.y + 0.5);
+  const F = { e, kind: o.kind || "halo", t: 0, dur: o.dur || 1, from: pp, land, dir: dir.clone(), ctrl: 2 * top - (pp.y + land.y) / 2, cues: (o.cues || []).map((c) => [c[0], c[1], false]), pose: o.pose, step: o.step, look: o.look, end: o.end, grips: [], rd: null };
+  GYRE.halo = F;
+  if (GYRE.on) gyreEnd("halo", true);
+  e.mf = true; e.posed = true; e.alert = true; e.stun = 0;
+  r6NoCollide(true); R6.pcgT = 0;
+  VM.attack = null; VM.inspect = null; MF.melee = null; cancelGunAnim(); arsCancel(); if (player.grapple) releaseGrapple();
+  ev("miniFin", { kind: F.kind, e, air: true });
+  return F;
+}
+// stepPlayer: while an air scene runs, the player rides its arc and nothing else moves them
+function gyreLock(dt) {
+  const F = GYRE.halo; if (!F) return false;
+  F.t += dt; const k = Math.min(1, F.t / F.dur), kh = smooth(k);
+  const x = F.from.x + (F.land.x - F.from.x) * kh, z = F.from.z + (F.land.z - F.from.z) * kh;
+  const y = (1 - k) * (1 - k) * F.from.y + 2 * k * (1 - k) * F.ctrl + k * k * F.land.y;
+  const p = playerPos(); const vx = (x - p.x) / DT * 0.5, vy = (y - p.y) / DT * 0.5, vz = (z - p.z) / DT * 0.5;
+  player.body.setLinvel({ x: THREE.MathUtils.clamp(vx, -40, 40), y: THREE.MathUtils.clamp(vy, -40, 40), z: THREE.MathUtils.clamp(vz, -40, 40) }, true);
+  GYRE.psOut = 1; player.immuneUntil = state.time + 0.6;
+  pressed.delete("Attack"); mouse.left = false;
+  for (const c of F.cues) if (!c[2] && F.t >= c[0]) { c[2] = true; try { c[1](F); } catch (err) { console.warn(err); } }
+  F.step?.(F, k, dt);
+  if (F.grips.length) updateGrips(F, DT * GYRE.k);
+  if (k >= 1) gyreSeqEnd(F);
+  return true;
+}
+function gyreSeqEnd(F) {
+  if (GYRE.halo !== F) return;
+  GYRE.halo = null; GYRE.endT = state.time; GYRE.killUntil = state.time + 0.15;
+  for (const g of [...F.grips]) releaseGrip(F, g, g.v.clone().multiplyScalar(0.5));
+  if (!F.e.dead) { F.e.mf = false; F.e.posed = false; }
+  R6.pcgT = 0.3; gyreLP(20000, 0.05);
+  const d = F.dir; player.body.setLinvel({ x: d.x * 4, y: -2, z: d.z * 4 }, true);
+  F.end?.(F);
+  ev("gyreEnd", { why: "seq", kind: F.kind, dur: F.t, kills: GYRE.kills });
+}
+// arms and look while an air scene runs
+const HALO_L = { p: [-0.12, -0.36, -0.4], r: [-0.95, 0.1, -0.15], el: 0.12, w: [0.55, 0, 0], curl: 0.9 };
+function gyrePose(R, L, dt) {
+  const F = GYRE.halo; if (!F) return;
+  const k = Math.min(1, F.t / F.dur);
+  if (F.pose) F.pose(F, k, R, L);
+  const at = F.look ? F.look(F) : null;
+  if (at) {
+    const to = _gyv.copy(at).sub(camOrigin());
+    const wy = Math.atan2(-to.x, -to.z), wp = Math.atan2(to.y, Math.hypot(to.x, to.z)); const kk = 1 - Math.exp(-dt * 7);
+    let dy = wy - yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); yaw += dy * kk; pitch += (THREE.MathUtils.clamp(wp, -1.45, 1.2) - pitch) * kk;
+  }
+}
+
+// ---------- Halo (default, any weapon): grab the head as you pass over, land behind, it twists off on its cables ----------
+function gyreHaloTry() {
+  const pp = playerPos(); const feet = pp.y - P.half - P.radius; let best = null, bd = 2.8;
+  for (const e of alive()) {
+    if (!mfOK(e)) continue; const p = enemyPos(e); const head = e.floorY + 1.9;
+    const d = Math.hypot(p.x - pp.x, p.z - pp.z); if (d < bd && feet > head - 0.9 && feet < head + 4.5) { bd = d; best = e; }
+  }
+  if (!best) return false;
+  return !!GYRE_HOOK.halo(best, player.weapon || "fists");
+}
+function gyreHaloDefault(e, w) {
+  const gore = andGore();
+  const hand = (F) => camOrigin().addScaledVector(lookDir(_gyv2), 0.55).add(_gyv.set(0, -0.32, 0));
+  let hg = null, q0 = null;
+  const F = gyreSeq(e, {
+    dur: 1.05, kind: "halo",
+    look: (F) => (F.rd ? r6PosRd(F.rd, "torso") : enemyPos(F.e).setY(F.e.floorY + 1.7)),
+    pose: (F, k, R, L) => { const wgt = k < 0.22 ? smooth(k / 0.22) : k > 0.86 ? 1 - smooth((k - 0.86) / 0.14) : 1; lerpPose(L, HALO_L, wgt); if (k > 0.3 && k < 0.8) L.curl = 1; },
+    cues: [
+      [0, () => { sfx.grab?.(); CAM.kickV -= 1; noise(0.2, "bandpass", 900, 0.3, 1.2, 2400); }],
+      // over the head: the hand closes, the chassis dies hanging from it
+      [0.3, (F) => {
+        const ep = enemyPos(e).setY(e.floorY + 1.75); e.killKind = "halo"; e.group.updateMatrixWorld(true);
+        killEnemy(e, ep, F.dir.clone(), 0.02);
+        F.rd = e.rd && ragdolls.includes(e.rd) ? e.rd : null;
+        if (F.rd) { F.rd.mfHeld = true; F.rd.launchSeen = true; q0 = rdQ(F.rd, "head"); hg = gripPart(F, F.rd, "head", () => ({ p: hand(F), q: _gyq.copy(q0).premultiply(_gyq2.setFromAxisAngle(_gyY, F.twist || 0)) })); }
+        sfx.grab?.(); tone("square", 140, 60, 0.12, 0.12); noise(0.15, "lowpass", 600, 0.6, 1, 200); CAM.kickV -= 2; shake = Math.max(shake, 0.2);
+      }],
+      [0.45, () => { tone("sawtooth", 180, 520, 0.4, 0.05); noise(0.4, "bandpass", 1400, 0.25, 3, 3200); }], // servos in the neck straining
+      // it twists off: the neck lets go on a fan of cables
+      [0.74, (F) => {
+        if (!F.rd || !ragdolls.includes(F.rd)) return;
+        const hp = r6PosRd(F.rd, "head"), tp = r6PosRd(F.rd, "torso"); if (!hp || !tp) return;
+        const neck = tp.clone().lerp(hp, 0.62);
+        if (gore !== "off") {
+          if (F.rd.joints?.head) { world.removeImpulseJoint(F.rd.joints.head, true); F.rd.joints.head = null; }
+          const torso = rdPart(F.rd, "torso");
+          for (let i = 0; i < 4; i++) goreWire(neck, _gyv.set((Math.random() - 0.5) * 2, 3 + Math.random() * 2, (Math.random() - 0.5) * 2), { body: torso?.body, rd: F.rd, life: 6 });
+          emitWorldSparks(neck, _gyY, 26, 0, 6); emitWorldSparks(neck, F.dir, 10, 2, 5); worldSmoke(neck, 2, 0.2, 0x8a9099, 0.3, 0.35, _gyY);
+        }
+        sfx.wireCut?.(); noise(0.12, "highpass", 3000, 0.6, 0.6); tone("square", 90, 30, 0.3, 0.25); impactFrame(60); glitch(0.45); shake = Math.max(shake, 0.4); hitstop(0.05);
+        if (state.mode === "test") popDamage(neck, 99, true);
+      }],
+      // and goes over your shoulder
+      [0.9, (F) => { if (hg) { releaseGrip(F, hg, F.dir.clone().multiplyScalar(-3).add(_gyv.set(0, 3, 0))); try { hg.p.body.setAngvel({ x: 9, y: 4, z: 6 }, true); } catch {} hg = null; } }],
+    ],
+    step: (F, k) => { F.twist = k < 0.4 ? 0 : smooth((k - 0.4) / 0.34) * Math.PI * 1.6; },
+  });
+  return !!F;
+}
+const r6PosRd = (rd, name) => { const p = rdPart(rd, name); if (!p) return null; const t = p.body.translation(); return new THREE.Vector3(t.x, t.y, t.z); };
+
+// ---------- Drop Spike: Ctrl in the flip slams you down onto whoever is below ----------
+function gyreDropSpike(e) {
+  const w = player.weapon || "fists";
+  ev("dropSpike", { e, w });
+  try { return GYRE_HOOK.drop(e && !e.dead ? e : null, w); } catch (err) { console.warn(err); return false; }
+}
+function gyreDropDefault(e, w) {
+  const pp = playerPos(); shake = Math.max(shake, 0.6); impactFrame(50); CAM.landV -= 2.5; CAM.kickV += 3; sfx.slam?.(); dust?.(pp.clone().setY(pp.y - 0.9), 3, 0x8a8494);
+  for (const o of alive()) { if (o === e) continue; const p = enemyPos(o); if (Math.hypot(p.x - pp.x, p.z - pp.z) < 3.5) stun(o, 1.2, 8); }
+  if (e && !e.dead) { e.killKind = "drop"; damageEnemy(e, 999, enemyPos(e).setY(e.floorY + 1.7), new THREE.Vector3(0, -1, 0), "heavy"); }
+  return true;
+}
+
+// ---------- combos ----------
+COMBOS.push(
+  { id: "halo", name: "Halo", gap: 6,
+    steps: ["Gyre: Space again in the air", "Kill something during the flip", "Mini finish a second enemy (a Halo counts)"],
+    perfectText: "All of it within 4 s",
+    seq: [
+      { on: "gyre", tag: "Gyre" },
+      { on: "gyreKill", keep: (a, d) => (a.e = d.e), tag: "Kill" },
+      { on: "miniFin", ok: (d, a) => d.e !== a.e, keep: (a, d) => (a.kind = d.kind), tag: (d) => (d.kind === "halo" ? "Halo" : "Finish") },
+    ],
+    perfect: (a) => a.span <= 4, line: "Gravity is a suggestion." },
+  { id: "spiral", name: "Spiral Staircase", gap: 5,
+    steps: ["Wall-run", "Wall-kick off", "Gyre", "Kill in the flip", "Wall-run again before you land"],
+    perfectText: "Never touch the floor",
+    breakOn: { any: ["ground"] },
+    seq: [{ on: "wallRun", tag: "Run" }, { on: "wallKick", tag: "Kick" }, { on: "gyre", tag: "Gyre" }, { on: "gyreKill", tag: "Kill" }, { on: "wallRun", tag: "Run" }],
+    perfect: () => true, line: "You did not come down once." },
+);
+
+// ---------- settings: Comfort ----------
+if (SET.gyreRoll === undefined) SET.gyreRoll = true;
+SET_UI.push(["Comfort", [["gyreRoll", "Gyre camera roll", "toggle", { note: "A 6° roll while you flip. The view itself never spins" }]]]);
+
+// ---------- testing ground: Gyre practice yard (launch pad, dummies on poles) and Tab menu toggles ----------
+const GY_YARD = { x: 46, z: -18 };
+const GY_POLES = [[0, 6, 0, "brawler"], [1.05, 6.5, 2.5, "gunman"], [2.1, 7, 5, "brawler"], [3.15, 6, 0, "gunman"], [4.2, 7.5, 7.5, "brawler"], [5.25, 6.5, 2.5, "brawler"]];
+for (const [a, r, h, type] of GY_POLES) TEST_NEW.push([type, GY_YARD.x + Math.cos(a) * r, GY_YARD.z + Math.sin(a) * r, h]);
+function gyreYard() {
+  const X = GY_YARD.x, Z = GY_YARD.z;
+  lvPad(X, Z, 0, 11, 1.4, "pad");
+  for (const [a, r, h] of GY_POLES) {
+    if (h <= 0) continue; const x = X + Math.cos(a) * r, z = Z + Math.sin(a) * r;
+    fixedBox(x, h / 2, z, 0.35, h, 0.35, M.mullion); fixedBox(x, h - 0.1, z, 1.6, 0.2, 1.6, M.concrete);
+  }
+}
+TGM.gyInf = false; TGM.gyShow = false;
+TGM_EXT.push((sec, btns, row, seg, tog) => {
+  const s = sec("Gyre practice");
+  row(s, "Infinite Gyre", [tog(TGM.gyInf, () => (TGM.gyInf = !TGM.gyInf))], "No charge or time limit");
+  row(s, "Show time scale", [tog(TGM.gyShow, () => (TGM.gyShow = !TGM.gyShow))], "Next to the pips while airborne");
+  btns(s, [["Go to the Gyre yard", () => tgmDo(() => { const at = { x: GY_YARD.x, y: 1.3, z: GY_YARD.z + 10 }; player.body.setTranslation(at, true); player.body.setLinvel({ x: 0, y: 0, z: 0 }, true); player.prev = new THREE.Vector3(at.x, at.y, at.z); yaw = 0; pitch = 0; }, "Gyre yard · step on the pad, Space in the air")]]);
+});
+
+// ---------- Floor 00: the Gyre module (before the Exam) ----------
+{
+  const exam = ROOMS.findIndex((r) => r.name === "Exam");
+  const room = { name: "Gyre", teaches: "Slow-motion flip, Halo", L: 56, H: 16,
+    build(R) {
+      // a stair of blocks up to a 4.8 m ledge (hold W into each one to climb), then the drop
+      for (const [i, h] of [[0, 1.2], [1, 2.4], [2, 3.6], [3, 4.8]]) { tBox(R, 0, h / 2, -7 - i * 2.4, 6, h, 2.4, M.concrete); }
+      tGlow(R, 0, 4.82, -15.6, 6, 0.04, 0.08, M.cyan);
+      for (const [x, z, h] of [[-6, -30, 2.4], [6, -30, 2.4], [0, -38, 3.6]]) { tBox(R, x, h / 2, z, 0.4, h, 0.4, M.mullion); tBox(R, x, h - 0.1, z, 1.6, 0.2, 1.6, M.concrete); }
+    },
+    populate(R) {
+      tSpawn(R, "brawler", 0, -21, { respawn: 3 }); tSpawn(R, "brawler", -3, -26, { respawn: 3 }); tSpawn(R, "brawler", 3, -26, { respawn: 3 });
+      for (const [x, z, h] of [[-6, -30, 2.4], [6, -30, 2.4], [0, -38, 3.6]]) tSpawn(R, "brawler", x, z, { y: h, respawn: 3 });
+    },
+    steps: [
+      { task: "Climb the blocks, jump off, then press Space again in the air", say: "Gyre. In the air, press jump again. You tuck, you turn, and the world nearly stops while you do. Look anywhere you like. Up, down, behind you.", on: (n) => n === "gyre" },
+      { task: "Kill a target while you flip", say: "Everything you carry still fires at full speed. Only they are slow.", on: (n) => n === "gyreKill" },
+      { task: "Flip over a target's head and press F: Halo", say: "Pass over one of them in the flip and press F at the top. Take the head with you.", on: (n, d) => n === "miniFin" && d.kind === "halo" },
+    ],
+    mastery: { text: "Two kills in one Gyre", on: (n, d, R) => { if (n === "gyre") R.m.c = 0; if (n === "gyreKill") { R.m.c = (R.m.c || 0) + 1; if (R.m.c >= 2) R.m.got = true; } }, ok: (R) => R.m.got } };
+  if (exam >= 0 && !ROOMS.some((r) => r.name === "Gyre")) {
+    ROOMS.splice(exam, 0, room);
+    // saved progress is by module index: shift the Exam's marks one along
+    if (!TUT.save.gy) { for (const k of ["done", "mastery"]) { const a = TUT.save[k] || []; if (a.length > exam) a.splice(exam, 0, false); } TUT.save.gy = 1; store.set("res.tut", TUT.save); }
+  }
+}
 // ---- end slot: gyre ----
 
 // ---- slot: traversal ----
+// ================= C3 · traversal pack =================
+// Wall-run and wall-kick, ground slam, head-hop, cable ride, slide-jump and speed carry, yank, disarm, door breach slow-mo.
+// Hooks into the rest of the game are one-line calls: travPre (stepPlayer, before the jump), travPost (end of stepMoves),
+// travTs (simStep's time chain), travKickDoor (landKick), travYank (the sling release), travSlideJump / travSlideCarry
+// (slides), travCam (updateMoveCam), travPose (movePoses), travReset (lvReset and resetMoves).
+// Level data registers its lines through TRV (world coordinates):
+//   TRV.addPanel(x1, z1, x2, z2, y0, y1, { follow })   a cyan wall-run strip on a wall face, runnable from either side
+//   TRV.addCable(ax, ay, az, bx, by, bz)                a cable; the rider hangs 1.4 m below it. Returns { cut() }
+//   TRV.addDoor(cx, cz, axis, w, h)                     a breachable door ("x": spans x, "z": spans z)
+//   TRV.roomReset()                                     re-arms the once-per-room breach slow-mo
+// Glass floors that break under a slam are ordinary glass panes with pane.floor = true.
+const TRV_K = {
+  wrMin: 6, wrDur: 1.2, wrMax: 2, wrGrav: 0.25, wrRoll: 0.14, kickBoost: 1.5,
+  slamV: 28, slamR: 3.5, slamKillH: 6, slamMinH: 1.6,
+  hopV: 3, hopUp: 8.9,
+  cableV: 14, cableHang: 1.3, cableReach: 2.6,
+  breachTs: 0.35, breachDur: 1.0, yankTap: 0.3, disarmR: 2.5, stolenShots: 3,
+};
+const TRV = (globalThis.TRV = {
+  panels: [], cables: [], doors: [],
+  wr: null, wrN: 0, wrCd: 0, roll: 0,
+  slam: null, hopN: 0, lastHop: -9, vyPrev: 0, airSp: 0, land: null, cableOffT: -9,
+  cable: null, breachT: 0, breachUsed: false, stolen: null, thrown: [], course: null,
+  addPanel(x1, z1, x2, z2, y0, y1, opts = {}) {
+    const p = { a: new THREE.Vector3(x1, 0, z1), b: new THREE.Vector3(x2, 0, z2), y0, y1, follow: opts.follow || null };
+    TRV.panels.push(p); return p;
+  },
+  addCable(ax, ay, az, bx, by, bz) {
+    const a = new THREE.Vector3(ax, ay, az), b = new THREE.Vector3(bx, by, bz);
+    const c = { a, b, len: a.distanceTo(b), dir: b.clone().sub(a).normalize(), dead: false,
+      cut() { c.dead = true; if (TRV.cable?.c === c) travCableOff(null, "cut"); } };
+    TRV.cables.push(c); return c;
+  },
+  addDoor(cx, cz, axis, w, h = 3) { return travDoor(cx, cz, axis, w, h); },
+  roomReset() { TRV.breachUsed = false; },
+});
+function travReset() {
+  TRV.panels.length = 0; TRV.cables.length = 0; TRV.doors.length = 0;
+  TRV.wr = null; TRV.wrN = 0; TRV.slam = null; TRV.hopN = 0; TRV.cable = null; TRV.breachT = 0; TRV.breachUsed = false; TRV.land = null;
+  travStolenDrop(); for (const T of TRV.thrown) T.g.removeFromParent(); TRV.thrown.length = 0; TRV.course = null;
+}
+
+const _trv1 = new THREE.Vector3(), _trv2 = new THREE.Vector3(), _trv3 = new THREE.Vector3(), _tUp = new THREE.Vector3(0, 1, 0), _tDown = new THREE.Vector3(0, -1, 0);
+const trvHoriz = (v) => Math.hypot(v.x, v.z);
+function trvFeet(pp) { return pp.y - (P.half + P.radius); }
+function trvHeight(pp) {
+  const h = world.castRay(new RAPIER.Ray({ x: pp.x, y: pp.y, z: pp.z }, { x: 0, y: -1, z: 0 }), 60, true, undefined, GROUPS.player, player.col);
+  return h ? (h.toi ?? h.timeOfImpact) - (P.half + P.radius) : 60;
+}
+function trvBusy() { return !!(player.grapple || player.climb || player.sling || MF.cur || state.fin || player.dead || player.stimUse); }
+
+// ---------- wall-run: find a runnable wall beside you ----------
+// A registered panel anywhere; in the testing ground, any vertical wall at least 2 m tall.
+function trvPanelHit(pp, dir) {
+  let best = null;
+  for (const p of TRV.panels) {
+    let a = p.a, b = p.b, y0 = p.y0, y1 = p.y1;
+    if (p.follow) { p.follow.updateMatrixWorld(); const m = p.follow.matrixWorld; a = _trv2.set(p.a.x, p.y0, p.a.z).applyMatrix4(m).clone(); b = _trv2.set(p.b.x, p.y0, p.b.z).applyMatrix4(m).clone(); const dy = a.y - p.y0; y0 += dy; y1 += dy; }
+    if (pp.y < y0 - 0.3 || pp.y > y1 + 0.4) continue;
+    const ab = _trv1.set(b.x - a.x, 0, b.z - a.z); const L2 = ab.lengthSq(); if (L2 < 1e-4) continue;
+    const u = ((pp.x - a.x) * ab.x + (pp.z - a.z) * ab.z) / L2; if (u < -0.02 || u > 1.02) continue;
+    const qx = a.x + ab.x * u, qz = a.z + ab.z * u; const dx = pp.x - qx, dz = pp.z - qz; const d = Math.hypot(dx, dz);
+    if (d > P.radius + 0.75 || d < 1e-3) continue;
+    const n = new THREE.Vector3(dx / d, 0, dz / d); if (dir && n.dot(dir) > -0.5) continue;
+    if (!best || d < best.d) best = { n, d, panel: p };
+  }
+  return best;
+}
+function trvRayWall(pp, dir) {
+  if (state.mode !== "test") return null;
+  const cast = (y) => world.castRayAndGetNormal(new RAPIER.Ray({ x: pp.x, y, z: pp.z }, dir), P.radius + 0.75, true, undefined, GROUPS.envOnly, player.col);
+  const h = cast(pp.y); if (!h || Math.abs(h.normal.y) > 0.3) return null;
+  if (!cast(pp.y + 1.1) && !cast(pp.y - 0.8)) return null; // too short to run on
+  const n = new THREE.Vector3(h.normal.x, 0, h.normal.z).normalize(); if (n.dot(dir) > -0.5) return null;
+  return { n, d: h.toi ?? h.timeOfImpact, panel: null };
+}
+function trvWallAt(pp, dir) { return trvPanelHit(pp, dir) || trvRayWall(pp, dir); }
+function trvFindWall(pp, hv) {
+  const side = _trv3.set(-hv.z, 0, hv.x).normalize(); let best = null;
+  for (const s of [1, -1]) { const w = trvWallAt(pp, side.clone().multiplyScalar(s)); if (w && (!best || w.d < best.d)) best = w; }
+  return best;
+}
+
+// ---------- per step, before the jump: inputs that have to win over the existing ones ----------
+function travPre(dt, vel, grounded, fwd, wish) {
+  const pp = playerPos();
+  const crouchP = pressed.has("ControlLeft") || pressed.has("ControlRight") || pressed.has("KeyC");
+  const eatCrouch = () => { pressed.delete("ControlLeft"); pressed.delete("ControlRight"); pressed.delete("KeyC"); };
+  const spaceFresh = keys.has("Space") && !player.jumpHeld;
+  // the cable owns Space (jump off), E (let go) and Ctrl (drop)
+  if (TRV.cable) {
+    if (spaceFresh) { player.jumpHeld = true; travCableOff(vel, "jump"); }
+    else if (pressed.has("KeyE")) { pressed.delete("KeyE"); player.grapBuf = 0; travCableOff(vel, "let go"); }
+    else if (crouchP) { eatCrouch(); travCableOff(vel, "drop"); }
+    return;
+  }
+  // wall-kick: Space while running a wall
+  if (TRV.wr && spaceFresh) { travWallKick(vel); return; }
+  // cable: E near a cable hooks onto it instead of firing the grapple
+  if (pressed.has("KeyE") && player.ownsSword && !trvBusy() && travCableOn(pp, vel)) { pressed.delete("KeyE"); player.grapBuf = 0; return; }
+  // disarm: F on an enemy aiming at you up close
+  if (pressed.has("KeyF") && !CARRY.rd && canAct() && !MF.cur && travDisarm()) { pressed.delete("KeyF"); return; }
+  // the stolen gun: LMB fires it, then throws it
+  if (TRV.stolen && pressed.has("Attack") && canAct()) { pressed.delete("Attack"); travStolenFire(); }
+  // ground slam: Ctrl in the air. The sword's grapple breach keeps Ctrl just after a grapple unless you look down.
+  if (crouchP && !grounded && !TRV.slam && !player.grapple && !player.climb && !player.sling && !MF.cur && !state.fin) {
+    const breachWin = player.ownsSword && state.time - player.lastGrapple < 1.5;
+    if ((!breachWin || pitch < -0.35) && trvHeight(pp) >= TRV_K.slamMinH) { eatCrouch(); travSlamStart(vel); }
+  }
+}
+
+// ---------- per step, after everything else has written the velocity ----------
+function travPost(dt, vel, grounded, fwd, wish) {
+  if (player.dead) return;
+  const pp = playerPos();
+  if (TRV.cable) travCableStep(dt, vel, pp);
+  else if (TRV.slam) travSlamStep(dt, vel, pp, grounded);
+  else travWallStep(dt, vel, pp, grounded);
+  if (!TRV.slam && !TRV.cable) travHop(vel, pp, grounded);
+  if (!TRV.cable) travDoorRam(vel, pp);
+  travThrownStep(dt);
+  // landing: remember the air speed for the slide carry, reset per-airtime counters
+  if (grounded && !player.grounded) {
+    const fromLine = state.time - player.lastGrapple < 1.2 || state.time - TRV.cableOffT < 1.2;
+    TRV.land = { t: state.time, sp: TRV.airSp, line: fromLine };
+  }
+  if (grounded && state.time - TRV.lastHop > 0.25) { TRV.wrN = 0; TRV.hopN = 0; }
+  if (!grounded) TRV.airSp = trvHoriz(vel);
+  TRV.vyPrev = vel.y;
+}
+
+// ---------- wall-run ----------
+function travWallStep(dt, vel, pp, grounded) {
+  const W = TRV.wr;
+  if (W) {
+    W.t += dt;
+    const hit = trvWallAt(pp, W.n.clone().negate());
+    const crouch = keys.has("ControlLeft") || keys.has("ControlRight") || keys.has("KeyC");
+    if (!hit || grounded || W.t >= TRV_K.wrDur || crouch || player.grapple || player.climb) { travWallEnd(vel, hit ? "time" : "lost"); return; }
+    W.n.copy(hit.n);
+    const hv = _trv1.set(vel.x, 0, vel.z); const along = hv.clone().addScaledVector(W.n, -hv.dot(W.n));
+    if (along.lengthSq() < 1e-3) along.copy(W.along); along.normalize(); W.along.copy(along);
+    let sp = Math.max(along.dot(hv), W.sp0 * 0.92, 7);
+    if (keys.has("KeyW") && sp < 11.5) sp += 5 * dt;
+    vel.x = along.x * sp - W.n.x * 1.2; vel.z = along.z * sp - W.n.z * 1.2;
+    W.vy += P.gravity * TRV_K.wrGrav * dt; vel.y = W.vy;
+    if (Math.random() < dt * 12) emitWorldSparks(pp.clone().addScaledVector(W.n, -0.45).add(_trv2.set(0, -0.7, 0)), W.n, 1, 0, 3);
+    return;
+  }
+  if (grounded || trvBusy() || TRV.wrN >= TRV_K.wrMax || state.time < TRV.wrCd) return;
+  const hs = trvHoriz(vel); if (hs < TRV_K.wrMin) return;
+  const hv = new THREE.Vector3(vel.x / hs, 0, vel.z / hs);
+  const w = trvFindWall(pp, hv); if (!w) return;
+  const into = hv.dot(w.n); if (into > 0.35 || into < -0.85) return; // moving away, or straight at it
+  const along = hv.clone().addScaledVector(w.n, -into).normalize();
+  TRV.wr = { t: 0, n: w.n.clone(), along, sp0: hs, vy: THREE.MathUtils.clamp(vel.y, 0.5, 4.5), side: -Math.sign(w.n.dot(_trv2.set(Math.cos(yaw), 0, -Math.sin(yaw)))) || 1 };
+  TRV.wrN++;
+  sfx.grab(); noise(0.5, "bandpass", 1400, 0.18, 2, 600); CAM.landV -= 0.6;
+  ev("wallRun", { n: TRV.wrN });
+}
+function travWallEnd(vel, why) {
+  const W = TRV.wr; if (!W) return; TRV.wr = null; TRV.wrCd = state.time + 0.2;
+  if (why === "time" && vel) { vel.addScaledVector(W.n, 2); }
+  ev("wallRunEnd", { why });
+}
+function travWallKick(vel) {
+  const W = TRV.wr; TRV.wr = null; TRV.wrCd = state.time + 0.3;
+  const d = W.n.clone().add(W.along).normalize(); // 45 degrees off the wall
+  const sp = Math.max(trvHoriz(vel), 7) + TRV_K.kickBoost;
+  vel.x = d.x * sp; vel.z = d.z * sp; vel.y = P.jump * 0.92;
+  player.jumpHeld = true; player.wallKickT = state.time; player.coyote = 0;
+  sfx.kickSwing(); sfx.dash(); fovKick += 7; speedLines(0.5); CAM.kickV -= 2; CAM.rollV += W.side * 4;
+  emitWorldSparks(playerPos().addScaledVector(W.n, -0.45), W.n, 10, 0, 5);
+  ev("wallKick", {});
+}
+function travCam() {
+  const want = TRV.wr ? TRV.wr.side * TRV_K.wrRoll * smooth(TRV.wr.t / 0.15) : 0;
+  return want;
+}
+
+// ---------- ground slam ----------
+function travSlamStart(vel) {
+  if (TRV.wr) travWallEnd(null, "slam");
+  const gy = typeof GYRE !== "undefined" && GYRE?.on;
+  if (gy && typeof gyreEnd === "function") try { gyreEnd("drop"); } catch (err) { console.warn(err); }
+  TRV.slam = { y0: playerPos().y, t: 0, gyre: !!gy };
+  vel.x *= 0.2; vel.z *= 0.2; vel.y = -TRV_K.slamV;
+  sfx.whiff(); tone("sawtooth", 300, 60, 0.3, 0.06); fovKick += 6; CAM.kickV -= 3; speedLines(0.6);
+}
+function travSlamTarget(pp) {
+  const feet = trvFeet(pp);
+  for (const e of alive()) {
+    if (e.T.boss || e.T.part || e.T.flying) continue;
+    const ep = enemyPos(e); if (Math.hypot(ep.x - pp.x, ep.z - pp.z) > 0.95) continue;
+    const top = ep.y + 0.93; if (feet > top - 0.4 && feet < top + 1.1) return e;
+  }
+  return null;
+}
+function travSlamStep(dt, vel, pp, grounded) {
+  const S = TRV.slam; S.t += dt;
+  const hv = _trv1.set(vel.x, 0, vel.z).multiplyScalar(Math.pow(0.2, dt));
+  const wish = new THREE.Vector3(); if (keys.has("KeyW")) wish.x -= Math.sin(yaw), wish.z -= Math.cos(yaw); if (keys.has("KeyS")) wish.x += Math.sin(yaw), wish.z += Math.cos(yaw);
+  hv.addScaledVector(wish, 6 * dt);
+  vel.x = hv.x; vel.z = hv.z; vel.y = -TRV_K.slamV;
+  const e = travSlamTarget(pp);
+  if (e || grounded || S.t > 3) travSlamHit(vel, pp, e);
+}
+function travSlamHit(vel, pp, direct) {
+  const S = TRV.slam; const h = Math.max(0, S.y0 - pp.y);
+  const at = new THREE.Vector3(pp.x, trvFeet(pp), pp.z);
+  const R = TRV_K.slamR;
+  // glass floors give way and the slam keeps going
+  let broke = false;
+  for (const pane of panes) {
+    if (pane.broken || !(pane.floor || (state.mode === "test" && pane.half.y < 0.1 && pane.half.x > 0.6 && pane.half.z > 0.6))) continue;
+    if (Math.abs(at.x - pane.center.x) < pane.half.x + 0.7 && Math.abs(at.z - pane.center.z) < pane.half.z + 0.7 && Math.abs(at.y - (pane.center.y + pane.half.y)) < 1.2) { shatter(pane, at.clone(), _tDown.clone(), 18); broke = true; }
+  }
+  if (broke) { sfx.glass(true); shake = Math.max(shake, 0.35); CAM.kickV -= 3; hitstop(0.05); S.glass = (S.glass || 0) + 1; ev("slamGlass", {}); return; }
+  TRV.slam = null;
+  ev("slam", { h, e: direct || null, gyre: S.gyre });
+  const kills = [];
+  if (direct && !direct.dead) {
+    if (h >= TRV_K.slamKillH) { damageEnemy(direct, 999, enemyPos(direct).add(_trv2.set(0, 0.9, 0)), _tDown.clone(), "slam"); flash("Slam kill", "var(--blood)"); }
+    else { damageEnemy(direct, 2, enemyPos(direct).add(_trv2.set(0, 0.9, 0)), _tDown.clone(), "slam"); if (!direct.dead) { stun(direct, 1.6, 4); flashEnemy(direct); } }
+    if (direct.dead) kills.push(direct);
+    if (S.gyre && typeof gyreDropSpike === "function") try { gyreDropSpike(direct); } catch (err) { console.warn(err); }
+  } else if (S.gyre && typeof gyreDropSpike === "function") try { gyreDropSpike(null); } catch (err) { console.warn(err); }
+  // the stagger ring
+  const k = clamp01(h / 10);
+  for (const e of alive()) {
+    if (e === direct || e.T.boss || e.T.part) continue;
+    const ep = enemyPos(e); const d = Math.hypot(ep.x - at.x, ep.z - at.z); if (d > R || Math.abs(ep.y - 0.95 - at.y) > 2.2) continue;
+    stun(e, 1.2 + 0.5 * k, 8 + 6 * (1 - d / R)); e.flinch = 0.4; e.flinchDir = "upper"; flashEnemy(e);
+  }
+  // desks, props, barrels and loose bodies
+  for (const D of [...PROPS.deskH.values()]) { const c = D.c || D.mesh?.position; if (c && Math.hypot(c.x - at.x, c.z - at.z) < R && Math.abs(c.y - at.y) < 2.5) try { deskHit(D, c.clone(), c.clone().sub(at).setY(0.5).normalize(), 6); } catch (err) { console.warn(err); } }
+  for (const P0 of PROPS.list) { if (P0.gone || P0.dead || !P0.g) continue; const c = P0.g.position; if (Math.hypot(c.x - at.x, c.z - at.z) < R && Math.abs(c.y - at.y) < 2.5) try { propHit(P0, c.clone(), c.clone().sub(at).setY(1).normalize(), 3); } catch (err) { console.warn(err); } }
+  for (const b of barrels) if (!b.dead && b.pos.distanceTo(at) < R) hitBarrel(b, 0.3);
+  for (const rd of ragdolls) { const t = rd.torso.translation(); if (Math.hypot(t.x - at.x, t.z - at.z) < R && Math.abs(t.y - at.y) < 2) rd.torso.applyImpulse({ x: (t.x - at.x) * rd.torso.mass(), y: 4 * rd.torso.mass(), z: (t.z - at.z) * rd.torso.mass() }, true); }
+  // the hit itself
+  crackDecal(at.clone().setY(at.y + 0.02), _tUp, 1.4 + 1.2 * k); dust(at, 3 + Math.round(3 * k), 0x8a8494);
+  emitWorldSparks(at, _tUp, 18 + Math.round(26 * k), 0, 6 + 4 * k);
+  sfx.slam(); sfx.kickHit(); impactFrame(40 + 30 * k); hitstop(0.06 + 0.05 * k); shake = Math.max(shake, 0.3 + 0.4 * k); glitch(0.2 + 0.3 * k);
+  CAM.landV -= 1.5 + 2 * k; CAM.kickV += 3 + 3 * k; fovKick -= 4;
+  // land: hold Ctrl and a direction to slide straight out of it
+  const crouch = keys.has("ControlLeft") || keys.has("ControlRight") || keys.has("KeyC");
+  const wish = new THREE.Vector3(); if (keys.has("KeyW")) wish.set(-Math.sin(yaw), 0, -Math.cos(yaw)); else if (keys.has("KeyS")) wish.set(Math.sin(yaw), 0, Math.cos(yaw)); else if (keys.has("KeyA")) wish.set(-Math.cos(yaw), 0, Math.sin(yaw)); else if (keys.has("KeyD")) wish.set(Math.cos(yaw), 0, -Math.sin(yaw));
+  if (direct && !direct.dead) { vel.y = 6; vel.x = vel.z = 0; } // bounce off a survivor
+  else if (crouch && wish.lengthSq()) { vel.x = wish.x * 12; vel.z = wish.z * 12; vel.y = -2; }
+  else { vel.x *= 0.2; vel.z *= 0.2; vel.y = -2; }
+}
+
+// ---------- head-hop ----------
+function travHop(vel, pp, grounded) {
+  if (Math.min(vel.y, TRV.vyPrev) > -TRV_K.hopV || player.grapple || player.sling) return;
+  const feet = trvFeet(pp);
+  for (const e of alive()) {
+    if (e.T.boss || e.T.part || e.T.flying || e.T.fixed || e.mf) continue;
+    if (state.time - (e.hopT || -9) < 0.5) continue;
+    const ep = enemyPos(e); if (Math.hypot(ep.x - pp.x, ep.z - pp.z) > 0.85) continue;
+    const top = ep.y + 0.93; if (feet < top - 0.35 || feet > top + 0.75) continue;
+    e.hopT = state.time;
+    if (e.T.shield || e.T.heavy) { // riot shields duck and shove you off
+      const away = pp.clone().sub(ep).setY(0); if (away.lengthSq() < 1e-4) away.set(Math.sin(yaw), 0, Math.cos(yaw)); away.normalize();
+      vel.x = away.x * 7; vel.z = away.z * 7; vel.y = 5; sfx.block(); flash("Shoved off", "var(--dim)"); shake = Math.max(shake, 0.15); return;
+    }
+    TRV.hopN++; TRV.lastHop = state.time;
+    vel.y = TRV_K.hopUp; player.coyote = 0;
+    if (player.dash < P.dashCharges) { player.dash++; player.dashRe = 0; }
+    stun(e, 1.1, 2); e.flinch = 0.4; e.flinchDir = "upper"; flashEnemy(e);
+    sfx.punchHit(false); tone("sine", 260 + TRV.hopN * 90, 520 + TRV.hopN * 120, 0.12, 0.06); CAM.landV -= 1.4; CAM.kickV += 1.5; shake = Math.max(shake, 0.14); hitstop(0.04);
+    emitWorldSparks(_trv2.set(ep.x, top, ep.z), _tUp, 8, 0, 4);
+    if (TRV.hopN >= 2) flash(`Head-hop ×${TRV.hopN}`, "var(--cyan)");
+    ev("hop", { e, n: TRV.hopN });
+    if (TRV.hopN >= 2) ev("hopChain", { n: TRV.hopN });
+    return;
+  }
+}
+
+// ---------- cable ride ----------
+function trvCablePoint(c, u, out = new THREE.Vector3()) { return out.copy(c.a).addScaledVector(c.dir, THREE.MathUtils.clamp(u, 0, c.len)); }
+function travCableOn(pp, vel) {
+  const hand = pp.clone(); hand.y += TRV_K.cableHang; let best = null;
+  for (const c of TRV.cables) {
+    if (c.dead) continue;
+    const u = THREE.MathUtils.clamp(hand.clone().sub(c.a).dot(c.dir), 0, c.len);
+    const q = trvCablePoint(c, u); const d = q.distanceTo(hand); if (d > TRV_K.cableReach) continue;
+    const look = lookDir(); const flat = _trv1.set(c.dir.x, 0, c.dir.z);
+    let s = flat.lengthSq() > 0.01 ? Math.sign(look.x * flat.x + look.z * flat.z) : 0; if (!s) s = c.dir.y < 0 ? 1 : -1;
+    if ((s > 0 && c.len - u < 1) || (s < 0 && u < 1)) s = -s;
+    if ((s > 0 && c.len - u < 1) || (s < 0 && u < 1)) continue;
+    if (!best || d < best.d) best = { c, u, s, d, q };
+  }
+  if (!best) return false;
+  if (TRV.wr) travWallEnd(null, "cable");
+  const g = { point: best.q.clone(), phase: "attached", mode: "cable", t: 1, dur: 0.1, L: TRV_K.cableHang, ramp: 1, disc: false, box: null, latchAt: state.time };
+  player.grapple = g; hookFx.state = "out"; VM.grapFire = 1; sfx.grapple(); sfx.grappleLatch(); shake = Math.max(shake, 0.1);
+  const rideDir = best.c.dir.clone().multiplyScalar(best.s);
+  TRV.cable = { c: best.c, u: best.u, s: best.s, g, sp: Math.max(6, vel.dot(rideDir)), t: 0 };
+  ev("cableOn", {});
+  return true;
+}
+function travCableStep(dt, vel, pp) {
+  const C = TRV.cable;
+  if (player.grapple !== C.g || C.c.dead) { travCableOff(vel, "lost"); return; }
+  C.t += dt; C.sp = Math.min(TRV_K.cableV, C.sp + 30 * dt);
+  C.u += C.s * C.sp * dt;
+  const rideDir = C.c.dir.clone().multiplyScalar(C.s);
+  if (C.u <= 0 || C.u >= C.c.len) { travCableOff(vel, "end"); return; }
+  const q = trvCablePoint(C.c, C.u); C.g.point.copy(q);
+  const target = q.clone(); target.y -= TRV_K.cableHang;
+  const err = target.sub(pp);
+  if (err.length() > 3.5) { travCableOff(vel, "snag"); return; }
+  vel.copy(rideDir).multiplyScalar(C.sp).addScaledVector(err, 12);
+  if (Math.random() < dt * 30) emitWorldSparks(q, _tUp, 1, 0, 2);
+}
+function travCableOff(vel, why) {
+  const C = TRV.cable; if (!C) return; TRV.cable = null; TRV.cableOffT = state.time; TRV.offWhy = why;
+  if (player.grapple === C.g) releaseGrapple();
+  player.grappleCd = 0.15;
+  if (vel) {
+    const rideDir = C.c.dir.clone().multiplyScalar(C.s);
+    vel.copy(rideDir).multiplyScalar(C.sp);
+    if (why === "jump") { vel.y = Math.max(vel.y, 0) + 6.5; vel.addScaledVector(_trv1.set(-Math.sin(yaw), 0, -Math.cos(yaw)), 2); fovKick += 6; speedLines(0.5); sfx.dash(); }
+    else if (why === "end") vel.y += 2;
+  }
+  ev("cableOff", { why });
+}
+
+// ---------- slide-jump and the speed carry ----------
+function travSlideJump(vel) {
+  const hs = trvHoriz(vel); if (hs < 0.1) return;
+  const k = (hs + 1.2) / hs; vel.x *= k; vel.z *= k; ev("slideJump", { sp: hs + 1.2 });
+}
+function travSlideCarry(vel) {
+  const L = TRV.land; if (!L || !L.line || state.time - L.t > 0.25) return;
+  const hs = trvHoriz(vel); if (hs < 0.1 || L.sp <= hs) return;
+  const k = L.sp / hs; vel.x *= k; vel.z *= k; TRV.land = null;
+  flash("Carry", "var(--cyan)"); fovKick += 5; speedLines(0.5); ev("speedCarry", { sp: L.sp });
+}
+
+// ---------- yank: a quick tap of the sling on an enemy pulls them in ----------
+function travYank(g, vel, attached) {
+  const e = g.enemy; if (!e || e.dead) return false;
+  if (attached && g.charge >= TRV_K.yankTap) return false; // held: the sling strike, as before
+  if (e.T.shield || e.T.heavy) { // too heavy: you go to them instead
+    if (attached) return false;
+    g.charge = 0.5; slingLaunch(vel, g); ev("yank", { e, heavy: true }); return true;
+  }
+  const pp = playerPos(), ep = enemyPos(e); const to = pp.clone().sub(ep).setY(0); const d = to.length(); if (d < 0.1) return false; to.divideScalar(d);
+  stun(e, 1.8, 0); e.knock.copy(to).multiplyScalar(Math.max(0, d - 1.9) * 3.912); e.flinch = 0.3; e.flinchDir = "upper"; flashEnemy(e);
+  sfx.grappleRetract(); tone("sawtooth", 140, 520, 0.2, 0.06); noise(0.2, "bandpass", 900, 0.4, 2, 300);
+  CAM.kickV -= 2.5; fovKick -= 3; shake = Math.max(shake, 0.15); flash("Yank", "var(--blood)");
+  ev("yank", { e });
+  return true;
+}
+
+// ---------- disarm: rip the forearm gun off an android that is aiming at you ----------
+function travDisarm() {
+  if (TRV.stolen) return false;
+  const pp = playerPos(), look = lookDir().setY(0).normalize(); let best = null, bd = 1e9;
+  for (const e of alive()) {
+    if (e.T.boss || e.T.part || e.T.fixed || e.T.flying || e.T.civ || !e.T.ranged || e.disarmed || e.mf) continue;
+    const ep = enemyPos(e); const to = ep.clone().sub(pp); if (Math.abs(to.y) > 1.6) continue; to.y = 0; const d = to.length();
+    if (d > TRV_K.disarmR + 0.4 || d < 0.05) continue; to.divideScalar(d); if (to.dot(look) < 0.55) continue;
+    const ry = e.group.rotation.y; const facing = -(Math.sin(ry) * to.x + Math.cos(ry) * to.z);
+    const aiming = e.tele > 0 || (e.alert && facing > 0.5) || (state.mode === "test" && e.dummy);
+    if (!aiming) continue;
+    if (d < bd) { bd = d; best = e; }
+  }
+  if (!best) return false;
+  const e = best, ep = enemyPos(e);
+  const right = new THREE.Vector3(Math.cos(e.group.rotation.y), 0, -Math.sin(e.group.rotation.y));
+  const hand = ep.clone().addScaledVector(right, -0.4).add(_trv2.set(0, 0.25, 0));
+  e.disarmed = true; e.T = Object.assign({}, e.T, { ranged: false, melee: true, burst: 0, dmg: Math.max(8, Math.round((e.T.dmg || 10) * 0.8)), speed: Math.max(e.T.speed || 3, 4.4) });
+  e.tele = 0; e.burstLeft = 0; if (e.meshes?.glow) e.meshes.glow.visible = false;
+  stun(e, 1.5, 6); e.flinch = 0.4; e.flinchDir = "hook"; flashEnemy(e);
+  try { andHit(e, 1.5, hand, right.clone().negate(), "heavy"); } catch {}
+  emitWorldSparks(hand, right, 26, 0, 6);
+  sfx.grab(); sfx.clunk(); tone("square", 300, 90, 0.16, 0.08); noise(0.18, "highpass", 2600, 0.4); hitstop(0.08); impactFrame(35); CAM.kickV -= 2; shake = Math.max(shake, 0.2);
+  TRV.stolen = { n: TRV_K.stolenShots, owner: e, cd: 0 }; travStolenShow(true);
+  flash(`Disarmed · ${TRV_K.stolenShots} shots, then throw`, "var(--amber)");
+  ev("disarm", { e });
+  return true;
+}
+// the gun in the left hand: a chunk of android forearm with its barrel still hot
+let trvGunVM = null;
+function trvGunMesh() {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.075, 0.3), M.gun); g.add(body);
+  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.14, 8), M.mullion); bar.rotation.x = Math.PI / 2; bar.position.set(0, 0.015, -0.2); g.add(bar);
+  const stump = new THREE.Mesh(new THREE.CylinderGeometry(0.034, 0.04, 0.09, 8), M.mullion); stump.rotation.x = Math.PI / 2; stump.position.set(0, -0.005, 0.18); g.add(stump);
+  const glow = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.012, 0.12), M.red || M.amber); glow.position.set(0, 0.043, -0.02); g.add(glow);
+  return g;
+}
+function travStolenShow(on) {
+  if (on) { if (!trvGunVM) trvGunVM = trvGunMesh(); armL.hand.add(trvGunVM); trvGunVM.position.set(-0.02, -0.05, -0.1); trvGunVM.rotation.set(-1.35, 0, 0); trvGunVM.visible = true; }
+  else if (trvGunVM) { trvGunVM.visible = false; trvGunVM.removeFromParent(); }
+}
+function travStolenDrop() { TRV.stolen = null; travStolenShow(false); }
+function travStolenFire() {
+  const S = TRV.stolen; if (state.time < S.cd) return;
+  if (S.n <= 0) { travThrow(); return; }
+  S.n--; S.cd = state.time + 0.22; S.kick = 1;
+  const o = camOrigin(), d = lookDir();
+  sfx.gunshot(); tone("square", 900, 200, 0.08, 0.06); CAM.kickV += 2.4; shake = Math.max(shake, 0.12); fovKick += 1;
+  let end = o.clone().addScaledVector(d, 60);
+  const hit = world.castRay(new RAPIER.Ray(o, d), 60, true, undefined, GROUPS.playerShot, player.col, undefined, (c) => !glassByHandle.has(c.handle));
+  if (hit) {
+    const toi = hit.toi ?? hit.timeOfImpact; end = o.clone().addScaledVector(d, toi); const h = hit.collider.handle; const e = enemyByHandle.get(h);
+    if (e && !e.dead) { const head = end.y - e.floorY > 1.47; damageEnemy(e, head ? 6 : 3, end, d.clone(), "stolen"); if (!e.dead) { e.flinch = 0.25; e.flinchDir = "jab"; flashEnemy(e); } ev("shot", { e, head, kill: e.dead, stolen: true }); sfx.gunHit(head); }
+    else { propHitH(h, end, d, 1.5); emitWorldSparks(end, d.clone().negate(), 8, 0, 5); }
+  }
+  vmCamera.updateMatrixWorld(true); const muzzle = trvGunVM ? vmToWorld(trvGunVM.localToWorld(_trv2.set(0, 0.015, -0.28))) : o;
+  spawnTracer(muzzle, end);
+  if (S.n <= 0) flash("Empty · click to throw it", "var(--amber)");
+}
+function travThrow() {
+  travStolenShow(false); TRV.stolen = null;
+  const o = camOrigin(), d = lookDir();
+  const g = trvGunMesh(); g.position.copy(o).addScaledVector(d, 0.6).add(_trv2.set(-0.2, -0.2, 0)); levelGroup.add(g);
+  TRV.thrown.push({ g, v: d.clone().multiplyScalar(30).add(_trv2.set(0, 2, 0)), life: 2, spin: new THREE.Vector3(14 + Math.random() * 6, 4, 0) });
+  sfx.whiff(); sfx.discThrow(); CAM.kickV -= 1.5;
+  ev("gunThrow", {});
+}
+function travThrownStep(dt) {
+  for (let i = TRV.thrown.length - 1; i >= 0; i--) {
+    const T = TRV.thrown[i]; T.life -= dt; T.v.y += P.gravity * 0.5 * dt;
+    const from = T.g.position.clone(); const step = T.v.length() * dt; const dir = T.v.clone().normalize();
+    T.g.position.addScaledVector(T.v, dt); T.g.rotation.x += T.spin.x * dt; T.g.rotation.y += T.spin.y * dt;
+    let done = T.life <= 0;
+    if (!T.hit) {
+      for (const e of alive()) {
+        if (e.T.boss) continue; const ep = enemyPos(e); ep.y += 0.5;
+        if (ep.distanceTo(T.g.position) < 1.0) {
+          T.hit = true; damageEnemy(e, 3, T.g.position.clone(), dir, "thrown"); if (!e.dead) { stun(e, 1.6, 9); e.flinch = 0.45; e.flinchDir = "upper"; flashEnemy(e); }
+          sfx.punchHit(true); emitWorldSparks(T.g.position.clone(), dir.clone().negate(), 14, 0, 6); hitstop(0.05);
+          T.v.multiplyScalar(-0.25).setY(3); break;
+        }
+      }
+      const w = world.castRay(new RAPIER.Ray(from, dir), step + 0.1, true, undefined, GROUPS.envOnly, player.col);
+      if (w && !T.hit) { T.hit = true; T.v.multiplyScalar(-0.2).setY(2); sfx.clink(); emitWorldSparks(from, dir.clone().negate(), 6, 0, 4); }
+    }
+    if (T.hit) { addDebris(T.g, T.g.position.clone(), T.v.clone(), 4); TRV.thrown.splice(i, 1); continue; }
+    if (done) { T.g.removeFromParent(); TRV.thrown.splice(i, 1); }
+  }
+}
+// left hand up to aim the stolen gun; the shots kick the wrist
+const TRV_GUNPOSE = { p: [-0.26, -0.2, -0.12], r: [0.05, 0.12, 0.05], el: 1.15, w: [0, 0.1, 0], curl: 1 };
+function travPose(R, L, dt) {
+  const S = TRV.stolen; TRV.gunW = (TRV.gunW || 0) + ((S ? 1 : 0) - (TRV.gunW || 0)) * (1 - Math.exp(-dt * 12));
+  if (TRV.gunW < 0.01) return;
+  lerpPose(L, TRV_GUNPOSE, TRV.gunW);
+  if (S) { S.kick = Math.max(0, (S.kick || 0) - dt * 7); L.p[2] += 0.05 * S.kick; L.r[0] += 0.35 * S.kick; }
+}
+
+// ---------- door breach slow-mo ----------
+function travDoor(cx, cz, axis, w, h) {
+  const alongX = axis === "x"; const t = 0.18;
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(alongX ? w : t, h, alongX ? t : w), M.door); mesh.position.set(cx, h / 2, cz); mesh.castShadow = true; mesh.receiveShadow = true; ink(mesh);
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(alongX ? w * 0.7 : t + 0.04, 0.12, alongX ? t + 0.04 : w * 0.7), M.mullion); bar.position.y = 0; mesh.add(bar);
+  levelGroup.add(mesh);
+  const body = world.createRigidBody(RAPIER.RigidBodyDesc.fixed().setTranslation(cx, h / 2, cz));
+  world.createCollider(RAPIER.ColliderDesc.cuboid((alongX ? w : t) / 2, h / 2, (alongX ? t : w) / 2).setCollisionGroups(GROUPS.env), body);
+  const D = { c: new THREE.Vector3(cx, h / 2, cz), alongX, w, h, mesh, body, open: false };
+  TRV.doors.push(D); return D;
+}
+function trvDoorNear(D, at, pad) {
+  if (D.open) return false;
+  const dl = D.alongX ? Math.abs(at.x - D.c.x) : Math.abs(at.z - D.c.z), dn = D.alongX ? Math.abs(at.z - D.c.z) : Math.abs(at.x - D.c.x);
+  return dl < D.w / 2 + 0.2 && dn < pad && at.y > D.c.y - D.h / 2 - 0.5 && at.y < D.c.y + D.h / 2 + 0.3;
+}
+function travKickDoor(at, flat) {
+  for (const D of TRV.doors) if (trvDoorNear(D, at, 0.9)) { travBreach(D, flat.clone()); return true; }
+  return false;
+}
+function travDoorRam(vel, pp) {
+  if (!TRV.doors.length) return;
+  const hs = trvHoriz(vel); if (!(player.sliding || player.dashT > 0 || player.thrustT > 0) || hs < 7) return;
+  const dir = _trv1.set(vel.x / hs, 0, vel.z / hs);
+  const ahead = pp.clone().addScaledVector(dir, 0.6);
+  for (const D of TRV.doors) if (trvDoorNear(D, ahead, P.radius + 0.35)) { travBreach(D, dir.clone()); return; }
+}
+function travBreach(D, dir) {
+  D.open = true; dir.setY(0); if (dir.lengthSq() < 1e-4) dir.set(-Math.sin(yaw), 0, -Math.cos(yaw)); dir.normalize();
+  world.removeRigidBody(D.body); // queued by physSafe until after the step
+  const v = dir.clone().multiplyScalar(16).add(_trv2.set(0, 3.5, 0));
+  addDebris(D.mesh, D.mesh.position.clone(), v, 6);
+  // whoever stood behind it takes the door
+  for (const e of alive()) {
+    if (e.T.boss || e.T.part) continue; const ep = enemyPos(e); const rel = ep.clone().sub(D.c); const fwdD = rel.dot(dir); const lat = Math.abs(rel.x * dir.z - rel.z * dir.x);
+    if (fwdD > -0.3 && fwdD < 5 && lat < D.w / 2 + 1.2) { stun(e, 1.8, 13); e.flinch = 0.45; e.flinchDir = "upper"; flashEnemy(e); }
+  }
+  sfx.door(); sfx.kickHit(); sfx.crumble(); dust(D.c, 4, 0x9a94a8); emitWorldSparks(D.c, dir, 30, 0, 8);
+  impactFrame(55); glitch(0.45); shake = Math.max(shake, 0.45); fovKick += 8; CAM.kickV -= 3;
+  if (!TRV.breachUsed) { TRV.breachUsed = true; TRV.breachT = TRV_K.breachDur; sfx.slow(); flash("Breach", "var(--amber)"); ev("breachSlow", {}); }
+  ev("doorBreach", {});
+}
+// world time scale while the breach is on: 35%, easing back in over the last quarter second (a TIME source)
+timeMod("breach", (ts) => travTs(ts));
+function travTs(ts) {
+  if (TRV.breachT <= 0) return ts;
+  TRV.breachT -= DT; const k = 1 - smooth((0.25 - TRV.breachT) / 0.25);
+  return Math.min(ts, TRV_K.breachTs + (1 - TRV_K.breachTs) * (1 - k));
+}
+
+// ---------- combos that use the new moves (Spiral Staircase and Halo live with the Gyre) ----------
+COMBOS.push(
+  { id: "hopscotch", name: "Hopscotch", gap: 2.5,
+    steps: ["Head-hop an enemy", "Hop a second without touching the floor", "Hop a third"], perfectText: "All three heads inside 2 s",
+    seq: [1, 2, 3].map((n) => ({ on: "hop", ok: (d) => d.n === n, tag: `Hop ${n}` })), perfect: (a) => a.span <= 2, line: "They never looked up." },
+  { id: "longway", name: "Long Way Down", gap: 4,
+    steps: ["Ground slam onto an enemy from 10 m or higher", "Slide out of the landing", "Kill a second enemy"], perfectText: "The second kill within 2.5 s of the slam",
+    seq: [{ on: "slam", ok: (d) => d.h >= 10 && !!d.e, keep: (a, d) => (a.e = d.e), tag: "Slam" }, { on: "kill", ok: (d, a) => d.e === a.e, tag: "Crushed" },
+      { on: "slide", tag: "Slide" }, { on: "kill", ok: (d, a) => d.e !== a.e, tag: (d) => d.w }],
+    perfect: (a) => a.span <= 2.5, line: "Gravity is a weapon too." },
+  { id: "zipline", name: "Zipline Express", gap: 6,
+    steps: ["Ride a cable", "Kill two enemies from the cable", "Jump off into a mini finisher"], perfectText: "The mini finisher within 1.5 s of leaving the cable",
+    seq: [{ on: "cableOn", tag: "Cable" }, { on: "kill", ok: () => !!TRV.cable, tag: "Kill" }, { on: "kill", ok: () => !!TRV.cable, tag: "Kill" },
+      { on: "cableOff", keep: (a, d) => (a.off = d.t), tag: "Off" }, { on: "miniFin", keep: (a, d) => (a.lag = d.t - a.off), tag: "Finish" }],
+    perfect: (a) => a.lag <= 1.5, line: "Express service." },
+  { id: "breachclear", name: "Breach and Clear", gap: 1.8,
+    steps: ["Kick or slide through a closed door", "Three kills before the slow motion ends"], perfectText: "All three kills within 1 s",
+    seq: [{ on: "breachSlow", tag: "Breach" }, ...[1, 2, 3].map(() => ({ on: "kill", ok: (d, a) => d.t - a.t0 <= 1.6, tag: (d) => d.w }))],
+    perfect: (a) => a.span <= 1.0, line: "Knock first, next time. Or don't." },
+  { id: "giveitback", name: "Give It Back", gap: 8,
+    steps: ["Disarm an android that is aiming at you", "Kill it with its own gun", "Throw the empty gun to kill a third"], perfectText: "All of it within 4 s",
+    seq: [{ on: "disarm", keep: (a, d) => (a.e = d.e), tag: "Disarm" }, { on: "kill", ok: (d, a) => d.e === a.e && d.w === "stolen", tag: "Own gun" }, { on: "kill", ok: (d) => d.kind === "thrown", tag: "Throw" }],
+    perfect: (a) => a.span <= 4, line: "Returned. With interest." },
+  { id: "reeldeal", name: "Reel and Deal", gap: 5,
+    steps: ["Yank an enemy with a tap of the sling", "Mini finisher on it", "The finisher kills a second enemy"], perfectText: "The second kill within 3 s of the yank",
+    seq: [{ on: "yank", ok: (d) => !d.heavy, keep: (a, d) => (a.e = d.e), tag: "Yank" }, { on: "miniFin", ok: (d, a) => d.e === a.e, tag: "Finish" },
+      { on: "kill", ok: (d, a) => d.e !== a.e && (d.kind === "mfProj" || !!MF.cur), tag: "Second" }],
+    perfect: (a) => a.span <= 3, line: "Come here. And you." },
+);
+
+// ---------- testing ground: the Movement course, east of the arena (key M) ----------
+// North to south: start pad, wall-run lane (two cyan walls), cable from a deck down the middle, three heads in a line
+// under the end of the cable, a slam tower with a glass floor beside it, a red door into a back room.
+function travCourse() {
+  const X0 = 64, X1 = 92, Z0 = -46, Z1 = 46, cx = 78;
+  fixedBox((X0 + X1) / 2, -0.5, 0, X1 - X0, 1, Z1 - Z0, M.grid, { uv: [7, 23] });
+  fixedBox(X0 - 0.3, 1.5, 0, 0.6, 3, Z1 - Z0, M.concrete); fixedBox(X1 + 0.3, 1.5, 0, 0.6, 3, Z1 - Z0, M.concrete);
+  fixedBox((X0 + X1) / 2, 1.5, Z1 + 0.3, X1 - X0 + 1.2, 3, 0.6, M.concrete); fixedBox((X0 + X1) / 2, 1.5, Z0 - 0.3, X1 - X0 + 1.2, 3, 0.6, M.concrete);
+  const strip = (x, z1, z2, y0, y1, side) => { // a cyan panel on a wall face (wall along z), plus its registration
+    const L = Math.abs(z2 - z1), zc = (z1 + z2) / 2, xf = x + side * 0.02;
+    for (const y of [y0 + 0.1, y1 - 0.1]) fixedBox(xf, y, zc, 0.04, 0.08, L, M.cyan, { noCollide: true, shadow: false, ink: false, round: false });
+    for (let u = 1; u < L; u += 2) fixedBox(xf, (y0 + y1) / 2, Math.min(z1, z2) + u, 0.04, y1 - y0 - 0.3, 0.06, M.cyan, { noCollide: true, shadow: false, ink: false, round: false });
+    TRV.addPanel(x, z1, x, z2, y0, y1);
+  };
+  // 1. wall-run lane: run the left wall, kick across to the right one
+  fixedBox(67, 3.5, 22, 0.6, 7, 18, M.concrete); strip(67.3, 13, 67.3, 31, 0.8, 6.6, 1);
+  fixedBox(73, 3.5, 12, 0.6, 7, 22, M.concrete); strip(72.7, 1, 72.7, 23, 0.8, 6.6, -1);
+  // 2. the cable: steps up to a deck, a line down the middle of the yard
+  fixedBox(cx, 3, 34.5, 6, 6, 3, M.concrete); fixedBox(cx, 1.5, 38, 6, 3, 4, M.concrete);
+  const A = new THREE.Vector3(cx, 9.4, 33.2), B = new THREE.Vector3(cx, 4.6, -12);
+  for (const P0 of [A, B]) { fixedBox(cx + 1.4, P0.y / 2 + 0.2, P0.z, 0.3, P0.y + 0.4, 0.3, M.mullion); fixedBox(cx + 0.7, P0.y + 0.25, P0.z, 1.6, 0.14, 0.14, M.mullion, { noCollide: true }); }
+  travCableMesh(TRV.addCable(A.x, A.y, A.z, B.x, B.y, B.z));
+  // 3. three heads in a line under the end of the cable, one jump apart at cable speed
+  const spots = [["brawler", cx, -15], ["gunman", cx, -25], ["brawler", cx, -35],
+    ["gunman", 87, 18], ["gunman", 88, 4], ["brawler", 86, -10]]; // yank and disarm practice
+  // 4. slam tower (a pad throws you onto it), a dummy at its foot and a glass floor beside it
+  fixedBox(70, 6, -24, 4, 12, 4, M.concrete);
+  try { lvPad(70, -19.4, 0, 13.2, 1.2); } catch (err) { console.warn(err); }
+  spots.push(["brawler", 70.5, -28.6]);
+  for (const [x, z] of [[65.2, -30.2], [69.8, -30.2], [65.2, -33.8], [69.8, -33.8]]) fixedBox(x, 1.25, z, 0.35, 2.5, 0.35, M.mullion);
+  const gp = glassPane(67.5, 2.5, -32, 5, 0.08, 4); gp.floor = true;
+  try { for (const x of [85, 88.5]) lvDesk(x, -28, 0, 0, { chair: true }); } catch (err) { console.warn(err); }
+  // 5. the breach door across the yard, three waiting behind it
+  fixedBox(68, 2, -38, 8, 4, 0.5, M.concrete); fixedBox(84, 2, -38, 16, 4, 0.5, M.concrete); fixedBox(74, 3.75, -38, 4, 0.5, 0.5, M.concrete);
+  const door = TRV.addDoor(74, -38, "x", 4, 3.5);
+  spots.push(["brawler", 72.5, -41.5], ["gunman", 75.5, -42.5], ["brawler", 78, -41]);
+  // a jump pad by the start, for Gyre practice
+  try { lvPad(86, 38, 0, 9, 1.3); } catch (err) { console.warn(err); }
+  for (const [type, x, z] of spots) { spawnDummy(type, x, z); const ring = new THREE.Mesh(new THREE.TorusGeometry(0.75, 0.04, 6, 32), M.amber); ring.rotation.x = Math.PI / 2; ring.position.set(x, 0.03, z); levelGroup.add(ring); }
+  TRV.course = { spots, glass: gp, door };
+}
+// testing ground L: the course's door and glass come back too
+function travCourseReset() {
+  const C = TRV.course; if (!C) return;
+  if (C.door.open) { const D = C.door; const i = TRV.doors.indexOf(D); if (i >= 0) TRV.doors.splice(i, 1); C.door = TRV.addDoor(74, -38, "x", 4, 3.5); }
+  if (C.glass.broken) { C.glass = glassPane(67.5, 2.5, -32, 5, 0.08, 4); C.glass.floor = true; }
+  TRV.breachUsed = false;
+}
+function travCableMesh(c) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, c.len, 6), M.mullion);
+  m.position.copy(c.a).add(c.b).multiplyScalar(0.5); m.quaternion.setFromUnitVectors(_tUp, c.dir); levelGroup.add(m);
+  for (let u = 0.8; u < 3.2; u += 0.8) { const ch = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.22, 6), M.cyan); ch.position.copy(c.a).addScaledVector(c.dir, u); ch.quaternion.setFromUnitVectors(_tUp, c.dir); levelGroup.add(ch); }
+  c.mesh = m; return m;
+}
+function travCourseTp() {
+  if (state.mode !== "test") return;
+  const inCourse = playerPos().x > 62;
+  const at = inCourse ? { x: 0, y: 1.3, z: 8 } : { x: 85.5, y: 1.3, z: 43 };
+  player.body.setTranslation(at, true); player.body.setLinvel({ x: 0, y: 0, z: 0 }, true); player.prev = new THREE.Vector3(at.x, at.y, at.z);
+  yaw = inCourse ? Math.PI : 0; pitch = 0; TRV.wr = null; TRV.slam = null; if (TRV.cable) travCableOff(null, "tp");
+  flash(inCourse ? "Arena" : "Movement course · M to go back", "var(--amber)");
+  if (!inCourse) hint("Movement course: run the cyan walls (Space to kick off), E on the cable, drop onto the heads, Ctrl in the air to slam the glass, kick the red door.", 7);
+}
+
+// testing ground menu: the course
+TGM_EXT.push((sec, btns, row) => {
+  const s = sec("Movement course");
+  btns(s, [["Go to the course (M)", () => tgmDo(() => { if (playerPos().x < 62) travCourseTp(); })], ["Back to the arena", () => tgmDo(() => { if (playerPos().x >= 62) travCourseTp(); })],
+    ["Reset door and glass", () => tgmDo(() => { travCourseReset(); for (const r of TEST.respawn) r.t = 0; }, "Course reset")]]);
+  row(s, "Moves", [], "Cyan walls: run (Space kicks off) · Ctrl in the air: slam · land on heads: hop · E on a cable: ride · tap the sling on an enemy: yank · F on an aiming gunman: disarm · kick or slide a red door: breach");
+});
 // ---- end slot: traversal ----
 
 // ---- slot: mfvariants ----
@@ -15460,7 +16446,7 @@ function frame(now) {
       if (f.t <= 0) { levelGroup.remove(f.obj); dispGeo(f.obj.geometry); if (f.life) f.obj.material.dispose(); fx.splice(i, 1); }
     }
     if (!state.fin) { updateCamera(dt); carxCamera(dt); }
-    updateHud(dt);
+    updateHud(dt); gyreFrame(dt);
     if (SET.fps && (PERF.fpsT = (PERF.fpsT || 0) - dt) <= 0) { PERF.fpsT = 0.4; $("fpsc").textContent = `${Math.round(1000 / Math.max(1, PERF.ft))} fps`; }
   } else if (!state.started) {
     const t = now * 0.00004; camera.position.set(Math.cos(t) * 70, 22, Math.sin(t) * 70); camera.lookAt(0, 2, 0);
@@ -15511,7 +16497,7 @@ setVoice(VOICE.on); renderBook();
 document.querySelector("#mnav button").focus({ preventScroll: true });
 state.pendingRestart = true; state.pendingFresh = true;
 // test hooks
-window.__res = { TIME, timeMod, timeScale, PH, perfSet, perfStats, FX_TIERS, fxTier, TGM_EXT, M, AND_PART_MAT, get GORE_CHROME() { return GORE_CHROME; }, get world() { return world; }, RAPIER, warmHidden, get WARM_G() { return WARM_G; }, THREE, spawnEnemy, get enemies() { return enemies; }, AND, AVIEW, andBuild, andStep, andViewApply, andHit, andGore, freezeRagdoll, R6, GORE, MIR, TGM, ONEH, R6I, goreBurst, goreKill, goreWire, propMirror, tgmOpen, tgmClose, oneHandPose, idleProps, grappleRay, fireGrapple, PROPS, propHitH, propsBlast, propChair, propPainting, propCoffee, propCooler, propPlant, propCabinet, propVending, propExt, explosion, BOOM5, get barrels() { return barrels; }, MF, MFA, SLING, SCOPE, mfStart, meleeTarget, meleeStrike, mfCan, pistolSpin, scopeUpdate, comboLanded, COMBOS, CARX, CARRY, IDLE, carxForce, carxOffer, carryPick, carryDrop, pressed, get panes() { return panes; }, idleStart, get ragdolls2() { return ragdolls; }, BOSSES, BOSS_KINDS, bossPenSpawn, bossPenSkip, bossPenClear, scene, renderer, LV, FLOORS, damageEnemy, killEnemy, buildFloor, lvCleared, get CITYR() { return CITYR; }, get finRig() { return finRig; }, applyFinPose, pose2, P2, FIN_POSES, rigIK, rigHandAim, rigPalm, FIN2, get U7M() { return globalThis.U7M_; },
+window.__res = { TRV, travCourseTp, travBreach, GYRE, GYRE_HOOK, gyreSeq, gyreEnd, gyreDropSpike, gyreStart, TIME, timeMod, timeScale, PH, perfSet, perfStats, FX_TIERS, fxTier, TGM_EXT, M, AND_PART_MAT, get GORE_CHROME() { return GORE_CHROME; }, get world() { return world; }, RAPIER, warmHidden, get WARM_G() { return WARM_G; }, THREE, spawnEnemy, get enemies() { return enemies; }, AND, AVIEW, andBuild, andStep, andViewApply, andHit, andGore, freezeRagdoll, R6, GORE, MIR, TGM, ONEH, R6I, goreBurst, goreKill, goreWire, propMirror, tgmOpen, tgmClose, oneHandPose, idleProps, grappleRay, fireGrapple, PROPS, propHitH, propsBlast, propChair, propPainting, propCoffee, propCooler, propPlant, propCabinet, propVending, propExt, explosion, BOOM5, get barrels() { return barrels; }, MF, MFA, SLING, SCOPE, mfStart, meleeTarget, meleeStrike, mfCan, pistolSpin, scopeUpdate, comboLanded, COMBOS, CARX, CARRY, IDLE, carxForce, carxOffer, carryPick, carryDrop, pressed, get panes() { return panes; }, idleStart, get ragdolls2() { return ragdolls; }, BOSSES, BOSS_KINDS, bossPenSpawn, bossPenSkip, bossPenClear, scene, renderer, LV, FLOORS, damageEnemy, killEnemy, buildFloor, lvCleared, get CITYR() { return CITYR; }, get finRig() { return finRig; }, applyFinPose, pose2, P2, FIN_POSES, rigIK, rigHandAim, rigPalm, FIN2, get U7M() { return globalThis.U7M_; },
   view(pos, at, fov = 40) { const cam = new THREE.PerspectiveCamera(fov, innerWidth / innerHeight, 0.05, 400); cam.position.set(...pos); cam.lookAt(new THREE.Vector3(...at)); scene.updateMatrixWorld(true); renderer.setRenderTarget(null); renderer.render(scene, cam); return renderer.domElement.toDataURL("image/png"); },
   FX2, FPROPS, DOORWAYS, ARS, WDEF, arsCancel, solveArmIK, armL, armR, cur, rig, get vmCam() { return vmCamera; }, SET, openSettings, applySet, bootFloor,
   get player() { return player; }, get enemies() { return enemies; }, get panes() { return panes; }, get bolts() { return bolts; }, state, keys, mouse, pressed,
