@@ -620,9 +620,9 @@ const rt = new THREE.WebGLRenderTarget(rtSize().x, rtSize().y, { type: THREE.Hal
 const postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 const postMat = new THREE.ShaderMaterial({
   depthTest: false, depthWrite: false,
-  uniforms: { tDiffuse: { value: rt.texture }, uTime: { value: 0 }, uAmt: { value: 0 }, uGray: { value: 0 }, uKeep: { value: 0 }, uTherm: { value: 0 }, uCel: { value: 0.7 }, uRes: { value: rtSize() } },
+  uniforms: { tDiffuse: { value: rt.texture }, uTime: { value: 0 }, uAmt: { value: 0 }, uGray: { value: 0 }, uKeep: { value: 0 }, uTherm: { value: 0 }, uCel: { value: 0.7 }, uGyre: { value: 0 }, uRes: { value: rtSize() } },
   vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
-  fragmentShader: `uniform sampler2D tDiffuse; uniform float uTime, uAmt, uGray, uKeep, uTherm, uCel; uniform vec2 uRes; varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float uTime, uAmt, uGray, uKeep, uTherm, uCel, uGyre; uniform vec2 uRes; varying vec2 vUv;
     float h1(float n) { return fract(sin(n * 12.9898) * 43758.5453); }
     float h2(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     void main() {
@@ -638,7 +638,7 @@ const postMat = new THREE.ShaderMaterial({
       uv += tear * vec2(h2(blk * 1.7 + t) - 0.5, (h2(blk + 3.0 + t) - 0.5) * 0.2) * 0.09 * a;
       // rgb split, stronger toward the edges
       vec2 q = vUv - 0.5;
-      vec2 off = vec2(0.0012 + 0.016 * a, 0.0) * (0.5 + length(q) * 1.6);
+      vec2 off = vec2(0.0012 + 0.016 * a + 0.0045 * uGyre * length(q), 0.0) * (0.5 + length(q) * 1.6);
       vec3 c;
       c.r = texture2D(tDiffuse, uv + off).r;
       c.g = texture2D(tDiffuse, uv).g;
@@ -656,7 +656,7 @@ const postMat = new THREE.ShaderMaterial({
       // cel: light falls into soft flat bands, and hard edges in the picture get an ink line
       float cel = uCel * (1.0 - uTherm);
       if (cel > 0.001) {
-        vec3 W3 = vec3(0.2126, 0.7152, 0.0722); vec2 px = 1.2 / uRes;
+        vec3 W3 = vec3(0.2126, 0.7152, 0.0722); vec2 px = (1.2 + 0.12 * uGyre) / uRes;
         float tn = dot(texture2D(tDiffuse, uv + vec2(0.0, px.y)).rgb, W3), ts = dot(texture2D(tDiffuse, uv - vec2(0.0, px.y)).rgb, W3);
         float te = dot(texture2D(tDiffuse, uv + vec2(px.x, 0.0)).rgb, W3), tw = dot(texture2D(tDiffuse, uv - vec2(px.x, 0.0)).rgb, W3);
         tn /= 1.0 + tn; ts /= 1.0 + ts; te /= 1.0 + te; tw /= 1.0 + tw;
@@ -666,7 +666,7 @@ const postMat = new THREE.ShaderMaterial({
         float tq = (floor(f) + smoothstep(0.32, 0.68, fract(f))) / 5.0; float t1 = mix(t0, tq, 0.75 * cel);
         c *= (t1 / max(1.0 - t1, 0.02)) / lc;
         c = mix(vec3(dot(c, W3)), c, 1.0 + 0.2 * cel);
-        c *= 1.0 - inkL * 0.8 * cel;
+        c *= 1.0 - inkL * (0.8 + 0.08 * uGyre) * cel;
       }
       // scanlines, grain and a dark vignette
       float scan = 0.5 + 0.5 * sin(gl_FragCoord.y * 3.14159 * 0.5);
@@ -884,7 +884,7 @@ let actx = null, noiseBuf = null, master = null;
 function initAudio() {
   if (actx) return;
   try {
-    actx = new AudioContext(); master = actx.createGain(); master.gain.value = SET.vol; master.connect(actx.destination);
+    actx = new AudioContext(); master = actx.createGain(); master.gain.value = SET.vol; gyreAudio(master);
     noiseBuf = actx.createBuffer(1, actx.sampleRate, actx.sampleRate);
     const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   } catch { actx = null; }
@@ -1011,8 +1011,8 @@ addEventListener("contextmenu", (e) => e.preventDefault());
 addEventListener("wheel", (e) => { if (locked && Math.abs(e.deltaY) > 4) pressed.add("Swap"); }, { passive: true });
 addEventListener("mousemove", (e) => {
   if (!locked || state.boot) return;
-  const k = 0.0022 * SET.sens; yaw -= e.movementX * k; pitch -= e.movementY * k * (SET.invert ? -1 : 1);
-  pitch = Math.max(-1.55, Math.min(1.55, pitch));
+  const k = 0.0022 * SET.sens; yaw -= e.movementX * k * gyreYawSign(); pitch -= e.movementY * k * (SET.invert ? -1 : 1);
+  pitch = gyrePitch(pitch);
 });
 document.addEventListener("pointerlockchange", () => {
   locked = document.pointerLockElement === renderer.domElement;
@@ -1729,8 +1729,8 @@ function killEnemy(e, hitPoint, dir, force) {
   world.removeRigidBody(e.body);
   levelGroup.remove(e.group);
   if (e.T.die) e.T.die(e, hitPoint, dir, force); else spawnRagdoll(e, hitPoint, dir, force);
-  if ((state.fin || MF.cur || e.finishing) && e.rd && ragdolls.includes(e.rd)) try { goreKill(e.rd, hitPoint, dir); } catch (err) { console.warn(err); }
-  if (e.and) try { andKillFx(e, hitPoint, dir, !!(state.fin || MF.cur || e.finishing)); } catch (err) { console.warn(err); }
+  if ((state.fin || MF.cur || e.finishing || GYRE.halo) && e.rd && ragdolls.includes(e.rd)) try { goreKill(e.rd, hitPoint, dir); } catch (err) { console.warn(err); }
+  if (e.and) try { andKillFx(e, hitPoint, dir, !!(state.fin || MF.cur || e.finishing || GYRE.halo)); } catch (err) { console.warn(err); }
   sfx.kill();
   if (e.dummy && state.mode === "test") TEST.respawn.push({ type: e.type, x: e.home.x, z: e.home.z, y: e.home.y, t: 3 });
   for (const b of bolts) if (b.owner === e) b.owner = null;
@@ -1908,9 +1908,9 @@ function groundCheck() {
 }
 function stepPlayer(dt) {
   carryInput();
-  if (mfLock(dt)) return;
+  if (mfLock(dt) || gyreLock(dt)) return;
   if (player.dead) return;
-  const v = player.body.linvel(); const vel = new THREE.Vector3(v.x, v.y, v.z);
+  const v = player.body.linvel(); const vel = new THREE.Vector3(v.x, v.y, v.z); gyreIn(vel);
   const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
   const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
   const wish = new THREE.Vector3();
@@ -1959,7 +1959,7 @@ function stepPlayer(dt) {
 
   let gScale = 1; if (!grounded && keys.has("Space") && Math.abs(vel.y) < 2.5) gScale = 0.6;
   if (player.thrustT > 0) gScale = 0.2;
-  vel.y += P.gravity * gScale * dt;
+  vel.y += P.gravity * gScale * dt * gyrePS();
   if (grounded && vel.y < 0) vel.y = Math.max(vel.y, -2);
 
   // jump, or jump off the grapple (the sling line keeps Space for focus instead)
@@ -1970,6 +1970,7 @@ function stepPlayer(dt) {
       vel.y = P.jump; player.coyote = 0; player.jumpHeld = true; ev("jump");
       if (player.sliding) { vel.x *= 1.08; vel.z *= 1.08; player.sliding = false; }
     }
+    else { player.jumpHeld = true; gyrePress(vel); }
   }
   if (!keys.has("Space")) player.jumpHeld = false;
 
@@ -2009,7 +2010,7 @@ function stepPlayer(dt) {
     const F = player.focus; F.t += dt;
     if (F.t > F.beat) { F.beat += Math.max(0.42, 0.85 - F.t * 0.1); sfx.heart(); }
     const g = player.grapple, live = g && g.mode === "sling" && g.phase === "attached";
-    if (!live || !keys.has("Space") || F.t >= FOCUS_MAX) {
+    if (!live || !keys.has("Space") || F.t >= gyreFocusCap()) {
       endFocus();
       if (live) { g.charge = 1; releaseGrapple(); slingLaunch(vel, g); fovKick = Math.max(fovKick, 24); impactFrame(45); glitch(0.5); shake = Math.max(shake, 0.3); }
     }
@@ -2104,8 +2105,8 @@ function stepPlayer(dt) {
   updateTest(dt); updateTut(dt);
   mfKeys(dt);
 
-  stepMoves(dt, vel, grounded, fwd, wish);
-  player.body.setLinvel(vel, true);
+  stepMoves(dt, vel, grounded, fwd, wish); gyreStep(dt, vel, grounded);
+  player.body.setLinvel(gyreOut(vel), true);
   player.vel.copy(vel); player.grounded = grounded;
 
   if (state.time - player.lastHurt > (BOSSES.active && !BOSSES.active.dead ? 4 : 2.5) && player.hp < 100) player.hp = Math.min(100, player.hp + 30 * dt);
@@ -2407,7 +2408,7 @@ function buildTestLevel() {
   door = { mesh: new THREE.Object3D(), opening: false, y: 0 }; sword = new THREE.Group();
   const tl = new THREE.PointLight(0x4ff0ff, 0, 9, 1.8); tl.position.set(0, -50, 0); levelGroup.add(tl); sword.userData.light = tl; // borrowed by the finisher
   TEST.respawn = []; TEST.spots = [];
-  lvTestYard();
+  lvTestYard(); gyreYard();
   buildCity();
 }
 const DUMMY_SPOTS = [["brawler", -12, -24], ["brawler", -8, -24], ["gunman", -4, -24], ["gunman", 0, -24], ["bot", 4, -24], ["bot", 9, -24],
@@ -2750,6 +2751,7 @@ const worldSparks = (() => {
   return { lines, pos, col, p: Array.from({ length: WSPARK_N }, () => ({ life: 0, max: 1, x: new THREE.Vector3(), v: new THREE.Vector3(), c: 0 })), i: 0 };
 })();
 function emitWorldSparks(at, dir, n, color = 0, speed = 9) {
+  n = gyreN(n);
   // color: 0 warm (orange), 1 cyan, 2 white-hot
   const S = worldSparks;
   for (let i = 0; i < n; i++) {
@@ -3830,7 +3832,7 @@ function updateCamera(dt) {
   // idle breathing sway when standing still
   CAM.sway += dt; const idle = 1 - CAM.bobAmt;
   const swayP = Math.sin(CAM.sway * 1.1) * 0.0025 * idle, swayY = Math.sin(CAM.sway * 0.7) * 0.002 * idle;
-  camera.rotation.set(pitch + CAM.kick * 0.03 + swayP - 0.012 * CAM.sprint + MV.pitch, yaw + swayY, roll + CAM.roll * 0.03 + MV.roll, "YXZ");
+  camera.rotation.set(pitch + CAM.kick * 0.03 + swayP - 0.012 * CAM.sprint + MV.pitch, yaw + swayY, roll + CAM.roll * 0.03 + MV.roll + gyreCamRoll(dt), "YXZ");
   fovKick *= Math.pow(0.05, dt);
   const charge = player.grapple?.mode === "sling" && player.grapple.phase === "attached" ? player.grapple.charge : 0;
   const fov = SET.fov + Math.min(16, Math.max(0, hs - 9) * 0.9) + fovKick + 6 * CAM.sprint - 7 * charge - 20 * (player.hasPistol || (arsOn() && WDEF[player.weapon]?.aims) ? VM.aim || 0 : 0) - (ARS.fovPull || 0);
@@ -3846,7 +3848,7 @@ function updateCamera(dt) {
   updateRig(dt);
   updateSlashes(dt);
   updateSpeedLines(dt, hs);
-  updateSelfBody(dt);
+  updateSelfBody(dt); gyreBody(dt);
   updateRope(dt);
   updateGunFx(dt); updateArsenalFx(dt);
   updateWorldSparks(dt * Math.max(0.05, timeVis()));
@@ -4963,7 +4965,7 @@ function climbArm(P0, s, k, ang) {
 }
 function movePoses(R, L, dt) {
   const sword = player.hasSword, pistol = player.hasPistol; let sl = false, sr = false;
-  idleUpdate(dt); idlePose(R, L); carryPose(L); mfPose(R, L, dt); scopeUpdate(dt); mfFx(dt);
+  idleUpdate(dt); idlePose(R, L); carryPose(L); mfPose(R, L, dt); gyrePose(R, L, dt); scopeUpdate(dt); mfFx(dt);
   const al = (state.alpha || 0) * DT;
   if (player.kick) KICK_ARMS(R, L, ckey(KICK_W, player.kick.t + al)[0], sword, pistol);
   const C = player.climb;
@@ -5089,6 +5091,7 @@ function ev(name, d = {}) {
   d.t = state.time;
   if (state.mode === "tut") tutEvent(name, d);
   comboEvent(name, d);
+  gyreEv(name, d);
 }
 function weaponOf(kind) {
   if (player.sling) return "sling";
@@ -11348,6 +11351,7 @@ const MF_KIND = { pistol: "whip", rail: "ram", wire: "lasso" };
 function mfKeys(dt) {
   if (pressed.has("KeyT")) { if (player.weapon === "pistol" && !VM.gunAnim && !VM.gunSpin) pistolSpin(); else startInspect(); }
   if (MF.cur || state.fin || player.dead) { MF.hold = 0; return; }
+  if (GYRE.on && pressed.has("KeyF") && gyreHaloTry()) return;
   if (CARRY.rd) { if (pressed.has("KeyF")) carryPick(); return; }
   if (arsIs("lance") && ARS.W.lance.state === "held") {
     const W = ARS.W.lance;
@@ -14639,6 +14643,375 @@ perfUi();
 // ---- end slot: rooms ----
 
 // ---- slot: gyre ----
+// ================= Gyre: the slow-motion flip, the Halo air finisher, Drop Spike (C2) =================
+// In the air, Space again tucks UNIT-7 into a flip while the world drops to 20% for up to 1.6 real seconds. The camera
+// stays on the mouse through all 360 degrees (look past your feet, behind you, upside down) and every weapon keeps its
+// real-time fire rate. The body does the flip (shadow, mirrors). 2 charges per room, a kill in the flip refunds one,
+// and the flip shares a 4 s budget with Focus. F at the top over an enemy is Halo; Ctrl in the flip is Drop Spike.
+// Pack B (C5) and traversal (C3) plug in through GYRE_HOOK, gyreSeq, gyreEnd and gyreDropSpike.
+const GY = { DUR: 1.6, K: 0.2, IN: 0.08, OUT: 0.15, BUDGET: 4, CHARGES: 2, ROLL: 0.105 };
+const GYRE = { on: false, t: 0, dur: GY.DUR, dir: "back", ang: 0, twist: 0, apex: false, n: GY.CHARGES, max: GY.CHARGES, budget: GY.BUDGET,
+  k: 1, psOut: 1, halo: null, drop: null, endT: -9, killUntil: -9, rollFix: 0, landT: -9, groundT: 0, beat: 0, fx: 0, pl: null, kills: 0,
+  lp: null, inf: false, show: false,
+  left() { return this.on ? Math.max(0, this.dur - this.t) : 0; } };
+// per weapon replaceable: each returns true when it handled the move. w is the weapon in hand.
+const GYRE_HOOK = { halo: (e, w) => gyreHaloDefault(e, w), drop: (e, w) => gyreDropDefault(e, w) };
+const _gyv = new THREE.Vector3(), _gyv2 = new THREE.Vector3(), _gyq = new THREE.Quaternion(), _gyq2 = new THREE.Quaternion(), _gye = new THREE.Euler();
+const _gyX = new THREE.Vector3(1, 0, 0), _gyY = new THREE.Vector3(0, 1, 0), _gyZ = new THREE.Vector3(0, 0, 1);
+const gyOn = () => GYRE.on || !!GYRE.halo;
+// the player keeps a little more speed than the world so the flip still drifts: 0.2x world is 0.3x player
+const gyrePS = () => 1 - (1 - GYRE.k) * 0.875;
+
+// ---------- time: Gyre is one source of the C0 clock (TIME); the slowest source wins ----------
+function gyreTs() {
+  const want = gyOn() ? GY.K : 1;
+  if (GYRE.k > want) GYRE.k = Math.max(want, GYRE.k - DT * (1 - GY.K) / GY.IN);
+  else if (GYRE.k < want) GYRE.k = Math.min(want, GYRE.k + DT * (1 - GY.K) / GY.OUT);
+  return GYRE.k;
+}
+timeMod("gyre", gyreTs);
+// stepPlayer reads the body's speed back as the player's own (unslowed) speed, and writes it out slowed
+function gyreIn(vel) { if (GYRE.psOut !== 1) vel.divideScalar(GYRE.psOut); }
+function gyreOut(vel) { const ps = gyrePS(); GYRE.psOut = ps; return ps === 1 ? vel : _gyv.copy(vel).multiplyScalar(ps); }
+// Focus and Gyre share one budget per room
+function gyreFocusCap() { return GYRE.inf || TGM.gyInf ? FOCUS_MAX : Math.min(FOCUS_MAX, Math.max(0.5, GYRE.budget)); }
+
+// ---------- audio: a low-pass on the master bus (800 Hz in the flip) ----------
+function gyreAudio(m) {
+  try { const lp = actx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 20000; lp.Q.value = 0.7; m.connect(lp); lp.connect(actx.destination); GYRE.lp = lp; }
+  catch { m.connect(actx.destination); }
+}
+function gyreLP(f, tc) { try { if (GYRE.lp) GYRE.lp.frequency.setTargetAtTime(f, actx.currentTime, tc); } catch {} }
+
+// ---------- input ----------
+// Space pressed in the air (not on a line, not in a scene): start the flip, or snap out of one
+function gyrePress(vel) {
+  if (GYRE.halo || MF.cur || state.fin || player.dead) return;
+  if (GYRE.on) { gyreEnd("snap"); return; }
+  if (player.climb || player.grapple || player.focus || player.grounded) return;
+  const inf = GYRE.inf || TGM.gyInf;
+  if (!inf && (GYRE.n <= 0 || GYRE.budget < 0.25)) { tone("square", 220, 180, 0.05, 0.04); return; }
+  gyreStart(vel);
+}
+function gyreStart(vel) {
+  const given = !!vel; if (!given) vel = new THREE.Vector3().copy(player.vel); // the perf gate starts one directly
+  const w = keys.has("KeyW"), s = keys.has("KeyS"), a = keys.has("KeyA"), d = keys.has("KeyD");
+  GYRE.dir = w && !s ? "front" : a && !d ? "left" : d && !a ? "right" : "back";
+  const inf = GYRE.inf || TGM.gyInf;
+  if (!inf) GYRE.n--;
+  Object.assign(GYRE, { on: true, t: 0, dur: inf ? GY.DUR : Math.min(GY.DUR, GYRE.budget), ang: 0, twist: 0, apex: false, beat: 0.4, kills: 0, rollFix: 0 });
+  vel.y = Math.max(vel.y, 4); // the tuck pops you up a little
+  if (player.sliding) player.sliding = false;
+  gyreLP(800, 0.025);
+  tone("sine", 62, 38, 0.5, 0.26); tone("sawtooth", 900, 260, 0.22, 0.035); noise(0.35, "lowpass", 700, 0.35, 0.8, 140);
+  CAM.kickV -= 1.5; glitch(0.15);
+  if (!given) player.body.setLinvel(vel, true);
+  ev("gyre", { dir: GYRE.dir });
+}
+// why: "time", "land", "snap", "drop", "halo", "scene"
+function gyreEnd(why = "time", quiet = false) {
+  if (!GYRE.on) return;
+  GYRE.on = false; GYRE.endT = state.time; GYRE.killUntil = state.time + 0.15;
+  // coming out upside down: the same view, turned the right way up, and the horizon rolls back level
+  if (Math.cos(pitch) < 0) { yaw += Math.PI; pitch = pitch > 0 ? Math.PI - pitch : -Math.PI - pitch; GYRE.rollFix = Math.PI * (Math.sin(GYRE.ang) >= 0 ? 1 : -1); }
+  pitch = Math.max(-1.55, Math.min(1.55, pitch));
+  if (!GYRE.halo) gyreLP(20000, 0.05);
+  if (!quiet) { noise(0.07, "highpass", 2600, 0.55, 0.7); tone("square", 320, 70, 0.09, 0.09); tone("sine", 140, 50, 0.18, 0.18); fovKick += 4; }
+  ev("gyreEnd", { why, dur: GYRE.t, kills: GYRE.kills });
+}
+
+// ---------- per sim step, from stepPlayer (after the moves, before the body gets its speed) ----------
+function gyreStep(dt, vel, grounded) {
+  if (GYRE.pl !== player) { gyreReset(); GYRE.pl = player; }
+  const inf = GYRE.inf || TGM.gyInf;
+  if (GYRE.on) {
+    GYRE.t += dt; if (!inf) GYRE.budget = Math.max(0, GYRE.budget - dt);
+    GYRE.apex = GYRE.apex || vel.y <= 0;
+    // the flip: one full turn, eased, over most of the window; a held direction adds a corkscrew
+    const k = Math.min(1, GYRE.t / Math.min(GYRE.dur, 1.25)); GYRE.ang = Math.PI * 2 * smooth(k);
+    const tw = (keys.has("KeyA") ? 1 : 0) - (keys.has("KeyD") ? 1 : 0) + (GYRE.dir === "left" || GYRE.dir === "right" ? (keys.has("KeyW") ? 1 : 0) - (keys.has("KeyS") ? 1 : 0) : 0);
+    GYRE.twist += tw * dt * Math.PI * 1.6;
+    // a heartbeat-like servo pulse
+    if (GYRE.t > GYRE.beat) { GYRE.beat += 0.42; tone("sine", 52, 38, 0.16, 0.2); noise(0.06, "lowpass", 300, 0.2); }
+    // enemy bolts that slip past you whoosh
+    for (const b of bolts) if (!b.friendly && !b.gyW && b.pos.distanceTo(camera.position) < 1.5) { b.gyW = true; noise(0.3, "bandpass", 1700, 0.4, 2, 500); glitch(0.12); }
+    if (grounded && GYRE.t > 0.1) { gyreEnd("land"); GYRE.landT = state.time; gyreRoll(vel, true); }
+    else if (player.grapple || player.climb || MF.cur || state.fin || player.dead) gyreEnd("scene");
+    else if (GYRE.t >= GYRE.dur) gyreEnd("time");
+    // Drop Spike: Ctrl in the flip. Traversal (TRV) owns Ctrl once it exists; until then a small fallback drop.
+    else if (typeof TRV === "undefined" && (pressed.has("ControlLeft") || pressed.has("ControlRight") || pressed.has("KeyC"))) {
+      gyreEnd("drop"); GYRE.drop = { t: state.time }; vel.x *= 0.25; vel.z *= 0.25; vel.y = -30; tone("sawtooth", 200, 60, 0.3, 0.08); fovKick += 6;
+    }
+  }
+  if (GYRE.drop) {
+    vel.y = Math.min(vel.y, -30);
+    if (grounded) { const pp = playerPos(); let best = null, bd = 1.8; for (const e of alive()) { const p = enemyPos(e); const d = Math.hypot(p.x - pp.x, p.z - pp.z); if (d < bd && Math.abs(p.y - pp.y) < 2.6) { bd = d; best = e; } } GYRE.drop = null; gyreDropSpike(best); }
+    else if (state.time - GYRE.drop.t > 2.5) GYRE.drop = null;
+  }
+  // landing after a flip: inside 0.3 s you roll and keep your speed, later you lose 30%
+  if (!GYRE.on && grounded && !player.grounded && GYRE.endT > GYRE.landT && state.time - GYRE.endT < 3) { GYRE.landT = state.time; gyreRoll(vel, state.time - GYRE.endT <= 0.3); }
+  // charges: a room's seal refills them; with no room system yet, standing on the floor for 4 s does
+  if (grounded && !GYRE.on && typeof ROOM_DEFS === "undefined") { GYRE.groundT += dt; if (GYRE.groundT > 4 && (GYRE.n < GYRE.max || GYRE.budget < GY.BUDGET)) gyreRefill(); }
+  else GYRE.groundT = 0;
+}
+function gyreRoll(vel, keep) {
+  if (keep) { CAM.kickV -= 2.5; CAM.rollV += (Math.random() < 0.5 ? -1 : 1) * 3; noise(0.25, "lowpass", 500, 0.5, 0.8, 120); tone("sine", 90, 50, 0.15, 0.15); }
+  else { vel.x *= 0.7; vel.z *= 0.7; }
+  ev("gyreLand", { roll: keep });
+}
+function gyreRefill() { GYRE.n = GYRE.max; GYRE.budget = GY.BUDGET; GYRE.groundT = 0; }
+function gyreReset() { Object.assign(GYRE, { on: false, halo: null, drop: null, k: 1, psOut: 1, n: GYRE.max, budget: GY.BUDGET, rollFix: 0, endT: -9, landT: -9, killUntil: -9 }); gyreLP(20000, 0.02); }
+// events: kills in the flip refund a charge and are re-sent as gyreKill; rooms refill
+function gyreEv(name, d) {
+  if (name === "kill" && (gyOn() || state.time < GYRE.killUntil)) {
+    GYRE.kills++; if (!(GYRE.inf || TGM.gyInf)) GYRE.n = Math.min(GYRE.max, GYRE.n + 1);
+    ev("gyreKill", { ...d });
+  } else if (name === "focusEnd" && !(GYRE.inf || TGM.gyInf)) GYRE.budget = Math.max(0, GYRE.budget - (d.dur || 0));
+  else if (name === "roomClear" || name === "sealOpen" || name === "roomLive") gyreRefill();
+}
+// fewer sparks while the flip is on (they live 5x longer in real time)
+const gyreN = (n) => (GYRE.k < 0.9 ? Math.ceil(n * 0.5) : n);
+// mouse: free pitch through the flip; upside down, left and right stay left and right on screen
+function gyrePitch(p) {
+  if (!GYRE.on) return Math.max(-1.55, Math.min(1.55, p));
+  return p > Math.PI ? p - Math.PI * 2 : p < -Math.PI ? p + Math.PI * 2 : p;
+}
+const gyreYawSign = () => (GYRE.on && Math.cos(pitch) < 0 ? -1 : 1);
+// camera roll: a 6 degree sway in the flip (Settings > Comfort), and the horizon righting itself after
+function gyreCamRoll(dt) {
+  if (GYRE.rollFix) { const s = Math.sign(GYRE.rollFix); GYRE.rollFix -= s * Math.min(Math.abs(GYRE.rollFix), dt * Math.PI / 0.28); }
+  const side = GYRE.dir === "left" ? 1 : GYRE.dir === "right" ? -1 : 0.5;
+  return GYRE.rollFix + (GYRE.on && SET.gyreRoll !== false ? Math.sin(GYRE.ang) * GY.ROLL * side : 0);
+}
+
+// ---------- render rate: the body flips, the picture sharpens, the pips ----------
+function gyreBody(dt) {
+  const on = GYRE.on;
+  GYRE.fx += ((on ? 1 : 0) - GYRE.fx) * (1 - Math.exp(-dt * (on ? 30 : 12)));
+  if (!on && GYRE.fx < 0.02) { if (GYRE.bodyOn) { GYRE.bodyOn = false; selfBody.rotation.set(0, yaw, 0); } return; }
+  GYRE.bodyOn = true;
+  // out of the flip the body finishes the turn it is closest to, it never unwinds backwards
+  if (!on) { const kk = 1 - Math.exp(-dt * 14), T = Math.PI * 2; GYRE.ang += ((GYRE.ang > Math.PI ? T : 0) - GYRE.ang) * kk; GYRE.twist += (Math.round(GYRE.twist / T) * T - GYRE.twist) * kk; }
+  const a = GYRE.ang;
+  const axis = GYRE.dir === "left" || GYRE.dir === "right" ? _gyZ : _gyX;
+  const sgn = GYRE.dir === "front" || GYRE.dir === "right" ? -1 : 1;
+  _gyq.setFromAxisAngle(_gyY, yaw).multiply(_gyq2.setFromAxisAngle(axis, sgn * a)).multiply(_gyq2.setFromAxisAngle(_gyY, GYRE.twist));
+  selfBody.quaternion.copy(_gyq);
+  // tuck: knees to the chest, and the body sits a little lower so it never clips the eye
+  const tk = Math.sin(Math.min(1, GYRE.fx) * Math.PI / 2);
+  selfBody.position.y -= 0.35 * tk * Math.abs(Math.sin(a / 2));
+  for (const L of selfLegs) { L.hip.rotation.x += (1.75 - L.hip.rotation.x) * tk; L.knee.rotation.x += (-2.2 - L.knee.rotation.x) * tk; }
+}
+const gyPips = (() => {
+  const d = document.createElement("div"); d.id = "gypips"; d.className = "hud"; d.hidden = true;
+  d.innerHTML = "<i></i><i></i><b></b>"; document.body.appendChild(d);
+  const st = document.createElement("style");
+  st.textContent = "#gypips{left:50%;top:50%;transform:translate(-50%,19px);display:flex;gap:6px;align-items:center}#gypips i{width:5px;height:5px;border:1px solid rgba(217,226,234,.8);transform:rotate(45deg)}#gypips i.on{background:var(--cyan);border-color:var(--cyan)}#gypips b{font:600 10px/1 inherit;color:var(--cyan);letter-spacing:.1em;margin-left:4px}";
+  document.head.appendChild(st); return d;
+})();
+function gyreFrame(dt) {
+  const u = postMat.uniforms.uGyre; if (u) u.value += (GYRE.fx - u.value) * Math.min(1, dt * 20);
+  const show = state.started && player && !player.dead && !player.grounded && !state.fin && !MF.cur;
+  gyPips.hidden = !show;
+  if (show) {
+    const inf = GYRE.inf || TGM.gyInf; const ps = gyPips.children;
+    ps[0].className = inf || GYRE.n >= 1 ? "on" : ""; ps[1].className = inf || GYRE.n >= 2 ? "on" : "";
+    ps[2].textContent = TGM.gyShow && state.mode === "test" ? (gyOn() || GYRE.k < 1 ? GYRE.k.toFixed(2) + "x" : "") : "";
+  }
+}
+
+// ---------- air scenes: a scripted arc over an enemy (Halo and pack B's air minis) ----------
+// gyreSeq(e, { dur, land, kind, cues: [[t, fn(F)]], pose(F, k, R, L), step(F, k, dt), look(F) }): the player rides an
+// arc from where they are, over the enemy, to `land` (default 1.5 m past it) in dur real seconds, at 0.2x world time.
+function gyreSeq(e, o = {}) {
+  if (GYRE.halo || MF.cur || state.fin || !e || e.dead) return null;
+  const pp = playerPos(), ep = enemyPos(e);
+  const dir = _gyv2.set(player.vel.x, 0, player.vel.z); if (dir.lengthSq() < 1) dir.set(ep.x - pp.x, 0, ep.z - pp.z); if (dir.lengthSq() < 1e-4) dir.set(-Math.sin(yaw), 0, -Math.cos(yaw)); dir.normalize();
+  const land = o.land || new THREE.Vector3(ep.x, e.floorY + P.half + P.radius + 0.05, ep.z).addScaledVector(dir, 1.5);
+  const top = Math.max(pp.y, e.floorY + 1.9 + 1.1, land.y + 0.5);
+  const F = { e, kind: o.kind || "halo", t: 0, dur: o.dur || 1, from: pp, land, dir: dir.clone(), ctrl: 2 * top - (pp.y + land.y) / 2, cues: (o.cues || []).map((c) => [c[0], c[1], false]), pose: o.pose, step: o.step, look: o.look, end: o.end, grips: [], rd: null };
+  GYRE.halo = F;
+  if (GYRE.on) gyreEnd("halo", true);
+  e.mf = true; e.posed = true; e.alert = true; e.stun = 0;
+  r6NoCollide(true); R6.pcgT = 0;
+  VM.attack = null; VM.inspect = null; MF.melee = null; cancelGunAnim(); arsCancel(); if (player.grapple) releaseGrapple();
+  ev("miniFin", { kind: F.kind, e, air: true });
+  return F;
+}
+// stepPlayer: while an air scene runs, the player rides its arc and nothing else moves them
+function gyreLock(dt) {
+  const F = GYRE.halo; if (!F) return false;
+  F.t += dt; const k = Math.min(1, F.t / F.dur), kh = smooth(k);
+  const x = F.from.x + (F.land.x - F.from.x) * kh, z = F.from.z + (F.land.z - F.from.z) * kh;
+  const y = (1 - k) * (1 - k) * F.from.y + 2 * k * (1 - k) * F.ctrl + k * k * F.land.y;
+  const p = playerPos(); const vx = (x - p.x) / DT * 0.5, vy = (y - p.y) / DT * 0.5, vz = (z - p.z) / DT * 0.5;
+  player.body.setLinvel({ x: THREE.MathUtils.clamp(vx, -40, 40), y: THREE.MathUtils.clamp(vy, -40, 40), z: THREE.MathUtils.clamp(vz, -40, 40) }, true);
+  GYRE.psOut = 1; player.immuneUntil = state.time + 0.6;
+  pressed.delete("Attack"); mouse.left = false;
+  for (const c of F.cues) if (!c[2] && F.t >= c[0]) { c[2] = true; try { c[1](F); } catch (err) { console.warn(err); } }
+  F.step?.(F, k, dt);
+  if (F.grips.length) updateGrips(F, DT * GYRE.k);
+  if (k >= 1) gyreSeqEnd(F);
+  return true;
+}
+function gyreSeqEnd(F) {
+  if (GYRE.halo !== F) return;
+  GYRE.halo = null; GYRE.endT = state.time; GYRE.killUntil = state.time + 0.15;
+  for (const g of [...F.grips]) releaseGrip(F, g, g.v.clone().multiplyScalar(0.5));
+  if (!F.e.dead) { F.e.mf = false; F.e.posed = false; }
+  R6.pcgT = 0.3; gyreLP(20000, 0.05);
+  const d = F.dir; player.body.setLinvel({ x: d.x * 4, y: -2, z: d.z * 4 }, true);
+  F.end?.(F);
+  ev("gyreEnd", { why: "seq", kind: F.kind, dur: F.t, kills: GYRE.kills });
+}
+// arms and look while an air scene runs
+const HALO_L = { p: [-0.12, -0.36, -0.4], r: [-0.95, 0.1, -0.15], el: 0.12, w: [0.55, 0, 0], curl: 0.9 };
+function gyrePose(R, L, dt) {
+  const F = GYRE.halo; if (!F) return;
+  const k = Math.min(1, F.t / F.dur);
+  if (F.pose) F.pose(F, k, R, L);
+  const at = F.look ? F.look(F) : null;
+  if (at) {
+    const to = _gyv.copy(at).sub(camOrigin());
+    const wy = Math.atan2(-to.x, -to.z), wp = Math.atan2(to.y, Math.hypot(to.x, to.z)); const kk = 1 - Math.exp(-dt * 7);
+    let dy = wy - yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); yaw += dy * kk; pitch += (THREE.MathUtils.clamp(wp, -1.45, 1.2) - pitch) * kk;
+  }
+}
+
+// ---------- Halo (default, any weapon): grab the head as you pass over, land behind, it twists off on its cables ----------
+function gyreHaloTry() {
+  const pp = playerPos(); const feet = pp.y - P.half - P.radius; let best = null, bd = 2.8;
+  for (const e of alive()) {
+    if (!mfOK(e)) continue; const p = enemyPos(e); const head = e.floorY + 1.9;
+    const d = Math.hypot(p.x - pp.x, p.z - pp.z); if (d < bd && feet > head - 0.9 && feet < head + 4.5) { bd = d; best = e; }
+  }
+  if (!best) return false;
+  return !!GYRE_HOOK.halo(best, player.weapon || "fists");
+}
+function gyreHaloDefault(e, w) {
+  const gore = andGore();
+  const hand = (F) => camOrigin().addScaledVector(lookDir(_gyv2), 0.55).add(_gyv.set(0, -0.32, 0));
+  let hg = null, q0 = null;
+  const F = gyreSeq(e, {
+    dur: 1.05, kind: "halo",
+    look: (F) => (F.rd ? r6PosRd(F.rd, "torso") : enemyPos(F.e).setY(F.e.floorY + 1.7)),
+    pose: (F, k, R, L) => { const wgt = k < 0.22 ? smooth(k / 0.22) : k > 0.86 ? 1 - smooth((k - 0.86) / 0.14) : 1; lerpPose(L, HALO_L, wgt); if (k > 0.3 && k < 0.8) L.curl = 1; },
+    cues: [
+      [0, () => { sfx.grab?.(); CAM.kickV -= 1; noise(0.2, "bandpass", 900, 0.3, 1.2, 2400); }],
+      // over the head: the hand closes, the chassis dies hanging from it
+      [0.3, (F) => {
+        const ep = enemyPos(e).setY(e.floorY + 1.75); e.killKind = "halo"; e.group.updateMatrixWorld(true);
+        killEnemy(e, ep, F.dir.clone(), 0.02);
+        F.rd = e.rd && ragdolls.includes(e.rd) ? e.rd : null;
+        if (F.rd) { F.rd.mfHeld = true; F.rd.launchSeen = true; q0 = rdQ(F.rd, "head"); hg = gripPart(F, F.rd, "head", () => ({ p: hand(F), q: _gyq.copy(q0).premultiply(_gyq2.setFromAxisAngle(_gyY, F.twist || 0)) })); }
+        sfx.grab?.(); tone("square", 140, 60, 0.12, 0.12); noise(0.15, "lowpass", 600, 0.6, 1, 200); CAM.kickV -= 2; shake = Math.max(shake, 0.2);
+      }],
+      [0.45, () => { tone("sawtooth", 180, 520, 0.4, 0.05); noise(0.4, "bandpass", 1400, 0.25, 3, 3200); }], // servos in the neck straining
+      // it twists off: the neck lets go on a fan of cables
+      [0.74, (F) => {
+        if (!F.rd || !ragdolls.includes(F.rd)) return;
+        const hp = r6PosRd(F.rd, "head"), tp = r6PosRd(F.rd, "torso"); if (!hp || !tp) return;
+        const neck = tp.clone().lerp(hp, 0.62);
+        if (gore !== "off") {
+          if (F.rd.joints?.head) { world.removeImpulseJoint(F.rd.joints.head, true); F.rd.joints.head = null; }
+          const torso = rdPart(F.rd, "torso");
+          for (let i = 0; i < 4; i++) goreWire(neck, _gyv.set((Math.random() - 0.5) * 2, 3 + Math.random() * 2, (Math.random() - 0.5) * 2), { body: torso?.body, rd: F.rd, life: 6 });
+          emitWorldSparks(neck, _gyY, 26, 0, 6); emitWorldSparks(neck, F.dir, 10, 2, 5); worldSmoke(neck, 2, 0.2, 0x8a9099, 0.3, 0.35, _gyY);
+        }
+        sfx.wireCut?.(); noise(0.12, "highpass", 3000, 0.6, 0.6); tone("square", 90, 30, 0.3, 0.25); impactFrame(60); glitch(0.45); shake = Math.max(shake, 0.4); hitstop(0.05);
+        if (state.mode === "test") popDamage(neck, 99, true);
+      }],
+      // and goes over your shoulder
+      [0.9, (F) => { if (hg) { releaseGrip(F, hg, F.dir.clone().multiplyScalar(-3).add(_gyv.set(0, 3, 0))); try { hg.p.body.setAngvel({ x: 9, y: 4, z: 6 }, true); } catch {} hg = null; } }],
+    ],
+    step: (F, k) => { F.twist = k < 0.4 ? 0 : smooth((k - 0.4) / 0.34) * Math.PI * 1.6; },
+  });
+  return !!F;
+}
+const r6PosRd = (rd, name) => { const p = rdPart(rd, name); if (!p) return null; const t = p.body.translation(); return new THREE.Vector3(t.x, t.y, t.z); };
+
+// ---------- Drop Spike: Ctrl in the flip slams you down onto whoever is below ----------
+function gyreDropSpike(e) {
+  const w = player.weapon || "fists";
+  ev("dropSpike", { e, w });
+  try { return GYRE_HOOK.drop(e && !e.dead ? e : null, w); } catch (err) { console.warn(err); return false; }
+}
+function gyreDropDefault(e, w) {
+  const pp = playerPos(); shake = Math.max(shake, 0.6); impactFrame(50); CAM.landV -= 2.5; CAM.kickV += 3; sfx.slam?.(); dust?.(pp.clone().setY(pp.y - 0.9), 3, 0x8a8494);
+  for (const o of alive()) { if (o === e) continue; const p = enemyPos(o); if (Math.hypot(p.x - pp.x, p.z - pp.z) < 3.5) stun(o, 1.2, 8); }
+  if (e && !e.dead) { e.killKind = "drop"; damageEnemy(e, 999, enemyPos(e).setY(e.floorY + 1.7), new THREE.Vector3(0, -1, 0), "heavy"); }
+  return true;
+}
+
+// ---------- combos ----------
+COMBOS.push(
+  { id: "halo", name: "Halo", gap: 6,
+    steps: ["Gyre: Space again in the air", "Kill something during the flip", "Mini finish a second enemy (a Halo counts)"],
+    perfectText: "All of it within 4 s",
+    seq: [
+      { on: "gyre", tag: "Gyre" },
+      { on: "gyreKill", keep: (a, d) => (a.e = d.e), tag: "Kill" },
+      { on: "miniFin", ok: (d, a) => d.e !== a.e, keep: (a, d) => (a.kind = d.kind), tag: (d) => (d.kind === "halo" ? "Halo" : "Finish") },
+    ],
+    perfect: (a) => a.span <= 4, line: "Gravity is a suggestion." },
+  { id: "spiral", name: "Spiral Staircase", gap: 5,
+    steps: ["Wall-run", "Wall-kick off", "Gyre", "Kill in the flip", "Wall-run again before you land"],
+    perfectText: "Never touch the floor",
+    breakOn: { any: ["ground"] },
+    seq: [{ on: "wallRun", tag: "Run" }, { on: "wallKick", tag: "Kick" }, { on: "gyre", tag: "Gyre" }, { on: "gyreKill", tag: "Kill" }, { on: "wallRun", tag: "Run" }],
+    perfect: () => true, line: "You did not come down once." },
+);
+
+// ---------- settings: Comfort ----------
+if (SET.gyreRoll === undefined) SET.gyreRoll = true;
+SET_UI.push(["Comfort", [["gyreRoll", "Gyre camera roll", "toggle", { note: "A 6° roll while you flip. The view itself never spins" }]]]);
+
+// ---------- testing ground: Gyre practice yard (launch pad, dummies on poles) and Tab menu toggles ----------
+const GY_YARD = { x: 46, z: -18 };
+const GY_POLES = [[0, 6, 0, "brawler"], [1.05, 6.5, 2.5, "gunman"], [2.1, 7, 5, "brawler"], [3.15, 6, 0, "gunman"], [4.2, 7.5, 7.5, "brawler"], [5.25, 6.5, 2.5, "brawler"]];
+for (const [a, r, h, type] of GY_POLES) TEST_NEW.push([type, GY_YARD.x + Math.cos(a) * r, GY_YARD.z + Math.sin(a) * r, h]);
+function gyreYard() {
+  const X = GY_YARD.x, Z = GY_YARD.z;
+  lvPad(X, Z, 0, 11, 1.4, "pad");
+  for (const [a, r, h] of GY_POLES) {
+    if (h <= 0) continue; const x = X + Math.cos(a) * r, z = Z + Math.sin(a) * r;
+    fixedBox(x, h / 2, z, 0.35, h, 0.35, M.mullion); fixedBox(x, h - 0.1, z, 1.6, 0.2, 1.6, M.concrete);
+  }
+}
+TGM.gyInf = false; TGM.gyShow = false;
+TGM_EXT.push((sec, btns, row, seg, tog) => {
+  const s = sec("Gyre practice");
+  row(s, "Infinite Gyre", [tog(TGM.gyInf, () => (TGM.gyInf = !TGM.gyInf))], "No charge or time limit");
+  row(s, "Show time scale", [tog(TGM.gyShow, () => (TGM.gyShow = !TGM.gyShow))], "Next to the pips while airborne");
+  btns(s, [["Go to the Gyre yard", () => tgmDo(() => { const at = { x: GY_YARD.x, y: 1.3, z: GY_YARD.z + 10 }; player.body.setTranslation(at, true); player.body.setLinvel({ x: 0, y: 0, z: 0 }, true); player.prev = new THREE.Vector3(at.x, at.y, at.z); yaw = 0; pitch = 0; }, "Gyre yard · step on the pad, Space in the air")]]);
+});
+
+// ---------- Floor 00: the Gyre module (before the Exam) ----------
+{
+  const exam = ROOMS.findIndex((r) => r.name === "Exam");
+  const room = { name: "Gyre", teaches: "Slow-motion flip, Halo", L: 56, H: 16,
+    build(R) {
+      // a stair of blocks up to a 4.8 m ledge (hold W into each one to climb), then the drop
+      for (const [i, h] of [[0, 1.2], [1, 2.4], [2, 3.6], [3, 4.8]]) { tBox(R, 0, h / 2, -7 - i * 2.4, 6, h, 2.4, M.concrete); }
+      tGlow(R, 0, 4.82, -15.6, 6, 0.04, 0.08, M.cyan);
+      for (const [x, z, h] of [[-6, -30, 2.4], [6, -30, 2.4], [0, -38, 3.6]]) { tBox(R, x, h / 2, z, 0.4, h, 0.4, M.mullion); tBox(R, x, h - 0.1, z, 1.6, 0.2, 1.6, M.concrete); }
+    },
+    populate(R) {
+      tSpawn(R, "brawler", 0, -21, { respawn: 3 }); tSpawn(R, "brawler", -3, -26, { respawn: 3 }); tSpawn(R, "brawler", 3, -26, { respawn: 3 });
+      for (const [x, z, h] of [[-6, -30, 2.4], [6, -30, 2.4], [0, -38, 3.6]]) tSpawn(R, "brawler", x, z, { y: h, respawn: 3 });
+    },
+    steps: [
+      { task: "Climb the blocks, jump off, then press Space again in the air", say: "Gyre. In the air, press jump again. You tuck, you turn, and the world nearly stops while you do. Look anywhere you like. Up, down, behind you.", on: (n) => n === "gyre" },
+      { task: "Kill a target while you flip", say: "Everything you carry still fires at full speed. Only they are slow.", on: (n) => n === "gyreKill" },
+      { task: "Flip over a target's head and press F: Halo", say: "Pass over one of them in the flip and press F at the top. Take the head with you.", on: (n, d) => n === "miniFin" && d.kind === "halo" },
+    ],
+    mastery: { text: "Two kills in one Gyre", on: (n, d, R) => { if (n === "gyre") R.m.c = 0; if (n === "gyreKill") { R.m.c = (R.m.c || 0) + 1; if (R.m.c >= 2) R.m.got = true; } }, ok: (R) => R.m.got } };
+  if (exam >= 0 && !ROOMS.some((r) => r.name === "Gyre")) {
+    ROOMS.splice(exam, 0, room);
+    // saved progress is by module index: shift the Exam's marks one along
+    if (!TUT.save.gy) { for (const k of ["done", "mastery"]) { const a = TUT.save[k] || []; if (a.length > exam) a.splice(exam, 0, false); } TUT.save.gy = 1; store.set("res.tut", TUT.save); }
+  }
+}
 // ---- end slot: gyre ----
 
 // ---- slot: traversal ----
@@ -14725,7 +15098,7 @@ function frame(now) {
       if (f.t <= 0) { levelGroup.remove(f.obj); dispGeo(f.obj.geometry); if (f.life) f.obj.material.dispose(); fx.splice(i, 1); }
     }
     if (!state.fin) { updateCamera(dt); carxCamera(dt); }
-    updateHud(dt);
+    updateHud(dt); gyreFrame(dt);
     if (SET.fps && (PERF.fpsT = (PERF.fpsT || 0) - dt) <= 0) { PERF.fpsT = 0.4; $("fpsc").textContent = `${Math.round(1000 / Math.max(1, PERF.ft))} fps`; }
   } else if (!state.started) {
     const t = now * 0.00004; camera.position.set(Math.cos(t) * 70, 22, Math.sin(t) * 70); camera.lookAt(0, 2, 0);
@@ -14776,7 +15149,7 @@ setVoice(VOICE.on); renderBook();
 document.querySelector("#mnav button").focus({ preventScroll: true });
 state.pendingRestart = true; state.pendingFresh = true;
 // test hooks
-window.__res = { TIME, timeMod, timeScale, PH, perfSet, perfStats, FX_TIERS, fxTier, TGM_EXT, M, AND_PART_MAT, get GORE_CHROME() { return GORE_CHROME; }, get world() { return world; }, RAPIER, warmHidden, get WARM_G() { return WARM_G; }, THREE, spawnEnemy, get enemies() { return enemies; }, AND, AVIEW, andBuild, andStep, andViewApply, andHit, andGore, freezeRagdoll, R6, GORE, MIR, TGM, ONEH, R6I, goreBurst, goreKill, goreWire, propMirror, tgmOpen, tgmClose, oneHandPose, idleProps, grappleRay, fireGrapple, PROPS, propHitH, propsBlast, propChair, propPainting, propCoffee, propCooler, propPlant, propCabinet, propVending, propExt, explosion, BOOM5, get barrels() { return barrels; }, MF, MFA, SLING, SCOPE, mfStart, meleeTarget, meleeStrike, mfCan, pistolSpin, scopeUpdate, comboLanded, COMBOS, CARX, CARRY, IDLE, carxForce, carxOffer, carryPick, carryDrop, pressed, get panes() { return panes; }, idleStart, get ragdolls2() { return ragdolls; }, BOSSES, BOSS_KINDS, bossPenSpawn, bossPenSkip, bossPenClear, scene, renderer, LV, FLOORS, damageEnemy, killEnemy, buildFloor, lvCleared, get CITYR() { return CITYR; }, get finRig() { return finRig; }, applyFinPose, pose2, P2, FIN_POSES, rigIK, rigHandAim, rigPalm, FIN2, get U7M() { return globalThis.U7M_; },
+window.__res = { GYRE, GYRE_HOOK, gyreSeq, gyreEnd, gyreDropSpike, gyreStart, TIME, timeMod, timeScale, PH, perfSet, perfStats, FX_TIERS, fxTier, TGM_EXT, M, AND_PART_MAT, get GORE_CHROME() { return GORE_CHROME; }, get world() { return world; }, RAPIER, warmHidden, get WARM_G() { return WARM_G; }, THREE, spawnEnemy, get enemies() { return enemies; }, AND, AVIEW, andBuild, andStep, andViewApply, andHit, andGore, freezeRagdoll, R6, GORE, MIR, TGM, ONEH, R6I, goreBurst, goreKill, goreWire, propMirror, tgmOpen, tgmClose, oneHandPose, idleProps, grappleRay, fireGrapple, PROPS, propHitH, propsBlast, propChair, propPainting, propCoffee, propCooler, propPlant, propCabinet, propVending, propExt, explosion, BOOM5, get barrels() { return barrels; }, MF, MFA, SLING, SCOPE, mfStart, meleeTarget, meleeStrike, mfCan, pistolSpin, scopeUpdate, comboLanded, COMBOS, CARX, CARRY, IDLE, carxForce, carxOffer, carryPick, carryDrop, pressed, get panes() { return panes; }, idleStart, get ragdolls2() { return ragdolls; }, BOSSES, BOSS_KINDS, bossPenSpawn, bossPenSkip, bossPenClear, scene, renderer, LV, FLOORS, damageEnemy, killEnemy, buildFloor, lvCleared, get CITYR() { return CITYR; }, get finRig() { return finRig; }, applyFinPose, pose2, P2, FIN_POSES, rigIK, rigHandAim, rigPalm, FIN2, get U7M() { return globalThis.U7M_; },
   view(pos, at, fov = 40) { const cam = new THREE.PerspectiveCamera(fov, innerWidth / innerHeight, 0.05, 400); cam.position.set(...pos); cam.lookAt(new THREE.Vector3(...at)); scene.updateMatrixWorld(true); renderer.setRenderTarget(null); renderer.render(scene, cam); return renderer.domElement.toDataURL("image/png"); },
   FX2, FPROPS, DOORWAYS, ARS, WDEF, arsCancel, solveArmIK, armL, armR, cur, rig, get vmCam() { return vmCamera; }, SET, openSettings, applySet, bootFloor,
   get player() { return player; }, get enemies() { return enemies; }, get panes() { return panes; }, get bolts() { return bolts; }, state, keys, mouse, pressed,
