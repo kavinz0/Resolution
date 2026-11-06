@@ -3974,6 +3974,18 @@ function warmHidden() {
   // compiled for the screen is a different program that the first real frame would have to build again
   const prevRT = renderer.getRenderTarget(); renderer.setRenderTarget(rt);
   try { renderer.compile(scene, camera); renderer.compile(vmScene, vmCamera); } catch (err) { console.warn(err); }
+  // compile() skips the shadow pass, so the depth programs of the warm set (torn android skin: alphaTest + map, double
+  // sided) used to build on the first gore kill mid-fight. One shadow-only render of just the warm set builds them now.
+  if (WARM_G && renderer.shadowMap.enabled) try {
+    const mine = new Set(); WARM_G.traverse((o) => mine.add(o));
+    const off = [], cast = [];
+    scene.traverse((o) => { if ((o.isMesh || o.isSprite || o.isPoints || o.isLine) && o.visible && !mine.has(o)) { off.push(o); o.visible = false; } });
+    WARM_G.traverse((o) => { if (o.isMesh) { cast.push([o, o.castShadow, o.frustumCulled]); o.castShadow = true; o.frustumCulled = false; } });
+    renderer.shadowMap.needsUpdate = true; renderer.render(scene, camera);
+    for (const [o, c, f] of cast) { o.castShadow = c; o.frustumCulled = f; }
+    for (const o of off) o.visible = true;
+    renderer.shadowMap.needsUpdate = true;
+  } catch (err) { console.warn(err); }
   renderer.setRenderTarget(prevRT);
   for (const [o, m] of odd) o.material = m;
   for (const o of hid) o.visible = false; if (WARM_G) scene.remove(WARM_G);
@@ -14669,7 +14681,13 @@ function rmSleep(R) { // back to geometry only: the living cast goes, the dead s
 // ---- going live
 function rmLive(R) {
   const pp = playerPos();
-  if (RM.live && RM.live !== R && RM.live.state === "live") RM.live.state = "primed";
+  const P = RM.live;
+  if (P && P !== R && P.state === "live") {
+    // stepping through a lockdown's seal lands you in the next room's box, which goes Live first: that crossing is the
+    // lockdown made, not an abandoned room (else the run demoted it and the bulkhead chain on Floor 05 never resolved)
+    if (P.def.clear.type === "lockdown" && P.lock && !P.lock.failed && !rmInside(P, pp, 0)) { P.lock.through = true; rmResolve(P); }
+    else P.state = "primed";
+  }
   R.state = "live"; RM.live = R; RM.focus = R; R.t = 0; R.wt = 0; R.hpLast = player.hp; R.liveAt = state.time;
   // which way you came in: the nearest entry within 6 m
   let best = null, bd = 6; for (const en of R.def.entries || []) { const a = rmAt(R, en.at); const d = Math.hypot(a.x - pp.x, a.z - pp.z) + Math.abs(a.y - rmFeet()) * 0.5; if (d < bd) { bd = d; best = en; } }
@@ -14720,7 +14738,9 @@ function rmStep(rdt, wdt) {
     // an alert from the room next door (alertNear) doesn't count: only this room's own eyes, or a hit
     const busy = RM.live && RM.live !== R && RM.live.state === "live";
     if (!go) for (const e of R.cast) if (!e.dead && e.alert && !e.T.civ) { if (busy && !e.rmSaw && !(e.hp < e.T.hp)) { e.alert = false; continue; } go = "alert:" + e.type; break; }
-    if (!go && (R.seeT = (R.seeT || 0) - rdt) <= 0) {
+    // while another room is Live, this room's cast can't pull you in by sight (a lockdown seal stands open onto the next
+    // room, and a turret seeing you through it used to demote the room you were in); crossing in or a hit still does
+    if (!go && !busy && (R.seeT = (R.seeT || 0) - rdt) <= 0) {
       R.seeT = 0.3; const head = pp.clone(); head.y += P.eye;
       for (const e of R.cast) { if (e.dead || e.T.civ) continue; const t = e.body.translation(); const dx = pp.x - t.x, dz = pp.z - t.z, d = Math.hypot(dx, dz); if (d > 26) continue;
         const fy = e.group.rotation.y; if ((Math.sin(fy) * dx + Math.cos(fy) * dz) / Math.max(0.01, d) < 0) continue; // only what is in front of them
