@@ -15744,7 +15744,7 @@ function mfPick(weapon, e, opt = {}) {
   const want = opt.force || (test && MFVT.v !== "random" && (MFVT.w === weapon || (MFVT.w === "env" && weapon !== "kick")) ? MFVT.v : null);
   if (want) {
     const v = pool.find((x) => x.id === want); if (!v) return null;
-    const ctx = mfvNeed(v, e, cache, { wall: true, anchor: true, ...forced });
+    const ctx = mfvNeed(v, e, cache, { ...forced, wall: true, anchor: true });
     if (!ctx) { flash(`${v.name} needs ${Object.keys(v.need || {}).join(", ") || "something"} here`, "var(--dim)"); return null; }
     MFV_STATE.lastCtx = ctx; return v;
   }
