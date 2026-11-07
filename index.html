@@ -4890,6 +4890,7 @@ function stepMoves(dt, vel, grounded, fwd, wish) {
     if (grounded) { const k = Math.pow(0.03, dt); vel.x *= k; vel.z *= k; } // you plant to kick
     if (K.t >= KICK.dur) player.kick = null;
   }
+  c5DiscKey(); // C5: Q on a staggered enemy = the disc's mini finisher
   // disc throw
   if (pressed.has("KeyQ")) {
     if (!player.ownsDisc) flash("No disc yet", "var(--dim)");
@@ -16160,7 +16161,7 @@ function mfPick(weapon, e, opt = {}) {
   const want = opt.force || (test && MFVT.v !== "random" && (MFVT.w === weapon || (MFVT.w === "env" && weapon !== "kick")) ? MFVT.v : null);
   if (want) {
     const v = pool.find((x) => x.id === want); if (!v) return null;
-    const ctx = mfvNeed(v, e, cache, { wall: true, anchor: true, ...forced });
+    const ctx = mfvNeed(v, e, cache, { ...forced, wall: true, anchor: true });
     if (!ctx) { flash(`${v.name} needs ${Object.keys(v.need || {}).join(", ") || "something"} here`, "var(--dim)"); return null; }
     MFV_STATE.lastCtx = ctx; return v;
   }
@@ -17289,6 +17290,1056 @@ TGM_EXT.push((sec, btns, row, seg, tog) => {
   row(s, "Rare every time", [tog(MFVT.rare, () => (MFVT.rare = !MFVT.rare))], "Random rolls the rare one when it fits");
   row(s, "N plays it", [tog(MFVT.armed, () => (MFVT.armed = !MFVT.armed))], "N on the nearest enemy plays this instead of the sword finisher");
   btns(s, [["Play on the nearest enemy", () => tgmDo(() => later(mfvTestN, 120))], ["Copier and fan corner", () => tgmDo(() => { const at = { x: -38.5, y: 1.3, z: 47.5 }; player.body.setTranslation(at, true); player.body.setLinvel({ x: 0, y: 0, z: 0 }, true); player.prev = new THREE.Vector3(at.x, at.y, at.z); yaw = Math.PI / 2; }, "Office corner")]]);
+});
+
+// ================= C5 · mini finisher pack B: sword, arc lance, whip lasso, rail driver, disc, and the air minis =================
+// Each weapon gets a variant table (MFV) of short first-person scenes on the Round 4 contract (MFA). Enemies are androids,
+// so the gore is torn skin, chrome, wires, sparks and coolant; Settings > Violence decides how much of it shows.
+// Freeze rules: no new materials or lights (only M, AM, GORE_* materials, already warm), limbs come off through the
+// physSafe queue (world.removeImpulseJoint), and at most 2 limbs and 1 slice per finisher (mfGore), except Ribbons and
+// Cheese Wire, which share a 10 s cooldown instead.
+const C5 = { thrown: [], disc: null, core: null, coreV: new THREE.Vector3(), coreT: 0, air: [], ranks: {} };
+const _c5 = new THREE.Vector3(), _c5b = new THREE.Vector3(), _c5c = new THREE.Vector3(), _c5q = new THREE.Quaternion(), _c5e = new THREE.Euler();
+const c5G = () => andGore(); // "full" | "sparks" | "off"
+const c5R = (a = 1) => (Math.random() - 0.5) * a;
+
+// ---------- props owned by the pack: a scene disc and a glowing core (built now, so warm-up compiles them) ----------
+{
+  const d = discMesh.clone(); d.visible = false; scene.add(d); C5.disc = d; C5.discSpin = d.children[0]?.children[0] || d;
+  const c = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 10), GORE_GLOW); c.visible = false; scene.add(c); C5.core = c;
+}
+
+// the sword trail's shader stays compiled: every slash builds its own ShaderMaterial and disposes it when the trail
+// fades, which released the program, so the next slash after a quiet moment compiled it again (a hitch on every
+// isolated swing, and on the first cut of every sword finisher). One never-disposed user keeps the program alive.
+{
+  const mat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    uniforms: { uHead: { value: 0 }, uFade: { value: 1 }, uSeed: { value: 0 }, uCore: { value: new THREE.Color(0xf4fbff) }, uEdge: { value: new THREE.Color(0x4ff0ff) }, uInk: { value: new THREE.Color(0x140a1e) } },
+    vertexShader: brushVS, fragmentShader: brushFS });
+  const geo = new THREE.BufferGeometry(); geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(9), 3)); geo.setAttribute("uv", new THREE.BufferAttribute(new Float32Array(6), 2));
+  const keep = new THREE.Mesh(geo, mat); keep.frustumCulled = false; keep.renderOrder = 20; keep.name = "c5SlashKeep"; vmCamera.add(keep); C5.slashKeep = keep;
+}
+
+// ---------- gore helpers ----------
+// a tear and a spray at a point, scaled down for the sparks setting and to a few sparks for off
+function c5Burst(S, at, dir, k = 1) {
+  const g = c5G(); if (g === "full" && S.rd && ragdolls.includes(S.rd)) return goreBurst(S.rd, at, dir, k);
+  emitWorldSparks(at, dir, Math.round((g === "off" ? 10 : 34) * k), 2, 9); if (g !== "off") { emitWorldSparks(at, _mvU, Math.round(12 * k), 0, 6); worldSmoke(at, 2, 0.3, 0x2a262e, 0.35, 0.4); }
+}
+const c5Tear = (S, name, lvl = 2) => { const p = S.rd && ragdolls.includes(S.rd) ? rdPart(S.rd, name) : null; if (p) goreTear(p, name, lvl); };
+const c5TearAll = (S, lvl = 2) => { if (S.rd && ragdolls.includes(S.rd)) for (const [p, n] of goreParts(S.rd)) goreTear(p, n, lvl); };
+// a limb comes off at its joint: wires spill from the stump. False (sparks only) when gore isn't full or the budget is spent.
+function c5Cut(S, name, v = null, spin = 0) {
+  const rd = S.rd; if (!rd || !ragdolls.includes(rd) || !rd.joints?.[name]) return false;
+  const p = rdPart(rd, name); if (!p) return false; const t = p.body.translation(); const at = new THREE.Vector3(t.x, t.y, t.z);
+  if (c5G() !== "full" || !mfGore(S, "dis")) { emitWorldSparks(at, v ? v.clone().normalize() : _mvU, 30, 2, 9); return false; }
+  world.removeImpulseJoint(rd.joints[name], true); rd.joints[name] = null; rd.c5Cut = (rd.c5Cut || 0) + 1;
+  goreTear(p, name, 2); const tb = rdPart(rd, "torso");
+  if (v && !p.body.isKinematic?.()) { const m = p.body.mass(); p.body.applyImpulse({ x: v.x * m, y: v.y * m, z: v.z * m }, true); if (spin) p.body.applyTorqueImpulse({ x: c5R(spin) * m, y: spin * m * 0.5, z: c5R(spin) * m }, true); }
+  const out = v ? v.clone().normalize() : _c5.set(0, 1, 0).clone();
+  goreBurst(rd, at, out, 0.8);
+  if (tb) for (let i = 0; i < 3; i++) goreWire(at.clone(), out.clone().multiplyScalar(1 + Math.random() * 2).add(_c5b.set(c5R(3), Math.random(), c5R(3))), { body: tb.body, rd, life: 6 });
+  sfx.wireCut?.(); noise(0.2, "highpass", 3200, 0.5, 0.7); tone("sawtooth", 260, 70, 0.14, 0.06);
+  return true;
+}
+// the whole body comes apart (Ribbons, Cheese Wire): only on full gore, and only those two use it
+function c5Shred(S, push) {
+  const rd = S.rd; if (!rd || !ragdolls.includes(rd)) return false;
+  if (c5G() !== "full") { c5Burst(S, r6Chest(S), _mvU, 1); return false; }
+  if (S.grips?.length) releaseAll(S); rd.mfHeld = false;
+  dismember(rd); for (const [p, n] of goreParts(rd)) { goreTear(p, n, 2); const v = push?.(n, p); if (v) { const m = p.body.mass(); p.body.applyImpulse({ x: v.x * m, y: v.y * m, z: v.z * m }, true); } }
+  goreBurst(rd, r6Chest(S), _mvU, 1); return true;
+}
+// a severed part (a head, mostly) thrown at another enemy: it staggers them when it gets there
+function c5Fling(part, target, T = 0.42, stunT = 1.5) {
+  if (!part) return; const t = part.body.translation();
+  try { if (part.body.isKinematic?.()) part.body.setBodyType(RAPIER.RigidBodyType.Dynamic, true); } catch {}
+  const g = Math.abs(world.gravity?.y ?? 21.6);
+  if (!target || target.dead) { const d = lookDir(_c5).setY(0.15).normalize(); part.body.setLinvel({ x: d.x * 14, y: d.y * 14 + 3, z: d.z * 14 }, true); return; }
+  const tp = enemyPos(target); tp.y += 0.45;
+  part.body.setLinvel({ x: (tp.x - t.x) / T, y: (tp.y - t.y) / T + 0.5 * g * T, z: (tp.z - t.z) / T }, true);
+  part.body.setAngvel({ x: c5R(30), y: c5R(30), z: c5R(30) }, true);
+  C5.thrown.push({ part, e: target, until: state.time + T * 2 + 0.4, stunT });
+}
+// sim rate: thrown parts, the kicked core, and the cooling rings
+function c5Step(dt) {
+  for (let i = C5.thrown.length - 1; i >= 0; i--) {
+    const F = C5.thrown[i]; let t; try { t = F.part.body.translation(); } catch { C5.thrown.splice(i, 1); continue; }
+    if (F.e.dead || state.time > F.until) { C5.thrown.splice(i, 1); continue; }
+    const p = enemyPos(F.e); if (Math.hypot(p.x - t.x, p.y + 0.4 - t.y, p.z - t.z) < 1.15) {
+      C5.thrown.splice(i, 1); const at = new THREE.Vector3(t.x, t.y, t.z); const d = _c5.set(p.x - t.x, 0, p.z - t.z).normalize().clone();
+      F.e.killKind = "mfProj"; damageEnemy(F.e, 1, at, d, "mfProj"); if (!F.e.dead) { stun(F.e, F.stunT, 5); flashEnemy(F.e); } else ev("mfProjKill", { e: F.e });
+      emitWorldSparks(at, d, 30, 2, 9); sfx.clunk(); noise(0.2, "lowpass", 700, 0.8, 0.8, 90); hitstop(0.05); flash("Staggered", "var(--amber)");
+    }
+  }
+  const c = C5.core; if (c.visible && C5.coreT > 0) {
+    C5.coreT -= dt; C5.coreV.y -= 21.6 * dt; c.position.addScaledVector(C5.coreV, dt); c.rotation.x += dt * 9;
+    if (c.position.y < C5.coreY) { c.position.y = C5.coreY; C5.coreV.y *= -0.35; C5.coreV.x *= 0.7; C5.coreV.z *= 0.7; if (Math.abs(C5.coreV.y) > 1) { emitWorldSparks(c.position, _mvU, 8, 0, 4); sfx.clink?.(); } }
+    if (Math.random() < 0.3) emitWorldSparks(c.position, _mvU, 1, 0, 2);
+    if (C5.coreT <= 0) { c.visible = false; worldSmoke(c.position, 3, 0.2, 0x2a262e, 0.3, 0.4); }
+  }
+}
+// a part held on a path given in mfPlace terms (d, lat, up, yaw, lean, roll)
+const c5Hold = (S, name, args, kind) => r6Hold(S, name, () => r6At(S, name, ...args()), kind);
+const c5Look = (S, at, k = 0.35) => { if (at) S.look.lerp(at, k); };
+const c5Muzzle = (obj, loc) => arsWorld(obj, loc);
+const c5Jit = (t, a) => wob(t, 23, a) + c5R(a * 0.3);
+// the lasso's ribbon: from the whip's tip out to a point, then n turns round a centre (a loop, a noose, a coil)
+function c5Rope(S, tip, to, c, r, turns, fly = 1, back = 0, h = 0.08, axis = null) {
+  const L = lassoRibbons(); const n = L.rib.n, nRope = 24; const a0 = Math.atan2(-S.dir.z, -S.dir.x);
+  for (let i = 0; i < n; i++) {
+    const P = L.rib.pts[i];
+    if (i < nRope || !c) { const u = i / ((c ? nRope : n) - 1); P.copy(tip).lerp(to, u); P.y += Math.sin(u * Math.PI) * 0.22 * (1 - fly); }
+    else { const u = (i - nRope) / (n - nRope - 1); const a = a0 + u * Math.PI * 2 * turns * fly; P.set(c.x + Math.cos(a) * r, c.y + (u - 0.5) * h, c.z + Math.sin(a) * r); }
+    if (back > 0) P.lerp(tip, back);
+  }
+  L.glow.pts.forEach((p, i) => p.copy(L.rib.pts[i])); drawRibbon(L.rib, camera.position); drawRibbon(L.glow, camera.position, 1, 1.4);
+  L.glow.mesh.material.opacity = 0.55;
+}
+function c5RopeOff() { const L = lassoRibbons(); L.rib.mesh.visible = false; L.glow.mesh.visible = false; AM.wireHot.color.setHex(0xff3b6b); }
+const c5WireTip = () => arsWorld(vmWire, WR_NOZZLE);
+// the scene disc: out of your hand into the world and back
+function c5DiscAt(S, at, spin = 1, dt = 0.016) { const d = C5.disc; d.visible = true; d.position.copy(at); C5.discSpin.rotation.y += dt * 40 * spin; player.discThrow = { t: 0, out: true }; }
+function c5DiscOff() { C5.disc.visible = false; if (player.discThrow?.out) player.discThrow = null; }
+const c5Hand = (S, fw = 0.55, side = -0.18, up = -0.25) => camOrigin().addScaledVector(lookDir(_c5c), fw).addScaledVector(S.side, side).add(_c5.set(0, up, 0));
+// the sword's arm: keyed poses, with the existing slash arcs laid over them
+const SWP = {
+  rest: SWORD_REST,
+  wind: thrustPose(clonePose(SWORD_REST), 0.07),
+  ext: thrustPose(clonePose(SWORD_REST), 0.4),
+};
+SWP.lift = (() => { const p = clonePose(SWP.ext); p.p[1] += 0.12; p.r[0] += 0.55; p.el = 0.25; return p; })();
+SWP.high = (() => { const p = clonePose(SWP.ext); p.p[1] += 0.2; p.r[0] += 1.15; p.el = 0.5; p.w[0] -= 0.4; return p; })();
+SWP.low = (() => { const p = clonePose(SWP.ext); p.p[1] -= 0.12; p.r[0] -= 0.45; return p; })();
+SWP.pommel = (() => { const p = clonePose(SWORD_REST); p.p[2] -= 0.3; p.p[0] -= 0.08; p.p[1] += 0.06; p.r[0] = 0.3; p.el = 0.05; p.w = [0.9, 0, -0.2]; return p; })();
+SWP.drag = (() => { const p = clonePose(SWP.ext); p.p[1] += 0.26; p.p[0] += 0.06; p.r[0] += 0.9; p.w[2] -= 0.6; return p; })();
+const _swR = (S, R, t) => {
+  const A = S.A; if (A.SWK) lerpPose(R, ckeyPose(A.SWK, Math.min(t, A.dur)), 1);
+  for (const [t0, d, v, low] of A.SL || []) if (t >= t0 && t < t0 + d) { const P = slashPose(clonePose(SWORD_REST), v, (t - t0) / d); if (low) { P.p[1] -= 0.14; P.r[0] -= 0.4; } lerpPose(R, P, 1); }
+};
+const c5SwordTip = () => arsWorld(vmSword, vmSword.userData.tipLocal);
+const c5Slash = (S, v) => { spawnSlash(v); sfx.swordSwing?.(); noise(0.14, "bandpass", 2400, 0.5, 1.6, 4000); };
+// a scene on the Round 4 contract, with the pack's defaults
+function c5Scene(o) {
+  const A = Object.assign({ tilt: -0.45, cam: [[0, 0, 0], [o.dur, 0, 0]], fov: [[0, 0], [o.dur, 0]] }, o);
+  if (o.SW) { A.SWK = o.SW.map(([t, P0]) => [t, ..._flat(P0)]); const p0 = o.pose; A.pose = (S, R, L, t) => { _swR(S, R, t); p0?.(S, R, L, t); }; }
+  const end0 = A.end; A.end = (S, hard) => { c5DiscOff(); end0?.(S, hard); };
+  // the next enemy (for payoffs) is found while this one is still alive: a dead one's body is gone and must not be read
+  const st0 = A.start; A.start = (S) => { try { S.tgt = MFN.second(S.e); } catch { S.tgt = null; } st0?.(S); };
+  return mfvPrep(A);
+}
+// the enemy reeling on its mark before the kill: knees loose, arms up, head rocking
+function c5Reel(S, t, k, d = 1.2) {
+  const e = S.e; if (e.dead) return; const s = wob(t, 6, 0.06) * k;
+  mfPlace(S, d + 0.12 * k, s, 0, 0.3 * k * Math.sin(t * 2), -0.12 * k, s * 2);
+  mfLimb(e, "head", -0.35 * k + wob(t, 7, 0.15) * k, 0.4 * k, 0.2 * k); mfLimb(e, "armL", -0.6 * k + wob(t, 5, 0.3) * k, 0, 0.5 * k); mfLimb(e, "armR", -0.4 * k, 0, -0.4 * k);
+  mfLimb(e, "legL", 0.25 * k, 0, 0); mfLimb(e, "legR", -0.2 * k + wob(t, 6, 0.15) * k, 0, 0); mfHead(S, S.look); S.look.y -= 0.12;
+}
+const c5Hit = (S, k = 1) => { hitstop(0.07 * k + 0.03); impactFrame(40 * k + 20); S.shake = Math.max(S.shake, 0.8 + 0.6 * k); glitch(0.2 * k); CAM.kickV += 2 * k; };
+const c5Thud = () => { sfx.clunk(); noise(0.25, "lowpass", 700, 0.9, 0.8, 90); tone("square", 200, 55, 0.16, 0.14); };
+
+// ================= SWORD (key 2) =================
+Object.assign(MFA, {
+  // Face Plate: one cut along the seam, the face slides off, the chrome skull keeps watching you; the pommel finishes it
+  swFace: c5Scene({
+    dur: 1.6, SL: [[0.16, 0.24, 2]],
+    SW: [[0, SWP.rest], [0.14, SWP.wind], [0.45, SWP.rest], [0.8, SWP.wind], [0.98, SWP.pommel], [1.15, SWP.pommel], [1.6, SWP.rest]],
+    cam: [[0, 0, 0], [0.3, 0.02, -0.06, 0, -0.06], [0.6, 0, 0], [0.98, -0.03, 0.04, 0, -0.08], [1.2, 0, 0], [1.6, 0, 0]],
+    fov: [[0, 0], [0.3, -4], [0.7, 2], [0.98, -7], [1.3, 0], [1.6, 0]],
+    step(S, t) {
+      const e = S.e, args = () => [1.2, wob(t, 3, 0.02), 0, 0.15 * Math.sin(t * 3), 0.06, 0];
+      if (!S.rd && !e.dead) c5Reel(S, t, ramp(t, 0, 0.3) * 0.4);
+      else if (S.rd) { const h = r6Head(S, _c5b); if (h) c5Look(S, h); }
+      cueAt(S, "sl", 0.16, () => c5Slash(S, 2));
+      cueAt(S, "cut", 0.3, () => {
+        // the skin of the face goes; the head is held up on the blade's line, turned to look at you
+        r6Hold(S, "head", () => { const r = r6At(S, "head", ...args()); r.q.multiply(_c5q.setFromEuler(_c5e.set(-0.1 + wob(t, 9, 0.05), wob(state.time, 5, 0.12), 0))); return r; }, "slash");
+        r6Hold(S, "torso", () => r6At(S, "torso", ...args()));
+        c5Tear(S, "head", 2); c5Burst(S, r6Head(S), S.side.clone().negate(), 0.6); c5Hit(S, 0.8); sfx.finSlash?.(); noise(0.3, "highpass", 3000, 0.6, 0.6);
+        flash("Face Plate", "var(--blood)");
+      });
+      if (S.rd && t > 0.35 && t < 1.0 && Math.random() < 0.08) emitWorldSparks(r6Head(S), _c5.set(c5R(), 0.3, c5R()), 3, 1, 4);
+      cueAt(S, "pommel", 1.0, () => {
+        const h = r6Head(S); c5Thud(); c5Hit(S, 1.2); r6Release(S, "torso", S.dir.clone().multiplyScalar(1.6));
+        if (S.rd && c5G() === "full" && mfGore(S, "dis")) { r6Release(S, "head"); headBurst(S.rd, S.dir.clone(), null); } else { r6Release(S, "head", S.dir.clone().multiplyScalar(3)); c5Burst(S, h, S.dir, 1); }
+      });
+    },
+  }),
+  // Open Hatch: in at the belly, lift, drag the blade up and out through the shoulder; it opens and the wiring spills
+  swHatch: c5Scene({
+    dur: 1.7,
+    SW: [[0, SWP.rest], [0.18, SWP.wind], [0.3, SWP.ext], [0.55, SWP.ext], [0.85, SWP.lift], [1.1, SWP.drag], [1.3, SWP.drag], [1.7, SWP.rest]],
+    cam: [[0, 0, 0], [0.3, -0.02, -0.04, 0, -0.08], [0.6, 0.02, 0], [1.1, 0.06, 0.05, 0, 0.06], [1.7, 0, 0]],
+    fov: [[0, 0], [0.3, -6], [0.9, 2], [1.1, 6], [1.7, 0]],
+    tremble: (S, t) => (t > 0.3 && t < 1.1 ? 1.4 : 0),
+    step(S, t) {
+      const e = S.e; const up = 0.25 * ramp(t, 0.55, 0.85);
+      if (!S.rd && !e.dead) c5Reel(S, t, ramp(t, 0, 0.3) * 0.3, 1.1);
+      else if (S.rd) c5Look(S, r6Chest(S, _c5b).setY(_c5b.y + 0.1));
+      cueAt(S, "in", 0.3, () => {
+        c5Hold(S, "torso", () => [1.1, wob(t, 17, 0.02), up - 0.12, 0, -0.25 * ramp(t, 0.55, 0.85), wob(t, 13, 0.04)], "slash");
+        sfx.lanceHit?.(); c5Hit(S, 1); c5Burst(S, r6Chest(S), S.dir.clone().negate(), 0.7); r6Twitch(S, 3);
+      });
+      if (S.rd && t > 0.35 && t < 1.1 && Math.random() < 0.15) r6Twitch(S, 1.6, ["armL", "armR", "legL", "legR"]);
+      cueAt(S, "drag", 1.05, () => {
+        const c = r6Chest(S); c5Slash(S, 3); c5Tear(S, "torso", 2); c5Tear(S, "armR", 2); c5Hit(S, 1.2); flash("Open Hatch", "var(--blood)");
+        if (S.rd && c5G() === "full") { const tb = rdPart(S.rd, "torso").body; for (let i = 0; i < 9; i++) goreWire(c.clone().add(_c5.set(c5R(0.2), c5R(0.3), c5R(0.2))), S.dir.clone().negate().multiplyScalar(1 + Math.random() * 2).add(_c5b.set(c5R(2), -1 - Math.random() * 2, c5R(2))), { body: tb, rd: S.rd, life: 8 }); }
+        c5Burst(S, c.clone().add(_c5.set(0, 0.2, 0)), _c5b.copy(S.dir).negate().add(_mvU), 1);
+      });
+      cueAt(S, "off", 1.3, () => r6Release(S, "torso", S.dir.clone().multiplyScalar(0.8).add(_c5.set(0, -1, 0))));
+    },
+  }),
+  // Kneecap to Crown: both knees, then the neck as it drops; the head lands on the flat of the blade and you flick it
+  swKnee: c5Scene({
+    dur: 1.75, SL: [[0.1, 0.22, 2, 1], [0.66, 0.22, 0]],
+    SW: [[0, SWP.rest], [0.4, SWP.rest], [0.62, SWP.wind], [0.95, SWP.low], [1.15, SWP.lift], [1.3, SWP.high], [1.75, SWP.rest]],
+    cam: [[0, 0, 0], [0.2, -0.04, -0.06, 0, -0.06], [0.5, -0.02, 0], [0.8, 0.02, 0.05], [1.3, 0.04, 0.02, 0, 0.06], [1.75, 0, 0]],
+    fov: [[0, 0], [0.2, -4], [0.7, -6], [1.2, 3], [1.75, 0]],
+    step(S, t) {
+      const e = S.e, drop = ramp(t, 0.3, 0.62);
+      if (!S.rd && !e.dead) c5Reel(S, t, 0.2, 1.25);
+      else if (S.rd) c5Look(S, r6Head(S, _c5b) || S.look);
+      cueAt(S, "knees", 0.24, () => {
+        c5Hold(S, "torso", () => [1.25, 0, -0.5 * drop, 0, 0.15 * drop, 0], "slash");
+        c5Tear(S, "legL", 2); c5Cut(S, "legR", S.side.clone().multiplyScalar(-2).add(_c5.set(0, 1, 0))); c5Hit(S, 1); sfx.finSlash?.(); r6Twitch(S, 2, ["armL", "armR"]);
+      });
+      cueAt(S, "neck", 0.78, () => {
+        c5Hit(S, 1.2); sfx.finSlash?.(); const cut = c5Cut(S, "head", null);
+        if (cut) S.headG = gripPart(S, S.rd, "head", () => { const k = ramp(S.t, 0.78, 1.05); const tip = c5SwordTip().lerp(camOrigin(), 0.25); return { p: S.hp0.clone().lerp(tip, k).add(_c5.set(0, 0.1 * Math.sin(k * Math.PI), 0)) }; });
+        S.hp0 = r6Head(S).clone(); r6Release(S, "torso", S.dir.clone().multiplyScalar(0.5));
+        flash("Kneecap to Crown", "var(--blood)");
+      });
+      cueAt(S, "flick", 1.3, () => {
+        const g = S.headG; if (!g) return; releaseGrip(S, g, new THREE.Vector3()); c5Fling(g.p, S.tgt, 0.42, 1.5);
+        noise(0.12, "bandpass", 1800, 0.5, 1.4, 3000); CAM.kickV += 2; S.shake = 0.6;
+      });
+    },
+  }),
+  // Ribbons: three cuts, a held breath while they stand perfectly still, then they come apart
+  swRibbons: c5Scene({
+    dur: 1.9, SL: [[0.08, 0.17, 0], [0.27, 0.17, 1], [0.46, 0.17, 2]],
+    SW: [[0, SWP.rest], [0.7, SWP.rest], [1.0, SWP.rest], [1.9, SWP.rest]],
+    cam: [[0, 0, 0], [0.15, 0.02, -0.05, 0, -0.04], [0.33, -0.02, 0.05, 0, 0.04], [0.52, 0, -0.04], [0.7, 0, 0], [1.1, 0.02, 0, 0, 0.05], [1.9, 0, 0]],
+    fov: [[0, 0], [0.5, -5], [0.7, -8], [1.05, -8], [1.15, 4], [1.9, 0]],
+    step(S, t) {
+      const e = S.e;
+      for (const [c, v] of [[0.1, 0], [0.29, 1], [0.48, 2]]) cueAt(S, "s" + c, c, () => { c5Slash(S, v); hitstop(0.04); S.shake = 0.6; if (!e.dead) emitWorldSparks(mfChest(S), S.side.clone().multiplyScalar(v === 1 ? 1 : -1), 16, 2, 7); });
+      if (!S.rd && !e.dead) {
+        // dead still: no sway, no breath, eyes front
+        if (t < 0.55) c5Reel(S, t, 0.15 * ramp(t, 0, 0.2), 1.2); else { mfPlace(S, 1.2, 0, 0, 0, 0, 0); for (const n of ["head", "armL", "armR", "legL", "legR", "torso"]) mfLimb(e, n, 0, 0, 0); mfChest(S, S.look); }
+      }
+      cueAt(S, "hush", 0.62, () => { tone("sine", 3800, 3700, 0.45, 0.02); mfSlow(S, 0.6, 0.4); });
+      cueAt(S, "apart", 1.05, () => {
+        const c = mfChest(S).clone(); S.rd = mfKill(S, "slash", 0.02); if (!S.rd) return; S.grips = [];
+        const side = S.side.clone();
+        c5Shred(S, (n) => ({ head: _c5.set(0, 1.4, 0).addScaledVector(side, 0.6), armL: _c5.copy(side).multiplyScalar(-1.4), armR: _c5.copy(side).multiplyScalar(1.4), torso: _c5.copy(S.dir).multiplyScalar(0.6), legL: _c5.copy(side).multiplyScalar(-0.4), legR: _c5.copy(side).multiplyScalar(0.4) })[n]);
+        emitWorldSparks(c, _mvU, 60, 2, 8); worldSmoke(c, 4, 0.5, 0x2a262e, 0.5, 0.45); c5Hit(S, 1.4); mfSlow(S, 0.3, 0.7); noise(0.5, "highpass", 2600, 0.7, 0.8);
+        flash("Ribbons", "var(--blood)");
+      });
+    },
+  }),
+  // Shoulder Throw: through the chest, up over your head on the blade, and down into the wall behind them
+  swShoulder: c5Scene({
+    dur: 1.9,
+    SW: [[0, SWP.rest], [0.16, SWP.wind], [0.28, SWP.ext], [0.5, SWP.ext], [0.85, SWP.high], [1.05, SWP.ext], [1.25, SWP.ext], [1.4, SWP.wind], [1.9, SWP.rest]],
+    cam: [[0, 0, 0], [0.28, -0.02, -0.05, 0, -0.08], [0.85, 0.12, 0.02], [1.05, -0.05, -0.06, 0, -0.1], [1.3, 0, 0], [1.9, 0, 0]],
+    fov: [[0, 0], [0.28, -5], [0.85, 6], [1.05, -8], [1.4, 0], [1.9, 0]],
+    tremble: (S, t) => (t > 0.3 && t < 1.05 ? 1.6 : 0),
+    start(S) { const w = S.ctx?.wall || MFN.wall(S.e); S.wall = w ? { p: w.p.clone(), n: w.n.clone() } : { p: S.e0.clone().addScaledVector(S.dir, 1.4).setY(S.e.floorY + 1.4), n: S.dir.clone().negate() }; },
+    step(S, t) {
+      const e = S.e;
+      if (!S.rd && !e.dead) c5Reel(S, t, 0.25, 1.1);
+      else if (S.rd) c5Look(S, r6Chest(S, _c5b));
+      cueAt(S, "in", 0.28, () => {
+        const a = S.foot.clone().addScaledVector(S.dir, 1.1).setY(e.floorY + 1.15);
+        const top = S.foot.clone().addScaledVector(S.dir, 0.7).setY(e.floorY + 2.5);
+        const wall = S.wall.p.clone().addScaledVector(S.wall.n, 0.28).setY(Math.max(e.floorY + 1.0, S.wall.p.y));
+        const q0 = new THREE.Quaternion().setFromEuler(_c5e.set(0, Math.atan2(-S.dir.x, -S.dir.z), 0, "YXZ"));
+        r6Hold(S, "torso", () => {
+          const t2 = S.t, up = ramp(t2, 0.45, 0.85), dn = ramp(t2, 0.85, 1.05), p = a.clone().lerp(top, up);
+          if (dn > 0) p.lerp(wall, dn); return { p: p.add(_c5.set(c5Jit(t2, 0.02), 0, 0)), q: q0.clone().multiply(_c5q.setFromEuler(_c5e.set(-1.4 * up + 1.2 * dn, 0, 0))) };
+        }, "slash");
+        sfx.lanceHit?.(); c5Hit(S, 1); c5Burst(S, r6Chest(S), S.dir.clone().negate(), 0.7); r6Twitch(S, 3);
+      });
+      if (S.rd && t > 0.3 && t < 1.0 && Math.random() < 0.12) r6Twitch(S, 1.8, ["armL", "armR", "legL", "legR"]);
+      cueAt(S, "slam", 1.05, () => {
+        const c = r6Chest(S); c5Thud(); sfx.slam?.(); c5Hit(S, 1.6); c5Burst(S, c, S.wall.n, 1); crackDecal(S.wall.p.clone().addScaledVector(S.wall.n, 0.02), S.wall.n, 1.2);
+        dust(c, 4, 0x8a8494); flash("Shoulder Throw", "var(--blood)");
+      });
+      cueAt(S, "off", 1.4, () => { r6Release(S, "torso", S.wall.n.clone().multiplyScalar(0.3).add(_c5.set(0, -0.6, 0))); sfx.swordSwing?.(); });
+    },
+  }),
+  // Lantern (rare): head to chest in one stroke; the halves peel apart round the glowing core, and you kick the core out
+  swLantern: c5Scene({
+    dur: 2.3, SL: [[0.2, 0.26, 3]],
+    SW: [[0, SWP.rest], [0.15, SWP.high], [0.5, SWP.low], [0.9, SWP.low], [1.3, SWP.rest], [2.3, SWP.rest]],
+    cam: [[0, 0, 0], [0.18, 0.06, 0], [0.42, -0.06, 0, 0, -0.08], [0.8, 0, 0], [1.6, -0.08, 0.02], [1.75, -0.04, -0.06, 0, 0.08], [2.3, 0, 0]],
+    fov: [[0, 0], [0.2, 4], [0.45, -6], [0.9, -9], [1.5, -9], [1.8, 4], [2.3, 0]],
+    step(S, t) {
+      const e = S.e, peel = ramp(t, 0.7, 1.45);
+      if (!S.rd && !e.dead) c5Reel(S, t, 0.2, 1.2);
+      else if (S.rd) c5Look(S, r6Chest(S, _c5b).setY(_c5b.y + 0.1), 0.2);
+      cueAt(S, "sl", 0.2, () => { c5Slash(S, 3); sfx.finCharge?.(); });
+      cueAt(S, "split", 0.44, () => {
+        const args = () => [1.2, 0, 0, 0, 0, 0];
+        c5Hold(S, "torso", args, "slash"); if (!S.rd) return;
+        for (const [n, s] of [["armL", -1], ["armR", 1]]) gripPart(S, S.rd, n, () => { const r = r6At(S, "torso", ...args()); return { p: r.p.addScaledVector(S.side, s * (0.42 + 0.35 * ramp(S.t, 0.7, 1.45))).add(_c5.set(0, 0.25, 0)) }; }).name = n;
+        c5Tear(S, "head", 2); c5Tear(S, "torso", 2); c5Hit(S, 1.4); sfx.finSlash?.(); mfSlow(S, 0.4, 0.6); flash("Lantern", "var(--blood)");
+        const c = r6Chest(S); emitWorldSparks(c, _mvU, 50, 2, 8); C5.core.visible = true; C5.coreT = 0; C5.core.position.copy(c);
+      });
+      if (C5.core.visible && C5.coreT <= 0 && S.rd) {
+        const c = r6Chest(S, _c5b); C5.core.position.copy(c).addScaledVector(S.dir, -0.12); const s = 1 + 0.25 * Math.sin(t * 30); C5.core.scale.setScalar(s * (0.6 + 0.6 * peel));
+        if (Math.random() < 0.25) arsFlash(0xff2a3a, 30 + 40 * peel, C5.core.position); if (Math.random() < 0.3) emitWorldSparks(C5.core.position, _c5.set(c5R(), 0.5, c5R()), 2, 0, 3);
+        if (peel > 0 && Math.random() < 0.06) r6Twitch(S, 1, ["legL", "legR"]);
+      }
+      cueAt(S, "apart", 1.45, () => { c5Cut(S, "armL", S.side.clone().multiplyScalar(-1.5)); c5Cut(S, "armR", S.side.clone().multiplyScalar(1.5)); });
+      cueAt(S, "kick", 1.72, () => {
+        c5Thud(); sfx.kick?.(); c5Hit(S, 1.2); releaseAll(S); if (S.rd) S.rd.mfHeld = false;
+        if (C5.core.visible) { C5.coreT = 2.4; C5.coreY = e.floorY + 0.08; C5.coreV.copy(S.dir).multiplyScalar(9).add(_c5.set(c5R(2), 4, c5R(2))); arsFlash(0xff2a3a, 90, C5.core.position); }
+        if (S.rd) { const tb = rdPart(S.rd, "torso"); const m = tb.body.mass(); tb.body.applyImpulse({ x: S.dir.x * 3 * m, y: 0.5 * m, z: S.dir.z * 3 * m }, true); }
+      });
+    },
+    end(S, hard) { if (hard || C5.coreT <= 0) { C5.core.visible = false; C5.core.scale.setScalar(1); } },
+  }),
+});
+
+// ================= ARC LANCE (key 5, hold F, release near an enemy) =================
+const LS5 = {
+  up: { p: [0.04, -0.12, -0.68], e: [-1.05, 0.0, 0.0] },
+  high: { p: [0.05, 0.06, -0.55], e: [-0.55, 0.0, 0.0] },
+  mouth: { p: [0.03, -0.1, -0.74], e: [-1.45, 0.0, 0.0] },
+  down: { p: [0.05, -0.32, -0.66], e: [-2.5, 0.0, 0.0] },
+  sweepA: { p: [0.36, -0.18, -0.36], e: [-1.57, -0.9, 1.4] },
+  sweepB: { p: [-0.22, -0.16, -0.52], e: [-1.57, 0.9, 1.4] },
+};
+const c5LanceTip = () => arsWorld(vmLance, _ap.set(0, 0.55, 0));
+const c5Zap = (S, at) => { MF.flash = 0.8; glitch(0.35); S.shake = Math.max(S.shake, 1.2); sfx.lightning?.(); arsFlash(0xa8f6ff, 80, at); impactFrame(25); };
+function c5Arcs(S, from, k = 1) {
+  if (!S.rd || Math.random() > 0.55 * k) return;
+  const n = ["head", "armL", "armR", "legL", "legR"][(Math.random() * 5) | 0]; const lp = r6Pos(S, n, _c5c); if (lp) bolt(from, lp.clone().add(_c5.set(c5R(0.2), c5R(0.2), c5R(0.2))), 0.1, 0.7);
+  if (Math.random() < 0.4) emitWorldSparks(from, _c5.set(c5R(), Math.random(), c5R()).normalize(), 3, 1, 6);
+  if (Math.random() < 0.12) tone("square", 1800 + Math.random() * 2400, 600, 0.05, 0.03);
+}
+Object.assign(MFA, {
+  // Lightning Rod: through the chest, butt planted, the body rides up the shaft while every joint arcs and the limbs pop
+  lnRod: c5Scene({
+    dur: 2.3, tilt: 0,
+    G: [[0, LNG.carry], [0.25, LS.back], [0.38, LS.thrust], [0.5, LS.deep], [0.7, LS.deep], [1.1, LS5.up], [1.9, LS5.up], [2.1, LS.pull], [2.3, LNG.carry]],
+    L: [[0, REST_L], [0.3, L_POINT], [0.6, L_DRAWN], [1.9, L_DRAWN], [2.3, REST_L]],
+    cam: [[0, 0, 0], [0.38, -0.02, -0.05, 0, -0.08], [0.6, 0, 0], [1.1, 0.12, 0.02], [1.9, 0.1, 0], [2.3, 0, 0]],
+    fov: [[0, 0], [0.38, -6], [0.8, 3], [1.2, 8], [1.9, 6], [2.3, 0]],
+    tremble: (S, t) => (t > 0.5 && t < 1.95 ? 1.8 : 0),
+    step(S, t) {
+      const W = ARS.W.lance; W.charge = t < 1.95 ? 1 : 0; const e = S.e, up = ramp(t, 0.7, 1.15);
+      if (!S.rd && !e.dead) c5Reel(S, t, 0.3, 1.1); else if (S.rd) c5Look(S, r6Chest(S, _c5b));
+      cueAt(S, "in", 0.4, () => {
+        c5Hold(S, "torso", () => [1.15 - 0.15 * up, c5Jit(t, 0.02), 0.85 * up + Math.random() * 0.02, c5Jit(t, 0.05), -0.25 - 0.35 * up, c5Jit(t, 0.06)], "lance");
+        sfx.lanceHit?.(); c5Hit(S, 1.2); c5Burst(S, r6Chest(S), S.dir.clone().negate(), 0.9); r6Twitch(S, 3);
+      });
+      cueAt(S, "plant", 0.72, () => { sfx.clunk(); noise(0.3, "lowpass", 300, 0.8, 0.8, 50); dust(S.foot.clone().addScaledVector(S.dir, 0.9), 3, 0x8a8494); S.shake = 1; });
+      for (const c of [0.8, 1.05, 1.3, 1.55, 1.8]) cueAt(S, "z" + c, c, () => { c5Zap(S, r6Chest(S)); r6Twitch(S, 2.5); });
+      if (S.rd && t > 0.75 && t < 1.95) c5Arcs(S, r6Chest(S, _c5b).addScaledVector(S.dir, -0.2), 1);
+      cueAt(S, "eyes", 1.2, () => { const h = r6Head(S); c5Tear(S, "head", 2); emitWorldSparks(h, S.dir.clone().negate(), 40, 2, 10); arsFlash(0xffffff, 90, h); noise(0.15, "highpass", 4000, 0.6, 0.6); });
+      cueAt(S, "pop1", 1.45, () => c5Cut(S, "armL", S.side.clone().multiplyScalar(-3).add(_c5.set(0, 2, 0)), 0.3));
+      cueAt(S, "pop2", 1.7, () => { c5Cut(S, "legR", S.side.clone().multiplyScalar(2.5).add(_c5.set(0, 1, 0)), 0.3); flash("Lightning Rod", "var(--cyan)"); });
+      cueAt(S, "off", 2.0, () => { r6Release(S, "torso", S.dir.clone().multiplyScalar(0.6).add(_c5.set(0, -1.5, 0))); sfx.clunk(); worldSmoke(r6Chest(S), 4, 0.3, 0x2a262e, 0.4, 0.5); });
+    },
+    end() { ARS.W.lance.charge = 0; },
+  }),
+  // Skewer Pair: one charged thrust through the first and on into the one behind; both slide down the shaft
+  lnSkewer: c5Scene({
+    dur: 2.1, tilt: 0,
+    G: [[0, LNG.carry], [0.25, LS.back], [0.4, LS.thrust], [0.55, LS.deeper || LS.deep], [1.0, LS.deep], [1.5, LS5.down], [1.8, LS.pull], [2.1, LNG.carry]],
+    L: [[0, REST_L], [0.3, L_POINT], [0.6, L_DRAWN], [1.7, L_DRAWN], [2.1, REST_L]],
+    cam: [[0, 0, 0], [0.4, -0.02, -0.06, 0, -0.1], [0.6, 0, 0], [1.5, -0.08, 0], [2.1, 0, 0]],
+    fov: [[0, 0], [0.4, -8], [0.7, 5], [1.5, 2], [2.1, 0]],
+    tremble: (S, t) => (t > 0.45 && t < 1.6 ? 1.4 : 0),
+    start(S) { const o = S.tgt; S.e2 = o && !o.dead && enemyPos(o).distanceTo(enemyPos(S.e)) < 6 ? o : null; },
+    step(S, t) {
+      const e = S.e, sl = ramp(t, 1.0, 1.55);
+      if (!S.rd && !e.dead) c5Reel(S, t, 0.25, 1.1); else if (S.rd) c5Look(S, r6Chest(S, _c5b).lerp(S.p2 || _c5b, 0.3));
+      cueAt(S, "in", 0.42, () => {
+        c5Hold(S, "torso", () => [1.15 + 0.35 * sl, 0, -0.55 * sl, 0, -0.2 + 0.9 * sl, 0], "lance"); sfx.lanceHit?.(); c5Hit(S, 1.3); c5Burst(S, r6Chest(S), S.dir.clone().negate(), 0.8);
+        const o = S.e2; if (!o || o.dead) return;
+        const p0 = enemyPos(o).clone(); o.killKind = "lance"; killEnemy(o, p0, S.dir.clone(), 0.2); const rd2 = o.rd; if (!rd2 || !ragdolls.includes(rd2)) return; rd2.mfHeld = true;
+        const g = gripPart(S, rd2, "torso", () => { const k = ramp(S.t, 0.42, 0.6); const r = r6At(S, "torso", 2.05 + 0.35 * sl, 0, -0.55 * sl, Math.PI, 0.2 - 0.9 * sl, 0); S.p2 = r.p.clone(); return { p: p0.clone().lerp(r.p, k), q: r.q }; }); if (g) g.name = "torso2";
+        goreBurst(rd2, p0, S.dir.clone(), 0.8); emitWorldSparks(p0, S.dir, 40, 1, 10); flash("Skewer Pair", "var(--cyan)"); S.rd2 = rd2;
+      });
+      if (S.rd && t > 0.5 && t < 1.55) c5Arcs(S, r6Chest(S, _c5b), 0.6);
+      cueAt(S, "z", 0.7, () => c5Zap(S, r6Chest(S)));
+      cueAt(S, "slide", 1.05, () => { sfx.wireScrape?.(); noise(0.5, "bandpass", 900, 0.4, 1.2, 300); });
+      cueAt(S, "off", 1.62, () => { releaseAll(S); if (S.rd) S.rd.mfHeld = false; if (S.rd2) S.rd2.mfHeld = false; c5Thud(); S.shake = 1; if (!S.e2) flash("Arc lance · skewer", "var(--cyan)"); });
+    },
+    end(S) { ARS.W.lance.charge = 0; if (S.rd2) S.rd2.mfHeld = false; },
+  }),
+  // Short Circuit: the point in the mouth, the overload, the skull splits and chrome runs out of the eyes
+  lnShort: c5Scene({
+    dur: 2.0, tilt: 0,
+    G: [[0, LNG.carry], [0.22, LS.back], [0.36, LS5.mouth], [0.5, LS5.mouth], [1.5, LS5.mouth], [1.75, LS.pull], [2.0, LNG.carry]],
+    L: [[0, REST_L], [0.25, L_GRAB_OPEN], [0.4, L_GRAB_HELD], [1.5, L_GRAB_HELD], [1.9, REST_L], [2.0, REST_L]],
+    cam: [[0, 0, 0], [0.36, -0.03, 0.04, 0, -0.06], [0.6, 0.02, 0], [1.5, 0.03, 0], [2.0, 0, 0]],
+    fov: [[0, 0], [0.36, -7], [1.0, -4], [1.55, 5], [2.0, 0]],
+    tremble: (S, t) => (t > 0.4 && t < 1.55 ? 2 : 0),
+    step(S, t) {
+      const e = S.e; ARS.W.lance.charge = t < 1.55 ? 1 : 0;
+      if (!S.rd && !e.dead) c5Reel(S, t, 0.3, 1.15); else if (S.rd) c5Look(S, r6Head(S, _c5b) || S.look);
+      cueAt(S, "in", 0.38, () => {
+        c5Hold(S, "head", () => [1.15, c5Jit(S.t, 0.015), 0.04, c5Jit(S.t, 0.06), -0.25, c5Jit(S.t, 0.05)], "lance"); sfx.lanceHit?.(); c5Hit(S, 1); c5Burst(S, r6Head(S), S.dir.clone().negate(), 0.5);
+      });
+      for (const c of [0.55, 0.8, 1.05, 1.3]) cueAt(S, "z" + c, c, () => { c5Zap(S, r6Head(S)); r6Twitch(S, 3); });
+      if (S.rd && t > 0.5 && t < 1.55) {
+        const h = r6Head(S, _c5b); c5Arcs(S, h, 0.8);
+        if (t > 0.9 && Math.random() < 0.45) { const eye = h.clone().addScaledVector(S.dir, -0.12).addScaledVector(S.side, Math.random() < 0.5 ? -0.05 : 0.05); emitWorldSparks(eye, _c5.set(c5R(0.2), -1, c5R(0.2)), 2, 0, 2.5); }
+        if (t > 1.0 && Math.random() < 0.06 && c5G() !== "off") chunk(h.clone().addScaledVector(S.dir, -0.1), [0.02, 0.012, 0.02], GORE_CHROME, _c5.set(c5R(0.5), -1, c5R(0.5)), 4, 4);
+      }
+      cueAt(S, "crack", 0.95, () => { c5Tear(S, "head", 2); noise(0.25, "highpass", 3000, 0.6, 0.6); tone("square", 900, 200, 0.2, 0.08); S.shake = 1.4; flash("Short Circuit", "var(--cyan)"); });
+      cueAt(S, "off", 1.6, () => {
+        const h = r6Head(S); r6Release(S, "head"); c5Thud();
+        if (S.rd && c5G() === "full" && mfGore(S, "dis")) headBurst(S.rd, S.dir.clone(), null); else c5Burst(S, h, S.dir, 1);
+      });
+    },
+    end() { ARS.W.lance.charge = 0; },
+  }),
+  // Grounded: through the foot into the floor; it can't get away; the charged shaft comes round across the neck
+  lnGround: c5Scene({
+    dur: 2.0, tilt: 0,
+    G: [[0, LNG.carry], [0.18, LNG.wind], [0.34, LS5.down], [0.95, LS5.down], [1.1, LS5.sweepA], [1.3, LS5.sweepB], [1.6, LS.pull], [2.0, LNG.carry]],
+    L: [[0, REST_L], [0.3, L_POINT], [1.0, L_POINT], [1.3, L_DRAWN], [2.0, REST_L]],
+    cam: [[0, 0, 0], [0.34, -0.14, -0.04, 0, -0.06], [0.7, -0.05, 0], [1.1, 0, 0.06], [1.3, 0, -0.08, 0, 0.1], [2.0, 0, 0]],
+    fov: [[0, 0], [0.34, -6], [0.9, 0], [1.25, 7], [2.0, 0]],
+    step(S, t) {
+      const e = S.e; ARS.W.lance.charge = t < 1.3 ? 1 : 0;
+      if (!S.rd && !e.dead) {
+        const pin = ramp(t, 0.34, 0.45);
+        // pinned by the foot: it heaves against it, arms wheeling, then stops dead when the shaft comes round
+        mfPlace(S, 1.25, wob(t, 5, 0.08) * pin, 0, wob(t, 4, 0.4) * pin, -0.15 * pin + wob(t, 7, 0.08) * pin, wob(t, 6, 0.1) * pin);
+        mfLimb(e, "legR", 0.45 * pin, 0, 0); mfLimb(e, "legL", -0.3 * pin + wob(t, 9, 0.3) * pin, 0, 0);
+        mfLimb(e, "armL", -1.2 * pin + wob(t, 11, 0.6) * pin, 0, 0.6 * pin); mfLimb(e, "armR", -1.1 * pin - wob(t, 10, 0.6) * pin, 0, -0.6 * pin); mfLimb(e, "head", wob(t, 8, 0.3) * pin, wob(t, 5, 0.4) * pin, 0);
+        mfHead(S, S.look); S.look.y -= 0.5 * (1 - ramp(t, 0.6, 1.0));
+      } else if (S.rd) c5Look(S, r6Chest(S, _c5b));
+      cueAt(S, "pin", 0.36, () => { sfx.lanceHit?.(); sfx.lanceWall?.(); c5Hit(S, 1); const f = S.foot.clone().addScaledVector(S.dir, 1.25).addScaledVector(S.side, 0.12).setY(e.floorY + 0.05); emitWorldSparks(f, _mvU, 40, 1, 7); crackDecal(f, _mvU, 0.7); bolt(f, f.clone().add(_c5.set(0, 1, 0)), 0.2, 0.5); S.pinAt = f; });
+      if (t > 0.4 && t < 1.15 && Math.random() < 0.15 && S.pinAt) { emitWorldSparks(S.pinAt, _mvU, 3, 1, 4); if (Math.random() < 0.3) noise(0.1, "bandpass", 1600, 0.2, 2, 600); }
+      cueAt(S, "sweep", 1.2, () => {
+        sfx.swordSwing?.(); c5Hold(S, "torso", () => [1.25, 0, -0.05, 0, 0.1, 0], "lance");
+        if (S.rd) { const g = gripPart(S, S.rd, "legR", () => ({ p: S.pinAt.clone().add(_c5.set(0, 0.3, 0)) })); if (g) g.name = "legR"; }
+        c5Cut(S, "head", S.side.clone().multiplyScalar(-6).add(_c5.set(0, 2.5, 0)), 0.6); c5Hit(S, 1.5); c5Zap(S, r6Chest(S)); mfSlow(S, 0.35, 0.5); flash("Grounded", "var(--cyan)");
+      });
+      cueAt(S, "drop", 1.5, () => r6Release(S, "torso", _c5.set(0, -1, 0).clone()));
+    },
+    end(S) { ARS.W.lance.charge = 0; },
+  }),
+  // Chain Arc: the charge goes in and jumps out of them into the two nearest; they stagger
+  lnChain: c5Scene({
+    dur: 1.8, tilt: 0,
+    G: [[0, LNG.carry], [0.22, LS.back], [0.35, LS.thrust], [0.48, LS.deep], [1.25, LS.twist], [1.5, LS.pull], [1.8, LNG.carry]],
+    L: [[0, REST_L], [0.3, L_POINT], [0.6, L_DRAWN], [1.4, L_DRAWN], [1.8, REST_L]],
+    cam: [[0, 0, 0], [0.35, -0.02, -0.05, 0, -0.08], [0.6, 0, 0], [1.25, 0.02, 0.03], [1.8, 0, 0]],
+    fov: [[0, 0], [0.35, -6], [0.7, 6], [1.3, 0], [1.8, 0]],
+    tremble: (S, t) => (t > 0.45 && t < 1.3 ? 1.8 : 0),
+    start(S) { const pp = enemyPos(S.e); S.arc = alive().filter((o) => o !== S.e && !o.dead && enemyPos(o).distanceTo(pp) < 11).sort((a, b) => enemyPos(a).distanceTo(pp) - enemyPos(b).distanceTo(pp)).slice(0, 2); },
+    step(S, t) {
+      const e = S.e; ARS.W.lance.charge = t < 1.3 ? 1 : 0;
+      if (!S.rd && !e.dead) c5Reel(S, t, 0.25, 1.1); else if (S.rd) c5Look(S, r6Chest(S, _c5b));
+      cueAt(S, "in", 0.37, () => { c5Hold(S, "torso", () => [1.12, c5Jit(S.t, 0.02), 0.1, c5Jit(S.t, 0.04), -0.2, c5Jit(S.t, 0.05)], "lance"); sfx.lanceHit?.(); c5Hit(S, 1.2); c5Burst(S, r6Chest(S), S.dir.clone().negate(), 0.8); });
+      if (S.rd && t > 0.45 && t < 1.3) c5Arcs(S, r6Chest(S, _c5b), 1);
+      for (const c of [0.55, 0.75, 0.95, 1.15]) cueAt(S, "j" + c, c, () => {
+        const c0 = r6Chest(S); c5Zap(S, c0); r6Twitch(S, 2.5);
+        for (const o of S.arc) { if (o.dead) continue; const p = enemyPos(o); p.y += 0.3; bolt(c0, p, 0.18, 0.8, null); bolt(c0, p, 0.12, 1.1, null); emitWorldSparks(p, _mvU, 12, 1, 6); if (c === 0.55) { stun(o, 1.2, 0); flashEnemy(o); } }
+        if (!S.arc.length) { const f = c0.clone().add(_c5.set(c5R(3), 0, c5R(3))).setY(e.floorY); bolt(c0, f, 0.15, 0.8); emitWorldSparks(f, _mvU, 8, 1, 5); }
+      });
+      cueAt(S, "fl", 0.6, () => flash(S.arc.length ? "Chain Arc · staggered" : "Chain Arc", "var(--cyan)"));
+      cueAt(S, "off", 1.35, () => { r6Release(S, "torso", S.dir.clone().multiplyScalar(0.8)); c5Tear(S, "head", 2); worldSmoke(r6Chest(S), 3, 0.3, 0x2a262e, 0.4, 0.5); });
+    },
+    end() { ARS.W.lance.charge = 0; },
+  }),
+  // Conductor (rare): the impaled body lifted overhead; lightning off it hits everyone close, and it burns down to the frame
+  lnConductor: c5Scene({
+    dur: 2.6, tilt: 0,
+    G: [[0, LNG.carry], [0.22, LS.back], [0.35, LS.thrust], [0.5, LS.deep], [0.7, LS.deep], [1.1, LS5.high], [2.1, LS5.high], [2.35, LS.pull], [2.6, LNG.carry]],
+    L: [[0, REST_L], [0.3, L_POINT], [0.6, L_DRAWN], [1.0, L_GRAB_HELD], [2.1, L_GRAB_HELD], [2.6, REST_L]],
+    cam: [[0, 0, 0], [0.35, -0.02, -0.05, 0, -0.08], [0.7, 0, 0], [1.1, 0.3, 0], [2.1, 0.25, 0.02], [2.6, 0, 0]],
+    fov: [[0, 0], [0.35, -6], [1.1, 10], [2.1, 12], [2.6, 0]],
+    tremble: (S, t) => (t > 0.5 && t < 2.15 ? 1.5 + ramp(t, 1.1, 2.0) : 0),
+    step(S, t) {
+      const e = S.e; ARS.W.lance.charge = t < 2.15 ? 1 : 0; const up = ramp(t, 0.7, 1.1);
+      if (!S.rd && !e.dead) c5Reel(S, t, 0.25, 1.1); else if (S.rd) c5Look(S, r6Chest(S, _c5b), 0.2);
+      cueAt(S, "in", 0.37, () => { c5Hold(S, "torso", () => [1.12 - 0.35 * up, c5Jit(S.t, 0.02), 1.25 * up, c5Jit(S.t, 0.05), -0.2 - 1.1 * up, c5Jit(S.t, 0.06)], "lance"); sfx.lanceHit?.(); c5Hit(S, 1.2); });
+      cueAt(S, "rise", 1.1, () => { tone("sawtooth", 80, 1600, 1.0, 0.06); noise(1.0, "bandpass", 2400, 0.25, 0.8, 6000); mfSlow(S, 0.5, 1.0); flash("Conductor", "var(--cyan)"); });
+      if (S.rd && t > 0.5 && t < 2.15) c5Arcs(S, r6Chest(S, _c5b), 1);
+      for (const c of [1.2, 1.45, 1.7, 1.95]) cueAt(S, "z" + c, c, () => {
+        const c0 = r6Chest(S); c5Zap(S, c0); r6Twitch(S, 3);
+        for (const o of alive()) { if (o === e || o.dead) continue; const p = enemyPos(o); if (p.distanceTo(c0) > 8.5) continue; p.y += 0.3; bolt(c0, p, 0.2, 1.0); emitWorldSparks(p, _mvU, 14, 1, 7); if (c === 1.2) { o.killKind = "lightning"; damageEnemy(o, 1, p, p.clone().sub(c0).normalize(), "lightning"); if (!o.dead) { stun(o, 1.5, 2); flashEnemy(o); } } }
+        // the skin burns off a piece at a time
+        if (S.rd) { const parts = goreParts(S.rd); const pk = parts[((c - 1.2) / 0.25) | 0]; if (pk) goreTear(pk[0], pk[1], 2); worldSmoke(c0, 3, 0.4, 0x2a262e, 0.45, 0.5); }
+      });
+      cueAt(S, "frame", 2.05, () => { c5TearAll(S, 2); c5Cut(S, "armL", _c5.set(c5R(3), 2, c5R(3)).clone()); c5Cut(S, "legL", _c5.set(c5R(3), 1, c5R(3)).clone()); });
+      cueAt(S, "off", 2.15, () => { r6Release(S, "torso", S.dir.clone().multiplyScalar(1.5).add(_c5.set(0, -2, 0))); c5Thud(); });
+    },
+    end() { ARS.W.lance.charge = 0; },
+  }),
+});
+
+// ================= WHIP LASSO / MONO-WIRE (key 6) =================
+Object.assign(MFA, {
+  // Noose: round the neck and yank; the head pops off and comes back to you on the line; swing it into the next one
+  wrNoose: c5Scene({
+    dur: 1.9, tilt: -0.4,
+    G: [[0, WRG.rest], [0.15, LW.up], [0.32, LW.cast], [0.6, LW.hold], [0.82, LW.yank], [1.1, LW.yank], [1.3, LW.up], [1.5, LW.cast], [1.9, WRG.rest]],
+    L: [[0, REST_L], [0.6, L_ROPE], [0.85, L_ROPE2], [1.3, L_ROPE], [1.9, REST_L]],
+    cam: [[0, 0, 0], [0.32, -0.02, 0.03], [0.85, 0.04, 0.06, 0, -0.06], [1.2, 0, 0], [1.45, 0.02, -0.05, 0, 0.08], [1.9, 0, 0]],
+    fov: [[0, 0], [0.6, 4], [0.85, -5], [1.4, 4], [1.9, 0]],
+    start() { lassoRibbons(); },
+    step(S, t) {
+      const e = S.e;
+      if (!S.rd && !e.dead) { const k = ramp(t, 0.5, 0.85); c5Reel(S, t, 0.3, 2.0 - 0.3 * k); mfLimb(e, "armL", -1.4 * k, 0, 0.3); mfLimb(e, "armR", -1.4 * k, 0, -0.3); }
+      else if (S.rd) c5Look(S, r6Head(S, _c5b) || S.look, 0.3);
+      const tip = c5WireTip(); const neck = (S.rd ? r6Head(S, _c5c) : mfHead(S, _c5c)).clone().add(_c5.set(0, -0.12, 0));
+      if (t > 0.18 && t < 1.55) c5Rope(S, tip, neck, neck, 0.11, 1.5, ramp(t, 0.18, 0.48), ramp(t, 1.35, 1.55), 0.04); else c5RopeOff();
+      cueAt(S, "crack", 0.3, () => { noise(0.08, "highpass", 3000, 0.9, 0.6); tone("square", 2600, 800, 0.08, 0.08); CAM.kickV -= 1.5; });
+      cueAt(S, "cinch", 0.5, () => { sfx.clunk(); noise(0.25, "bandpass", 2200, 0.5, 1.4, 600); flashEnemy(e); tone("sawtooth", 200, 900, 0.4, 0.04); });
+      cueAt(S, "yank", 0.85, () => {
+        const h0 = mfHead(S).clone(); S.rd = mfKill(S, "wire", 0.05); if (!S.rd) return; S.grips = []; S.rd.mfHeld = true; S.rd.launchSeen = true;
+        const cut = c5Cut(S, "head", null);
+        if (cut) { const g = gripPart(S, S.rd, "head", () => { const k = ramp(S.t, 0.85, 1.12), sw = ramp(S.t, 1.15, 1.45); const hand = c5Hand(S, 0.75, 0.15, -0.05 + 0.25 * sw).addScaledVector(S.side, -0.5 * sw); return { p: h0.clone().lerp(hand, smooth(k)).add(_c5.set(0, 0.35 * Math.sin(k * Math.PI), 0)) }; }); if (g) g.name = "head"; }
+        const tb = rdPart(S.rd, "torso"); if (tb) { const m = tb.body.mass(); tb.body.applyImpulse({ x: -S.dir.x * 1.5 * m, y: 0, z: -S.dir.z * 1.5 * m }, true); }
+        c5Hit(S, 1.2); sfx.wireCut?.(); flash("Noose", "var(--blood)");
+      });
+      cueAt(S, "swing", 1.45, () => { const g = S.grips?.find((x) => x.name === "head"); if (!g) return; releaseGrip(S, g, new THREE.Vector3()); c5Fling(g.p, S.tgt, 0.4, 1.5); noise(0.15, "bandpass", 1600, 0.5, 1.4, 3000); S.shake = 0.6; });
+    },
+    end() { c5RopeOff(); },
+  }),
+  // Hamstring Reel: both legs, pulled face first across the floor to you, and a stomp on the back of the head
+  wrHamstring: c5Scene({
+    dur: 1.9, tilt: -0.4,
+    G: [[0, WRG.rest], [0.15, LW.up], [0.32, LW.cast], [0.55, LW.hold], [0.7, LW.pull], [0.95, LW.yank], [1.9, WRG.rest]],
+    L: [[0, REST_L], [0.55, L_ROPE], [0.9, L_ROPE2], [1.4, REST_L], [1.9, REST_L]],
+    cam: [[0, 0, 0], [0.32, -0.04, 0.03], [0.9, -0.1, 0], [1.25, -0.5, 0], [1.42, -0.62, 0.02, 0, 0.1], [1.9, -0.1, 0]],
+    fov: [[0, 0], [0.7, 6], [1.4, -6], [1.9, 0]],
+    lookK: 10,
+    start() { lassoRibbons(); },
+    step(S, t) {
+      const e = S.e, fall = ramp(t, 0.6, 0.92), drag = ramp(t, 0.7, 1.15);
+      if (!e.dead) {
+        mfPlace(S, 2.1 - 0.9 * drag, 0, 0.1 * fall, 0, 1.45 * fall, wob(t, 5, 0.05));
+        mfLimb(e, "armL", -2.6 * fall, 0, 0.4); mfLimb(e, "armR", -2.6 * fall, 0, -0.4); mfLimb(e, "legL", 0.2 * fall, 0, 0); mfLimb(e, "legR", 0.2 * fall, 0, 0); mfLimb(e, "head", -0.4 * fall, 0, 0);
+        mfChest(S, S.look);
+      } else if (S.rd) c5Look(S, r6Head(S, _c5b) || S.look, 0.3);
+      const tip = c5WireTip(); const knees = (e.dead ? (r6Pos(S, "legL", _c5c) || S.look) : _c5c.copy(e.group.position).add(_c5.set(0, 0.45, 0))).clone();
+      if (t > 0.18 && t < 1.2) c5Rope(S, tip, knees, knees, 0.16, 2.2, ramp(t, 0.18, 0.5), ramp(t, 1.0, 1.2), 0.1); else c5RopeOff();
+      cueAt(S, "crack", 0.3, () => { noise(0.08, "highpass", 3000, 0.9, 0.6); tone("square", 2600, 800, 0.08, 0.08); });
+      cueAt(S, "wrap", 0.5, () => { sfx.clunk(); noise(0.25, "bandpass", 2200, 0.5, 1.4, 600); });
+      cueAt(S, "floor", 0.92, () => { c5Thud(); dust(mfChest(S), 4, 0x8a8494); S.shake = 1; sfx.slam?.(); });
+      cueAt(S, "down", 1.15, () => { S.rd = mfKill(S, "wire", 0.02); if (S.rd) { S.grips = []; S.rd.launchSeen = true; } });
+      cueAt(S, "stomp", 1.42, () => {
+        const h = r6Head(S); if (!h) return; c5Hit(S, 1.6); sfx.kick?.(); c5Thud(); noise(0.3, "lowpass", 500, 1, 0.8, 50); crackDecal(h.clone().setY(e.floorY + 0.02), _mvU, 0.9);
+        c5Tear(S, "head", 2); c5Burst(S, h, _mvU, 0.9); const hp = S.rd && rdPart(S.rd, "head");
+        if (hp && c5G() === "full") { hp.mesh.scale.y *= 0.45; hp.mesh.scale.x *= 1.25; hp.mesh.scale.z *= 1.15; const m = hp.body.mass(); hp.body.applyImpulse({ x: 0, y: -4 * m, z: 0 }, true); }
+        flash("Hamstring Reel", "var(--blood)");
+      });
+    },
+    end() { c5RopeOff(); },
+  }),
+  // Cheese Wire: twice round the torso, pulled taut; the body slides apart in three rings (shares a cooldown with Ribbons)
+  wrCheese: c5Scene({
+    dur: 2.0, tilt: -0.4,
+    G: [[0, WRG.rest], [0.15, LW.up], [0.32, LW.cast], [0.55, LW.hold], [1.2, LW.pull], [1.35, LW.yank], [1.7, LW.yank], [2.0, WRG.rest]],
+    L: [[0, REST_L], [0.55, L_ROPE], [1.2, L_ROPE2], [1.6, L_ROPE2], [2.0, REST_L]],
+    cam: [[0, 0, 0], [0.32, -0.02, 0.03], [1.2, 0.02, 0.06, 0, -0.08], [1.37, 0.05, -0.06, 0, 0.05], [2.0, 0, 0]],
+    fov: [[0, 0], [0.55, 0], [1.25, 10], [1.4, -4], [2.0, 0]],
+    tremble: (S, t) => (t > 0.55 && t < 1.35 ? 0.5 + 2 * ramp(t, 0.55, 1.3) : 0),
+    start() { lassoRibbons(); },
+    step(S, t) {
+      const e = S.e, tight = ramp(t, 0.55, 1.33);
+      if (!S.rd && !e.dead) { const st = 0.3 + tight; mfPlace(S, 1.9 - 0.2 * tight, wob(t, 4, 0.04) * st, 0, wob(t, 6, 0.1) * st, -0.1 * tight, wob(t, 7, 0.05) * st); mfLimb(e, "armL", -0.3, 0, 0.1 + wob(t, 11, 0.15) * st); mfLimb(e, "armR", -0.3, 0, -0.1 - wob(t, 11, 0.15) * st); mfLimb(e, "head", -0.4 * tight, wob(t, 9, 0.3) * st, 0); mfChest(S, S.look); }
+      const tip = c5WireTip(); const c = e.dead ? S.cw : (S.cw = e.group.position.clone().add(_c5.set(0, 1.1, 0)));
+      const r = Math.max(0.02, 0.36 - 0.14 * tight - (t > 1.33 ? 0.22 : 0));
+      if (t > 0.18 && t < 1.7 && c) { c5Rope(S, tip, c.clone().addScaledVector(S.dir, -r), c, r, 2.4, ramp(t, 0.18, 0.55), ramp(t, 1.45, 1.7), 0.5); const hot = 0.6 + tight * 2; AM.wireHot.color.setRGB(Math.min(1, hot), 0.23 * hot, 0.42 * hot); } else c5RopeOff();
+      if (t > 0.55 && t < 1.33 && c && Math.random() < 0.3 + tight) { const a = Math.random() * 6.28; emitWorldSparks(_c5.set(c.x + Math.cos(a) * r, c.y + c5R(0.4), c.z + Math.sin(a) * r), _c5b.set(Math.cos(a), 0.2, Math.sin(a)), 3, 2, 6); }
+      cueAt(S, "cinch", 0.55, () => { sfx.clunk(); flashEnemy(e); tone("sawtooth", 200, 900, 0.8, 0.035); tone("sine", 600, 2600, 0.8, 0.025); });
+      cueAt(S, "cut", 1.35, () => {
+        S.rd = mfKill(S, "wire", 0.02); if (!S.rd) return; S.grips = []; const sd = S.side.clone(), dr = S.dir.clone();
+        c5Shred(S, (n) => ({ head: _c5.copy(sd).multiplyScalar(1.6).addScaledVector(dr, 0.5).add(_mvU), armL: _c5.copy(sd).multiplyScalar(1.2), armR: _c5.copy(sd).multiplyScalar(-1.2).addScaledVector(dr, 0.3), torso: _c5.copy(sd).multiplyScalar(-1.4).addScaledVector(dr, 0.4), legL: _c5.set(0, 0, 0), legR: _c5.set(0, 0, 0) })[n]);
+        emitWorldSparks(S.cw, _mvU, 60, 2, 9); arsFlash(0xff3b6b, 90, S.cw); c5Hit(S, 1.4); mfSlow(S, 0.3, 0.8); noise(0.4, "highpass", 2500, 0.8, 0.7); tone("square", 3000, 200, 0.3, 0.06);
+        flash("Cheese Wire", "var(--blood)");
+      });
+    },
+    end() { c5RopeOff(); },
+  }),
+  // Puppet: the wire through the arm, jerk it so it shoots its friend, then cut every string
+  wrPuppet: c5Scene({
+    dur: 2.3, tilt: -0.4,
+    G: [[0, WRG.rest], [0.15, LW.up], [0.32, LW.cast], [0.55, LW.hold], [0.75, LW.pull], [0.95, LW.hold], [1.55, LW.yank], [1.8, LW.yank], [2.3, WRG.rest]],
+    L: [[0, REST_L], [0.55, L_ROPE], [0.8, L_ROPE2], [1.4, L_ROPE], [1.7, L_ROPE2], [2.3, REST_L]],
+    cam: [[0, 0, 0], [0.32, -0.02, 0.03], [0.9, 0, 0.04], [1.1, 0.01, 0.02], [1.55, 0.03, -0.05, 0, 0.06], [2.3, 0, 0]],
+    fov: [[0, 0], [0.75, 3], [1.0, 6], [1.6, -4], [2.3, 0]],
+    start(S) { lassoRibbons(); S.e2 = S.tgt; },
+    step(S, t) {
+      const e = S.e, aim = ramp(t, 0.72, 0.92), o = S.e2;
+      if (!S.rd && !e.dead) {
+        let yo = 0; if (o && !o.dead) { const p2 = enemyPos(o), pe = e.group.position; const want = Math.atan2(-(p2.x - pe.x), -(p2.z - pe.z)); const base = Math.atan2(-S.dir.x, -S.dir.z) + Math.PI; let d = want - base; d = Math.atan2(Math.sin(d), Math.cos(d)); yo = d * aim; }
+        mfPlace(S, 1.9, 0, 0, Math.PI + yo, -0.05, wob(t, 9, 0.04)); mfLimb(e, "armR", -1.55 * aim + wob(t, 13, 0.05), 0, -0.1); mfLimb(e, "armL", -0.4 + wob(t, 8, 0.2), 0, 0.3); mfLimb(e, "head", wob(t, 7, 0.2), 0.3 * aim, 0);
+        mfChest(S, S.look); if (o && !o.dead && t > 0.8 && t < 1.3) S.look.lerp(enemyPos(o), 0.3);
+      } else if (S.rd) c5Look(S, r6Chest(S, _c5b), 0.3);
+      const tip = c5WireTip(); const arm = e.dead ? (r6Pos(S, "armR", _c5c) || S.look).clone() : (e.meshes?.armR ? (e.group.updateMatrixWorld(true), e.meshes.armR.getWorldPosition(_c5c).clone()) : mfChest(S).clone());
+      if (t > 0.18 && t < 1.85) c5Rope(S, tip, arm, arm, 0.07, 1.2, ramp(t, 0.18, 0.5), ramp(t, 1.65, 1.85), 0.05); else c5RopeOff();
+      cueAt(S, "hook", 0.5, () => { sfx.clunk(); noise(0.25, "bandpass", 2200, 0.5, 1.4, 600); flashEnemy(e); });
+      cueAt(S, "bang", 1.0, () => {
+        if (!o || o.dead || e.dead) return; e.group.updateMatrixWorld(true); const hand = (e.meshes?.armR?.getWorldPosition(new THREE.Vector3()) || mfChest(S).clone()).add(_c5.set(0, -0.3, 0)); const p2 = enemyPos(o); p2.y += 0.35;
+        sfx.gunshot?.(); bolt(hand, p2, 0.12, 0.05); emitGunSparks?.(hand, 6, 1.2); arsFlash(0xffb060, 50, hand); o.killKind = "puppet"; damageEnemy(o, 99, p2, p2.clone().sub(hand).normalize(), "shot"); flash("Puppet", "var(--blood)"); S.shake = 0.8; hitstop(0.06);
+      });
+      cueAt(S, "sever", 1.6, () => {
+        S.rd = mfKill(S, "wire", 0.04); if (!S.rd) return; S.grips = []; S.rd.launchSeen = true;
+        c5Cut(S, "armR", S.side.clone().multiplyScalar(2).add(_c5.set(0, 2, 0)), 0.3); c5Cut(S, "armL", S.side.clone().multiplyScalar(-2).add(_c5.set(0, 2, 0)), 0.3);
+        c5Hit(S, 1.2); sfx.wireCut?.(); if (!o) flash("Puppet", "var(--blood)");
+      });
+    },
+    end() { c5RopeOff(); },
+  }),
+  // Hang: over a beam, hoisted, left kicking; then the line cuts through the neck
+  wrHang: c5Scene({
+    dur: 2.5, tilt: -0.4,
+    G: [[0, WRG.rest], [0.12, LW.up], [0.3, LW.up], [0.5, LW.hold], [0.75, LW.yank], [1.0, LW.yank], [1.9, LW.pull], [2.05, LW.yank], [2.5, WRG.rest]],
+    L: [[0, REST_L], [0.5, L_ROPE], [0.8, L_ROPE2], [1.9, L_ROPE2], [2.5, REST_L]],
+    cam: [[0, 0, 0], [0.3, 0.08, 0], [0.8, 0.1, 0.02], [1.9, 0.05, 0], [2.05, 0.05, -0.05, 0, 0.06], [2.5, 0, 0]],
+    fov: [[0, 0], [0.8, 4], [1.9, 6], [2.1, -4], [2.5, 0]],
+    start(S) { lassoRibbons(); const a = S.ctx?.anchor || MFN.anchor(S.e); S.anc = a ? a.p.clone() : S.e0.clone().setY(S.e.floorY + 3.2); S.hang = Math.min(S.anc.y - 0.45, S.e.floorY + 2.75); },
+    step(S, t) {
+      const e = S.e;
+      if (!S.rd && !e.dead) c5Reel(S, t, 0.25, 1.6); else if (S.rd) c5Look(S, r6Head(S, _c5b) || S.look, 0.25);
+      const tip = c5WireTip(); const neck = (S.rd ? r6Head(S, _c5c) : mfHead(S, _c5c)).clone().add(_c5.set(0, -0.1, 0));
+      if (t > 0.2 && t < 2.2) {
+        // tip up to the beam, over it, and down to the neck
+        const L = lassoRibbons(); const n = L.rib.n, half = 30, fly = ramp(t, 0.2, 0.5), back = ramp(t, 2.0, 2.2);
+        for (let i = 0; i < n; i++) { const P = L.rib.pts[i]; if (i < half) P.copy(tip).lerp(S.anc, i / (half - 1)); else if (i < n - 14) P.copy(S.anc).lerp(neck, (i - half) / (n - 14 - half)); else { const a = (i - (n - 14)) / 13 * 6.28; P.set(neck.x + Math.cos(a) * 0.1, neck.y, neck.z + Math.sin(a) * 0.1); } if (fly < 1) P.lerp(tip, 1 - fly); if (back > 0) P.lerp(tip, back); }
+        L.glow.pts.forEach((p, i) => p.copy(L.rib.pts[i])); drawRibbon(L.rib, camera.position); drawRibbon(L.glow, camera.position, 1, 1.4); L.glow.mesh.material.opacity = 0.55;
+      } else c5RopeOff();
+      cueAt(S, "over", 0.45, () => { sfx.clink?.(); noise(0.2, "bandpass", 2600, 0.4, 1.2, 800); });
+      cueAt(S, "hoist", 0.75, () => {
+        const h0 = mfHead(S).clone(); S.rd = mfKill(S, "wire", 0.02); if (!S.rd) return; S.grips = []; S.rd.mfHeld = true; S.rd.launchSeen = true;
+        const g = gripPart(S, S.rd, "head", () => { const k = ramp(S.t, 0.75, 1.15); return { p: h0.clone().lerp(_c5.set(S.anc.x, S.hang, S.anc.z), smooth(k)).add(_c5b.set(0, 0.05 * Math.sin(S.t * 9) * (1 - ramp(S.t, 1.2, 1.9)), 0)) }; }); if (g) g.name = "head";
+        sfx.servo?.(); tone("sawtooth", 120, 60, 0.4, 0.08); c5Hit(S, 0.8); flash("Hang", "var(--blood)");
+      });
+      if (S.rd && t > 1.1 && t < 1.95 && Math.random() < 0.18) r6Twitch(S, 2.8 * (1 - ramp(t, 1.1, 1.95)) + 0.6, ["legL", "legR"]);
+      cueAt(S, "cut", 1.98, () => { c5Cut(S, "head", null) || r6Release(S, "head", new THREE.Vector3()); c5Hit(S, 1); sfx.wireCut?.(); arsFlash(0xff3b6b, 60, r6Head(S) || S.anc); });
+      cueAt(S, "drop", 2.3, () => r6Release(S, "head", new THREE.Vector3()));
+    },
+    end() { c5RopeOff(); },
+  }),
+  // Spindle (rare): wrapped head to foot and pulled; it spins like a top while the wire peels the skin off in a spiral
+  wrSpindle: c5Scene({
+    dur: 2.6, tilt: -0.4,
+    G: [[0, WRG.rest], [0.15, LW.up], [0.32, LW.cast], [0.75, LW.hold], [0.9, LW.yank], [1.6, LW.pull], [2.0, LW.hold], [2.6, WRG.rest]],
+    L: [[0, REST_L], [0.6, L_ROPE], [0.95, L_ROPE2], [1.8, L_ROPE], [2.6, REST_L]],
+    cam: [[0, 0, 0], [0.32, -0.02, 0.03], [0.9, 0.04, 0.06, 0, -0.08], [1.4, 0, 0], [2.6, 0, 0]],
+    fov: [[0, 0], [0.75, 4], [0.95, -5], [1.6, -8], [2.2, 0], [2.6, 0]],
+    start() { lassoRibbons(); },
+    step(S, t) {
+      const e = S.e; const sp = ramp(t, 0.9, 1.2) * (1 - ramp(t, 1.75, 2.1)); S.ang = (S.ang || 0) + sp * 26 * (1 / 60);
+      if (!S.rd && !e.dead) { mfPlace(S, 1.8, 0, 0, wob(t, 5, 0.05), 0, 0); for (const n of ["armL", "armR"]) mfLimb(e, n, 0, 0, (n === "armL" ? 1 : -1) * 0.1 * ramp(t, 0.5, 0.8)); mfChest(S, S.look); }
+      else if (S.rd) c5Look(S, r6Chest(S, _c5b), 0.3);
+      const tip = c5WireTip(); const c = (S.cw ||= S.e0.clone().setY(S.e.floorY + 1.0));
+      // a helix from the shins to the neck, then it unwinds off them as they spin
+      if (t > 0.18 && t < 1.85) {
+        const L = lassoRibbons(); const n = L.rib.n, nr = 16, fly = ramp(t, 0.18, 0.7), un = ramp(t, 1.0, 1.8);
+        for (let i = 0; i < n; i++) { const P = L.rib.pts[i]; if (i < nr) P.copy(tip).lerp(_c5.copy(c).addScaledVector(S.dir, -0.3).setY(c.y - 0.5 + 1.1 * un), i / (nr - 1)); else { const u = (i - nr) / (n - nr - 1); if (u > 1 - un) { P.copy(L.rib.pts[nr - 1]); continue; } const a = u * Math.PI * 2 * 6 * fly - (S.ang || 0); P.set(c.x + Math.cos(a) * 0.3, c.y - 0.6 + 1.25 * u, c.z + Math.sin(a) * 0.3); } if (fly < 1) P.lerp(tip, 1 - fly); }
+        L.glow.pts.forEach((p, i) => p.copy(L.rib.pts[i])); drawRibbon(L.rib, camera.position); drawRibbon(L.glow, camera.position, 1, 1.4); L.glow.mesh.material.opacity = 0.55;
+      } else c5RopeOff();
+      cueAt(S, "wrap", 0.72, () => { sfx.clunk(); flashEnemy(e); tone("sawtooth", 150, 700, 1.0, 0.04); });
+      cueAt(S, "pull", 0.92, () => {
+        c5Hold(S, "torso", () => [1.8, 0, 0.0, S.ang || 0, 0, 0], "wire"); sfx.wireOut?.(); c5Hit(S, 1); tone("sawtooth", 300, 2400, 0.9, 0.05); noise(0.9, "bandpass", 1800, 0.3, 1.2, 5000);
+        flash("Spindle", "var(--blood)");
+      });
+      if (S.rd && t > 1.0 && t < 1.85) {
+        if (Math.random() < 0.5) { const a = Math.random() * 6.28; emitWorldSparks(_c5.set(c.x + Math.cos(a) * 0.3, c.y - 0.5 + Math.random() * 1.3, c.z + Math.sin(a) * 0.3), _c5b.set(-Math.sin(a), 0.2, Math.cos(a)), 3, 2, 8); }
+        for (const [i, n] of [[1.1, "legL"], [1.25, "legR"], [1.4, "armL"], [1.5, "armR"], [1.62, "torso"], [1.72, "head"]]) cueAt(S, "peel" + n, i, () => { c5Tear(S, n, 2); const p = r6Pos(S, n, _c5); if (p && c5G() === "full") { const m = S.rd && rdPart(S.rd, n); for (let k = 0; k < 2; k++) chunk(p.clone(), [0.06, 0.012, 0.04], m?.mat0 || M.roboDark, _c5b.set(c5R(6), 1 + Math.random() * 2, c5R(6)), 10, 1); } noise(0.12, "bandpass", 2000, 0.3, 1.5, 800); });
+      }
+      cueAt(S, "fall", 2.05, () => { r6Release(S, "torso", new THREE.Vector3(0, -0.5, 0)); c5Thud(); dust(c, 3, 0x8a8494); });
+    },
+    end() { c5RopeOff(); },
+  }),
+});
+
+// ================= RAIL DRIVER / CHARGE RIFLE (key 8) =================
+const RR5 = {
+  smash: { p: [-0.04, -0.18, -0.5], e: [0.25, 1.15, -0.5] },
+  plant: { p: [0.03, -0.22, -0.56], e: [-0.02, 0.0, -0.05] },
+  eye: { p: [0.03, -0.12, -0.6], e: [0.2, 0.0, -0.05] },
+  mouth: { p: [0.03, -0.17, -0.6], e: [0.08, 0.0, -0.05] },
+};
+const c5RailMz = () => c5Muzzle(vmRail, RL_MUZZLE);
+Object.assign(MFA, {
+  // Through and Through: stock to the face, muzzle on the chest, a hole you can see the room through; it looks down at it
+  rlThrough: c5Scene({
+    dur: 2.0,
+    G: [[0, RLG.rest], [0.12, RR.back], [0.26, RR5.smash], [0.45, RR.back], [0.65, RR5.plant], [0.85, RR5.plant], [0.9, RR.blown], [1.2, RR.back], [2.0, RLG.rest]],
+    cam: [[0, 0, 0], [0.26, -0.02, 0.06, 0, 0.08], [0.5, 0, 0], [0.88, 0.06, 0.02, 0, 0.06], [1.3, -0.03, 0], [2.0, 0, 0]],
+    fov: [[0, 0], [0.26, -4], [0.7, -5], [0.88, 8], [1.3, -4], [2.0, 0]],
+    step(S, t) {
+      const e = S.e; const W = ARS.W.rail; W.charge = t < 0.88 ? ramp(t, 0.5, 0.86) : 0;
+      if (!S.rd && !e.dead) c5Reel(S, t, ramp(t, 0.26, 0.4) * 0.6, 1.2); else if (S.rd) c5Look(S, r6Chest(S, _c5b), 0.25);
+      cueAt(S, "smash", 0.26, () => { c5Thud(); c5Hit(S, 1); flashEnemy(e); emitWorldSparks(mfHead(S), S.side.clone().negate(), 20, 0, 7); });
+      cueAt(S, "whine", 0.55, () => tone("sawtooth", 200, 2600, 0.35, 0.05));
+      cueAt(S, "fire", 0.88, () => {
+        const c = mfChest(S).clone(); const q0 = () => new THREE.Quaternion().setFromEuler(_c5e.set(0, Math.atan2(-S.dir.x, -S.dir.z), 0, "YXZ"));
+        S.rd = mfKill(S, "rail", 0.02); if (!S.rd) return; S.grips = []; S.rd.mfHeld = true; S.rd.launchSeen = true;
+        const base = S.foot.clone().addScaledVector(S.dir, 1.25);
+        gripPart(S, S.rd, "torso", () => ({ p: base.clone().setY(e.floorY + 1.15 + c5Jit(S.t, 0.01)), q: q0() })).name = "torso";
+        gripPart(S, S.rd, "head", () => { const k = ramp(S.t, 1.0, 1.35); return { p: base.clone().setY(e.floorY + 1.66 - 0.06 * k).addScaledVector(S.dir, -0.05 * k), q: q0().multiply(_c5q.setFromEuler(_c5e.set(-0.9 * k, 0, 0))) }; }).name = "head";
+        c5Tear(S, "torso", 2); railBeam(c5RailMz(), c.clone().addScaledVector(S.dir, 14)); sfx.rail?.(); c5Hit(S, 1.6); MF.flash = 0.6; mfSlow(S, 0.35, 0.6);
+        const back = c.clone().addScaledVector(S.dir, 0.25); emitWorldSparks(back, S.dir, 60, 1, 14); worldSmoke(back, 4, 0.3, 0x2a262e, 0.35, 0.5);
+        if (c5G() === "full") for (let i = 0; i < 5; i++) goreWire(back.clone(), S.dir.clone().multiplyScalar(5 + Math.random() * 5).add(_c5.set(c5R(3), c5R(3), c5R(3))), { life: 6 });
+        flash("Through and Through", "var(--cyan)");
+      });
+      if (S.rd && t > 0.9 && t < 1.5 && Math.random() < 0.3) emitWorldSparks(r6Chest(S, _c5b).addScaledVector(S.dir, -0.1), _c5.set(c5R(), 0.2, c5R()), 1, 1, 2);
+      cueAt(S, "drop", 1.55, () => { releaseAll(S); if (S.rd) S.rd.mfHeld = false; sfx.clunk(); });
+    },
+  }),
+  // Bore: the muzzle in the eye on a low charge; the beam drills in, the skull glows orange from inside, the top blows off
+  rlBore: c5Scene({
+    dur: 2.1,
+    G: [[0, RLG.rest], [0.15, RR.back], [0.35, RR5.eye], [1.5, RR5.eye], [1.55, RR.blown], [1.9, RR.back], [2.1, RLG.rest]],
+    L: [[0, REST_L], [0.2, L_GRAB_OPEN], [0.35, L_GRAB_HELD], [1.45, L_GRAB_HELD], [1.8, REST_L], [2.1, REST_L]],
+    cam: [[0, 0, 0], [0.35, 0.03, 0.03, 0, -0.06], [1.5, 0.05, 0], [1.6, 0.12, -0.04, 0, 0.1], [2.1, 0, 0]],
+    fov: [[0, 0], [0.35, -6], [1.45, -10], [1.6, 6], [2.1, 0]],
+    tremble: (S, t) => (t > 0.4 && t < 1.5 ? 0.5 + 2 * ramp(t, 0.4, 1.45) : 0),
+    step(S, t) {
+      const e = S.e, W = ARS.W.rail, ch = ramp(t, 0.45, 1.45); W.charge = t < 1.5 ? 0.35 * ch : 0;
+      if (!S.rd && !e.dead) c5Reel(S, t, 0.3, 1.2); else if (S.rd) c5Look(S, r6Head(S, _c5b) || S.look, 0.3);
+      cueAt(S, "in", 0.38, () => { c5Hold(S, "head", () => [1.2, c5Jit(S.t, 0.01), 0.02, c5Jit(S.t, 0.04), -0.2, c5Jit(S.t, 0.05)], "rail"); c5Thud(); c5Hit(S, 0.8); tone("sawtooth", 120, 900, 1.1, 0.05); noise(1.1, "bandpass", 3000, 0.2, 0.8, 7000); });
+      if (S.rd && t > 0.45 && t < 1.5) {
+        const h = r6Head(S, _c5b); if (Math.random() < 0.25 + ch) arsFlash(0xff7a20, 20 + 70 * ch, h);
+        if (Math.random() < 0.4) emitWorldSparks(h.clone().addScaledVector(S.dir, -0.1), _c5.set(c5R(), 0.3, c5R()), 2, 0, 3 + 4 * ch);
+        if (Math.random() < 0.15) emitSteam(h, 1, 0.4); if (Math.random() < 0.08) r6Twitch(S, 1.5 + 2 * ch);
+        if (ch > 0.4) S.shake = Math.max(S.shake, 0.3 + ch);
+      }
+      cueAt(S, "glow", 0.95, () => c5Tear(S, "head", 1));
+      cueAt(S, "pop", 1.5, () => {
+        const h = r6Head(S); r6Release(S, "head"); railBeam(c5RailMz(), h.clone().addScaledVector(S.dir, 6).add(_c5.set(0, 3, 0))); sfx.rail?.(); c5Hit(S, 1.6); MF.flash = 0.5; arsFlash(0xffb060, 90, h);
+        if (S.rd && c5G() === "full" && mfGore(S, "dis")) headBurst(S.rd, _c5.copy(S.dir).add(_mvU).normalize().clone(), null); else c5Burst(S, h, _mvU, 1);
+        flash("Bore", "var(--cyan)");
+      });
+    },
+  }),
+  // Pin Shot: one shot through them into the wall; the slug drags the body there and it stays pinned by the hole
+  rlPin: c5Scene({
+    dur: 1.9,
+    G: [[0, RLG.rest], [0.25, RLG.ads], [0.6, RLG.ads], [0.65, RR.blown], [1.0, RLG.ads], [1.9, RLG.rest]],
+    cam: [[0, 0, 0], [0.6, 0, 0], [0.66, 0.08, 0.02, 0, 0.08], [1.0, 0, 0], [1.9, 0, 0]],
+    fov: [[0, 0], [0.3, -10], [0.6, -14], [0.7, 6], [1.2, 0], [1.9, 0]],
+    start(S) { const w = S.ctx?.wall || MFN.wall(S.e); S.wall = w ? { p: w.p.clone(), n: w.n.clone() } : { p: S.e0.clone().addScaledVector(S.dir, 2).setY(S.e.floorY + 1.4), n: S.dir.clone().negate() }; },
+    step(S, t) {
+      const e = S.e, W = ARS.W.rail; W.charge = t < 0.62 ? ramp(t, 0.1, 0.6) : 0;
+      if (!S.rd && !e.dead) c5Reel(S, t, 0.3, 1.5); else if (S.rd) c5Look(S, r6Chest(S, _c5b), 0.3);
+      cueAt(S, "fire", 0.64, () => {
+        const c = mfChest(S).clone(); S.rd = mfKill(S, "rail", 0.02); if (!S.rd) return; S.grips = []; S.rd.mfHeld = true; S.rd.launchSeen = true;
+        const to = S.wall.p.clone().addScaledVector(S.wall.n, 0.22); to.y = Math.max(to.y, e.floorY + 1.25);
+        const q = new THREE.Quaternion().setFromEuler(_c5e.set(0, Math.atan2(S.wall.n.x, S.wall.n.z), 0, "YXZ"));
+        gripPart(S, S.rd, "torso", () => ({ p: c.clone().lerp(to, smooth(ramp(S.t, 0.64, 0.8))), q })).name = "torso";
+        railBeam(c5RailMz(), S.wall.p.clone()); sfx.rail?.(); c5Hit(S, 1.6); MF.flash = 0.5; c5Tear(S, "torso", 2); emitWorldSparks(c, S.dir, 40, 1, 12);
+      });
+      cueAt(S, "wall", 0.8, () => { const p = S.wall.p.clone().addScaledVector(S.wall.n, 0.02); crackDecal(p, S.wall.n, 1.1); emitWorldSparks(p, S.wall.n, 50, 1, 9); dust(p, 4, 0x8a8494); c5Thud(); S.shake = 1.2; c5Burst(S, r6Chest(S), S.wall.n, 0.8); flash("Pin Shot", "var(--cyan)"); });
+      if (S.rd && t > 0.85 && t < 1.8 && Math.random() < 0.1) r6Twitch(S, 1.4, ["legL", "legR", "armL", "armR"]);
+    },
+    end(S) {
+      // the torso stays where the slug put it; the rest hangs off it
+      const g = S.grips?.find((x) => x.name === "torso"); if (g && S.rd && ragdolls.includes(S.rd)) { releaseGrip(S, g, null, "fixed"); S.rd.pinned = true; }
+    },
+  }),
+  // Overcharge: the vented barrel in the mouth and all the heat dumped; the head sags and runs like wax
+  rlOver: c5Scene({
+    dur: 2.2,
+    G: [[0, RLG.rest], [0.15, RR.back], [0.35, RR5.mouth], [1.6, RR5.mouth], [1.85, RLG.vent], [2.2, RLG.rest]],
+    L: [[0, REST_L], [0.2, L_GRAB_OPEN], [0.35, L_GRAB_HELD], [1.55, L_GRAB_HELD], [1.9, REST_L], [2.2, REST_L]],
+    cam: [[0, 0, 0], [0.35, 0.02, 0.03, 0, -0.05], [1.6, 0.03, 0], [2.2, 0, 0]],
+    fov: [[0, 0], [0.35, -7], [1.6, -10], [1.9, 0], [2.2, 0]],
+    tremble: (S, t) => (t > 0.4 && t < 1.6 ? 1.2 : 0),
+    step(S, t) {
+      const e = S.e, melt = ramp(t, 0.5, 1.55);
+      if (!S.rd && !e.dead) c5Reel(S, t, 0.3, 1.2); else if (S.rd) c5Look(S, r6Head(S, _c5b) || S.look, 0.3);
+      cueAt(S, "in", 0.38, () => {
+        c5Hold(S, "head", () => [1.2, c5Jit(S.t, 0.01), -0.12 * melt, c5Jit(S.t, 0.03), -0.2 + 0.35 * melt, c5Jit(S.t, 0.03)], "rail"); c5Thud(); c5Hit(S, 0.8);
+        sfx.steam?.(); noise(1.2, "highpass", 1800, 0.3, 0.5); tone("sawtooth", 400, 90, 1.2, 0.05);
+        const hp = S.rd && rdPart(S.rd, "head"); if (hp) S.hs0 = hp.mesh.scale.clone();
+      });
+      if (S.rd && t > 0.4 && t < 1.6) {
+        const h = r6Head(S, _c5b); const mz = c5RailMz(); if (Math.random() < 0.5) emitSteam(mz, 1, 0.6); if (Math.random() < 0.3) emitSteam(h, 1, 0.8);
+        if (Math.random() < 0.3) arsFlash(0xff7a20, 25 + 50 * melt, h); if (Math.random() < 0.25) emitWorldSparks(h.clone().add(_c5.set(0, -0.1, 0)), _c5.set(c5R(0.4), -1, c5R(0.4)), 1, 0, 1.5);
+        const hp = rdPart(S.rd, "head"); if (hp && S.hs0 && c5G() !== "off") { const k = c5G() === "full" ? melt : melt * 0.3; hp.mesh.scale.set(S.hs0.x * (1 + 0.3 * k), S.hs0.y * (1 - 0.45 * k), S.hs0.z * (1 + 0.2 * k)); }
+        if (Math.random() < 0.06) r6Twitch(S, 1.4);
+      }
+      cueAt(S, "skin", 0.9, () => { c5Tear(S, "head", 2); flash("Overcharge", "var(--amber)"); });
+      cueAt(S, "off", 1.62, () => { r6Release(S, "head", S.dir.clone().multiplyScalar(0.6)); emitSteam(c5RailMz(), 6, 1.2); sfx.clunk(); });
+    },
+  }),
+  // Railroad (rare): a shoulder shove lines them up, and one shot goes through every one of them
+  rlRailroad: c5Scene({
+    dur: 2.3,
+    G: [[0, RLG.rest], [0.2, RR.back], [0.35, RR.ram], [0.55, RR.back], [0.9, RLG.ads], [1.25, RLG.ads], [1.3, RR.blown], [1.7, RLG.ads], [2.3, RLG.rest]],
+    cam: [[0, 0, 0], [0.35, -0.03, -0.04, 0, -0.06], [0.6, 0, 0], [1.28, 0, 0], [1.32, 0.1, 0.03, 0, 0.1], [1.8, 0, 0], [2.3, 0, 0]],
+    fov: [[0, 0], [0.35, -4], [0.9, -12], [1.28, -16], [1.4, 8], [1.9, 0], [2.3, 0]],
+    start(S) {
+      const o = S.tgt; S.e2 = o; if (!o) return;
+      // turn the line toward the second one so the shove puts the first right in front of it
+      const pp = playerPos(), p2 = enemyPos(o); const d = new THREE.Vector3(p2.x - pp.x, 0, p2.z - pp.z).normalize(); S.dir0 = S.dir.clone(); S.dirT = d;
+      // the second one reels too, so it stays on the line while you line the shot up
+      stun(o, 2.6, 0); flashEnemy(o);
+    },
+    step(S, t) {
+      const e = S.e, W = ARS.W.rail; W.charge = t < 1.28 ? ramp(t, 0.6, 1.25) : 0;
+      if (S.dirT && S.e2 && !S.e2.dead && t < 1.28) { const pp = playerPos(), p2 = enemyPos(S.e2); const d = _c5b.set(p2.x - pp.x, 0, p2.z - pp.z); if (d.lengthSq() > 1) S.dirT.copy(d.normalize()); }
+      if (S.dirT) { S.dir.copy(S.dir0).lerp(S.dirT, ramp(t, 0.3, 0.6)).normalize(); S.side.set(-S.dir.z, 0, S.dir.x); }
+      if (!e.dead) { const sh = ramp(t, 0.35, 0.7); const far = S.e2 && !S.e2.dead ? THREE.MathUtils.clamp(playerPos().setY(0).distanceTo(enemyPos(S.e2).setY(0)) - 1.2, 1.4, 3.0) : 3.0; c5Reel(S, t, 0.3 + 0.4 * sh, 1.2 + (far - 1.2) * sh); }
+      if (t > 0.6 && t < 1.28) { S.look.copy(camOrigin()).addScaledVector(S.dir, 10); S.look.y -= 0.3; }
+      cueAt(S, "shove", 0.36, () => { c5Thud(); c5Hit(S, 0.8); flashEnemy(e); sfx.kick?.(); });
+      cueAt(S, "whine", 0.65, () => { tone("sawtooth", 120, 3200, 0.6, 0.05); tone("sine", 300, 4200, 0.6, 0.04); });
+      cueAt(S, "fire", 1.3, () => {
+        const o = camOrigin(), d = S.dir.clone().setY(0).normalize(); let n = 0;
+        for (const x of alive()) { if (x.dead) continue; const p = enemyPos(x); const rel = p.clone().sub(o); const along = rel.dot(d); if (along < 0.3 || along > 40) continue; const off = rel.clone().addScaledVector(d, -along).setY(0).length(); if (off > 0.95) continue;
+          if (x === e) { const rd = mfKill(S, "rail", 2.5); if (rd) { S.rd = rd; goreKill(rd, p, d); } } else { x.killKind = "rail"; killEnemy(x, p.clone().setY(p.y + 0.3), d.clone(), 3); if (x.rd) goreBurst(x.rd, p, d, 1); }
+          n++; emitWorldSparks(p, d, 30, 1, 12); }
+        if (!e.dead) { mfKill(S, "rail", 2.5); n++; }
+        railBeam(c5RailMz(), o.clone().addScaledVector(d, 40)); sfx.rail?.(); c5Hit(S, 2); MF.flash = 0.8; mfSlow(S, 0.25, 0.9); glitch(0.6);
+        flash(n > 1 ? `Railroad · ${n}` : "Railroad", "var(--cyan)");
+      });
+    },
+  }),
+});
+
+// ================= DISC (Q, while the disc is in your hand) =================
+Object.assign(MFA, {
+  // Dinner Plate: the disc slammed into the neck, still spinning; the head spins off on it
+  dsPlate: c5Scene({
+    dur: 1.8,
+    L: [[0, REST_L], [0.15, L_POINT], [0.3, L_GRAB_HELD], [1.1, L_GRAB_HELD], [1.5, REST_L], [1.8, REST_L]],
+    cam: [[0, 0, 0], [0.3, -0.02, 0.05, 0, -0.06], [0.6, 0, 0], [1.0, 0.04, 0], [1.8, 0, 0]],
+    fov: [[0, 0], [0.3, -6], [1.0, -3], [1.2, 4], [1.8, 0]],
+    tremble: (S, t) => (t > 0.3 && t < 1.0 ? 1.5 : 0),
+    step(S, t, dt) {
+      const e = S.e;
+      if (!S.rd && !e.dead) { c5Reel(S, t, 0.3 + 0.4 * ramp(t, 0.3, 0.5), 1.15); if (t > 0.3) { mfLimb(e, "head", -0.5 + c5Jit(t, 0.15), c5Jit(t, 0.3), c5Jit(t, 0.15)); mfLimb(e, "armL", -1.5, 0, 0.4); mfLimb(e, "armR", -1.5, 0, -0.4); } }
+      else if (S.rd) c5Look(S, r6Head(S, _c5b) || S.look, 0.2);
+      const neck = (S.rd ? r6Head(S, _c5c) : mfHead(S, _c5c)).clone().add(_c5.set(0, -0.16, 0)).addScaledVector(S.dir, -0.1);
+      const hand = c5Hand(S, 0.5, -0.22, -0.2);
+      if (t > 0.12 && t < 1.45) { const k = t < 1.0 ? ramp(t, 0.12, 0.3) : 1 - ramp(t, 1.05, 1.42); c5DiscAt(S, hand.lerp(S.neck || neck, k), 1, dt || 0.016); if (t < 1.0 && t > 0.3) S.neck = neck; C5.disc.rotation.set(0.15, 0, Math.PI / 2 * ramp(t, 0.12, 0.3)); } else c5DiscOff();
+      if (t > 0.3 && t < 1.0 && Math.random() < 0.8) { emitWorldSparks(neck, _c5.copy(S.side).multiplyScalar(Math.random() < 0.5 ? 1 : -1).add(_c5b.set(0, 0.6, 0)), 3, 0, 8); if (Math.random() < 0.15) noise(0.08, "bandpass", 3000 + Math.random() * 2000, 0.3, 2, 900); }
+      cueAt(S, "bite", 0.3, () => { sfx.clunk(); c5Hit(S, 1); noise(0.7, "bandpass", 2800, 0.35, 1.5, 1200); tone("sawtooth", 1400, 900, 0.7, 0.04); flashEnemy(e); });
+      cueAt(S, "off", 0.98, () => {
+        S.rd = mfKill(S, "disc", 0.02); if (!S.rd) return; S.grips = []; S.rd.launchSeen = true;
+        if (!c5Cut(S, "head", _c5.set(0, 3.5, 0).addScaledVector(S.side, 1.2).clone(), 2.5)) c5Burst(S, neck, _mvU, 1);
+        else { const hp = rdPart(S.rd, "head"); hp?.body.setAngvel({ x: 0, y: 40, z: 0 }, true); }
+        c5Hit(S, 1.3); sfx.discCatch?.(); flash("Dinner Plate", "var(--cyan)");
+      });
+      cueAt(S, "catch", 1.4, () => { sfx.discCatch?.(); VM.discCatch = 1; });
+    },
+  }),
+  // Return to Sender: thrown short, off the wall, it takes an arm on the way back; you catch it and cut down through them
+  dsReturn: c5Scene({
+    dur: 2.1,
+    L: [[0, REST_L], [0.12, L_POINT], [0.25, L_GRAB_OPEN], [0.9, L_GRAB_OPEN], [1.0, L_GRAB_HELD], [1.25, L_GRAB_HELD], [1.35, L_GRAB_LOW], [1.6, REST_L], [2.1, REST_L]],
+    cam: [[0, 0, 0], [0.25, 0.02, 0.03], [0.6, 0, 0.04], [0.9, -0.02, -0.04], [1.3, 0.05, 0], [1.4, -0.08, 0, 0, -0.1], [2.1, 0, 0]],
+    fov: [[0, 0], [0.5, 3], [0.7, -4], [1.3, 3], [1.42, -6], [2.1, 0]],
+    start(S) { const w = S.ctx?.wall || MFN.wall(S.e); S.wall = w ? w.p.clone().addScaledVector(w.n, 0.2) : S.e0.clone().addScaledVector(S.dir, 3).addScaledVector(S.side, 0.8).setY(S.e.floorY + 1.4); },
+    step(S, t, dt) {
+      const e = S.e;
+      if (!S.rd && !e.dead) c5Reel(S, t, 0.35, 1.5); else if (S.rd) c5Look(S, r6Chest(S, _c5b), 0.25);
+      const hand = c5Hand(S, 0.5, -0.2, -0.18);
+      const sh = (S.rd ? r6Pos(S, "armR", _c5c) : null) || mfChest(S, _c5c).clone().addScaledVector(S.side, 0.35);
+      let at = null;
+      if (t > 0.15 && t < 0.42) at = hand.clone().lerp(S.wall, ramp(t, 0.15, 0.42)).addScaledVector(S.side, -0.6 * Math.sin(Math.PI * ramp(t, 0.15, 0.42)));
+      else if (t >= 0.42 && t < 0.62) at = S.wall.clone().lerp(sh, ramp(t, 0.42, 0.62));
+      else if (t >= 0.62 && t < 0.98) at = (S.shAt ||= sh.clone()).clone().lerp(hand, ramp(t, 0.62, 0.98));
+      else if (t >= 0.98 && t < 1.55) { const k = ramp(t, 1.2, 1.42); at = hand.clone().add(_c5.set(0, 0.35 - 0.7 * k, 0)).addScaledVector(lookDir(_c5b), 0.25 + 0.35 * k); }
+      if (at) c5DiscAt(S, at, 1, dt || 0.016); else c5DiscOff();
+      cueAt(S, "throw", 0.15, () => { sfx.servo?.(); noise(0.15, "bandpass", 1800, 0.4, 1.4, 3000); });
+      cueAt(S, "wall", 0.42, () => { sfx.clink?.(); emitWorldSparks(S.wall, _c5.copy(S.dir).negate(), 30, 1, 9); S.shake = 0.6; });
+      cueAt(S, "arm", 0.62, () => {
+        c5Hold(S, "torso", () => [1.5, wob(S.t, 4, 0.03), 0, 0.3, 0.05, 0], "disc"); if (!S.rd) return;
+        c5Cut(S, "armR", S.side.clone().multiplyScalar(3).add(_c5.set(0, 1.5, 0)).addScaledVector(S.dir, 1), 0.5); c5Hit(S, 1); sfx.wireCut?.();
+      });
+      cueAt(S, "catch", 0.98, () => { sfx.discCatch?.(); CAM.kickV -= 1; });
+      cueAt(S, "cut", 1.4, () => { c5Hit(S, 1.5); sfx.finSlash?.(); const h = r6Head(S); if (!c5Cut(S, "head", S.side.clone().multiplyScalar(-1.5).add(_c5.set(0, 1, 0)), 1)) c5Burst(S, h, _mvU, 1); c5Tear(S, "torso", 2); flash("Return to Sender", "var(--cyan)"); });
+      cueAt(S, "drop", 1.5, () => r6Release(S, "torso", S.dir.clone().multiplyScalar(0.8)));
+      cueAt(S, "back", 1.6, () => { VM.discCatch = 1; });
+    },
+  }),
+  // Halo Saw (rare): the disc held to the spine and ground from the neck to the hip, sparks to the ceiling
+  dsSaw: c5Scene({
+    dur: 2.4,
+    L: [[0, REST_L], [0.2, L_GRAB_OPEN], [0.35, L_GRAB_HELD], [1.8, L_GRAB_HELD], [2.1, REST_L], [2.4, REST_L]],
+    cam: [[0, 0, 0], [0.35, -0.02, 0.04, 0, -0.06], [0.6, 0.05, 0], [1.75, -0.15, 0], [1.9, -0.05, 0, 0, 0.08], [2.4, 0, 0]],
+    fov: [[0, 0], [0.35, -6], [1.75, -10], [1.9, 4], [2.4, 0]],
+    tremble: (S, t) => (t > 0.4 && t < 1.75 ? 2.2 : 0),
+    step(S, t, dt) {
+      const e = S.e, g = ramp(t, 0.45, 1.7);
+      if (!S.rd && !e.dead) c5Reel(S, t, 0.3, 1.15); else if (S.rd) c5Look(S, r6Chest(S, _c5b), 0.25);
+      cueAt(S, "grab", 0.32, () => { c5Hold(S, "torso", () => [1.15, c5Jit(S.t, 0.015), 0, Math.PI * ramp(S.t, 0.32, 0.45), 0.15, c5Jit(S.t, 0.03)], "disc"); c5Thud(); c5Hit(S, 0.8); });
+      const hand = c5Hand(S, 0.5, -0.22, -0.2);
+      let at = null;
+      if (S.rd) { const top = r6Head(S, _c5c).clone().add(_c5.set(0, -0.2, 0)), bot = r6Chest(S, _c5b).clone().add(_c5.set(0, -0.4, 0)); at = top.lerp(bot, g).addScaledVector(S.dir, 0.12); S.sawAt = at.clone(); }
+      if (t > 0.2 && t < 2.05) { const k = t < 1.8 ? ramp(t, 0.2, 0.42) : 1 - ramp(t, 1.8, 2.05); c5DiscAt(S, hand.lerp(at || S.sawAt || hand, k), 1.3, dt || 0.016); C5.disc.rotation.set(Math.PI / 2, 0, 0); } else c5DiscOff();
+      cueAt(S, "bite", 0.45, () => { tone("sawtooth", 900, 700, 1.3, 0.05); noise(1.3, "bandpass", 3200, 0.35, 1.5, 1500); flash("Halo Saw", "var(--cyan)"); });
+      if (S.rd && t > 0.45 && t < 1.72 && at) {
+        const n = Math.random() < 0.5 ? 3 : 2; emitWorldSparks(at, _c5.set(c5R(0.4), 1, c5R(0.4)).normalize(), n, 0, 14); if (Math.random() < 0.25) emitWorldSparks(at, _c5.copy(S.dir).negate(), 2, 2, 8);
+        S.shake = Math.max(S.shake, 0.5); if (Math.random() < 0.05) r6Twitch(S, 1.8);
+      }
+      cueAt(S, "spine", 0.9, () => c5Tear(S, "torso", 2));
+      cueAt(S, "hips", 1.72, () => { c5Cut(S, "legL", S.side.clone().multiplyScalar(-1).add(_c5.set(0, 0.5, 0))); c5Cut(S, "legR", S.side.clone().multiplyScalar(1).add(_c5.set(0, 0.5, 0))); c5Hit(S, 1.4); });
+      cueAt(S, "drop", 1.9, () => { r6Release(S, "torso", _c5.set(0, -1, 0).clone()); sfx.discCatch?.(); });
+    },
+  }),
+});
+
+// the original charged stab, under its own name so the picker can start it without coming back through the redirect
+MFA.lnOverload = MFA.stab;
+
+// ================= the variant tables =================
+Object.assign(MFV, {
+  sword: [
+    { id: "faceplate", name: "Face Plate", w: 3, need: {}, scene: "swFace" },
+    { id: "hatch", name: "Open Hatch", w: 3, need: {}, scene: "swHatch" },
+    { id: "kneecap", name: "Kneecap to Crown", w: 2, need: {}, scene: "swKnee", payoff: "projectile" },
+    { id: "ribbons", name: "Ribbons", w: 2, need: {}, scene: "swRibbons", cd: "ribbons", cdS: 10 },
+    { id: "shoulder", name: "Shoulder Throw", w: 3, need: { wall: true }, scene: "swShoulder" },
+    { id: "lantern", name: "Lantern", w: 1, rare: true, need: {}, scene: "swLantern" },
+  ],
+  lance: [
+    { id: "overload", name: "Overload", w: 2, need: {}, scene: "lnOverload" },
+    { id: "rod", name: "Lightning Rod", w: 3, need: {}, scene: "lnRod" },
+    { id: "skewer", name: "Skewer Pair", w: 4, need: { second: true }, scene: "lnSkewer" },
+    { id: "short", name: "Short Circuit", w: 3, need: {}, scene: "lnShort" },
+    { id: "grounded", name: "Grounded", w: 3, need: {}, scene: "lnGround" },
+    { id: "chain", name: "Chain Arc", w: 3, need: {}, scene: "lnChain", payoff: "stagger" },
+    { id: "conductor", name: "Conductor", w: 1, rare: true, need: {}, scene: "lnConductor", payoff: "stagger" },
+  ],
+  wire: [
+    { id: "lasso", name: "Cut in Two", w: 2, need: {}, scene: "lasso" },
+    { id: "noose", name: "Noose", w: 3, need: {}, scene: "wrNoose", payoff: "projectile" },
+    { id: "hamstring", name: "Hamstring Reel", w: 3, need: {}, scene: "wrHamstring" },
+    { id: "cheese", name: "Cheese Wire", w: 2, need: {}, scene: "wrCheese", cd: "ribbons", cdS: 10 },
+    { id: "puppet", name: "Puppet", w: 4, need: { second: true }, scene: "wrPuppet" },
+    { id: "hang", name: "Hang", w: 4, need: { anchor: true }, scene: "wrHang" },
+    { id: "spindle", name: "Spindle", w: 1, rare: true, need: {}, scene: "wrSpindle" },
+  ],
+  rail: [
+    { id: "ram", name: "Ram", w: 2, need: {}, scene: "ram" },
+    { id: "through", name: "Through and Through", w: 3, need: {}, scene: "rlThrough" },
+    { id: "bore", name: "Bore", w: 3, need: {}, scene: "rlBore" },
+    { id: "pin", name: "Pin Shot", w: 4, need: { wall: true }, scene: "rlPin" },
+    { id: "overcharge", name: "Overcharge", w: 3, need: {}, scene: "rlOver" },
+    { id: "railroad", name: "Railroad", w: 1, rare: true, need: { second: true }, scene: "rlRailroad" },
+  ],
+  disc: [
+    { id: "plate", name: "Dinner Plate", w: 3, need: {}, scene: "dsPlate" },
+    { id: "return", name: "Return to Sender", w: 3, need: { wall: true }, scene: "dsReturn" },
+    { id: "saw", name: "Halo Saw", w: 1, rare: true, need: {}, scene: "dsSaw" },
+  ],
+});
+
+// ---------- input: the lance's charged release and the disc key go through the tables too ----------
+{
+  const start0 = mfStart; let inPick = false;
+  mfStart = function (kind, e) {
+    if (kind === "stab" && !inPick && MFV.lance) { const v = mfPick("lance", e, { env: false }); if (v) { inPick = true; try { mfStartV(v, e, undefined, "lance"); } finally { inPick = false; } return; } }
+    return start0(kind, e);
+  };
+}
+// stepPlayer, before the disc throw: Q on a staggered enemy in reach with the disc in hand is the disc's mini finisher
+function c5DiscKey() {
+  if (!pressed.has("KeyQ") || !player.ownsDisc || DISC.state !== "held" || player.discThrow || MF.cur || state.fin || player.dead || !player.grounded) return;
+  const e = meleeTarget(2.6); if (!e || !mfCan(e)) return;
+  const v = mfPick("disc", e, { env: false }); if (!v) return; mfStartV(v, e, undefined, "disc"); pressed.delete("KeyQ");
+}
+
+// ================= air minis (during Gyre): Halo per weapon, Drop Spike per weapon, Skyhook Lasso =================
+// they ride the Gyre's scripted arc (gyreSeq); the gore is the same, without a scene to hold parts on paths
+const c5AirS = (e) => ({ e, rd: null, gb: { dis: 0, slice: 0 }, v: null, grips: [] });
+function c5AirKill(S, kind, at, dir, force = 0.3) { const e = S.e; if (e.dead) return null; e.killKind = kind; killEnemy(e, at, dir, force); S.rd = e.rd && ragdolls.includes(e.rd) ? e.rd : null; if (S.rd) S.rd.launchSeen = true; return S.rd; }
+const c5EHead = (e) => { if (e.meshes?.head && !e.dead) { e.group.updateMatrixWorld(true); return e.meshes.head.getWorldPosition(new THREE.Vector3()).add(_c5.set(0, 0.16, 0)); } return e.group.position.clone().add(_c5.set(0, 1.75, 0)); };
+const c5Down = () => new THREE.Vector3(0, -1, 0);
+// a strike of the right arm with whatever is in it (the arm's own melee motion, with no hit of its own)
+const c5Swing = (sword) => { if (sword && player.hasSword) { VM.combo = (VM.combo || 0) + 1; VM.attack = { kind: "slash", v: VM.combo % 4, t: 0, dur: 0.38, arm: "R" }; spawnSlash(VM.combo % 4); sfx.swordSwing?.(); } else { MF.side = -MF.side; MF.melee = { t: 0, dur: 0.42, hit: true, e: null, side: MF.side }; } };
+// the Gyre's air scene, with the camera easing onto the enemy's head unless the scene says otherwise
+const c5Seq = (e, o) => { o.look ||= (F) => (F.e.dead ? null : c5EHead(F.e)); return gyreSeq(e, o); };
+const C5_HALO = {
+  // the blade passes under you through the neck; the head goes up spinning while you come down behind
+  sword: (e) => { const S = c5AirS(e); return !!c5Seq(e, { dur: 0.9, cues: [[0.12, () => c5Swing(true)], [0.26, () => { const h = c5EHead(e); c5AirKill(S, "slash", h, lookDir(new THREE.Vector3()), 0.1); if (!c5Cut(S, "head", _c5.set(c5R(1), 6, c5R(1)).clone(), 3)) c5Burst(S, h, _mvU, 1); emitWorldSparks(h, _mvU, 40, 2, 9); hitstop(0.06); impactFrame(50); flash("Halo · sword", "var(--blood)"); }]] }); },
+  // straight down through the collar on the pass; the body drops pinned to the shaft for a moment
+  lance: (e) => { const S = c5AirS(e); return !!c5Seq(e, { dur: 0.95, cues: [[0.1, () => c5Swing(false)], [0.24, () => { const h = c5EHead(e); c5AirKill(S, "lance", h, c5Down(), 1.2); c5Burst(S, h, _mvU, 1); bolt(h, h.clone().setY(e.floorY), 0.25, 0.6); sfx.lanceHit?.(); sfx.lightning?.(); MF.flash = 0.6; hitstop(0.08); impactFrame(60); if (S.rd) { c5Tear(S, "torso", 2); r6Twitch(S, 3); } flash("Halo · lance", "var(--cyan)"); }]] }); },
+  // Skyhook Lasso: whip them up off the floor, meet them at the top of the flip, and cut them in half in the air
+  wire: (e) => {
+    const S = c5AirS(e); const p0 = e.group.position.clone(); const pp = playerPos();
+    return !!c5Seq(e, {
+      dur: 1.1, land: p0.clone().setY(e.floorY + 1).addScaledVector(_c5.set(p0.x - pp.x, 0, p0.z - pp.z).normalize(), 1.6),
+      cues: [[0.08, () => { lassoRibbons(); noise(0.08, "highpass", 3000, 0.9, 0.6); tone("square", 2600, 800, 0.08, 0.08); }], [0.25, () => { sfx.clunk(); tone("sawtooth", 200, 900, 0.3, 0.05); }],
+        [0.55, () => { if (e.dead) return; const at = e.group.position.clone().add(_c5.set(0, 1, 0)); const d = lookDir(new THREE.Vector3()).setY(0).normalize(); if (c5G() === "full") sliceEnemy(e, d.multiplyScalar(0.35).add(_c5.set(0, 0.25, 0)), "lasso"); else c5AirKill(S, "wire", at, d, 0.3); emitWorldSparks(at, _mvU, 60, 2, 9); arsFlash(0xff3b6b, 90, at); hitstop(0.1); impactFrame(70); glitch(0.5); flash("Skyhook Lasso", "var(--blood)"); }],
+        [0.75, () => c5RopeOff()]],
+      step(F) {
+        const t = F.t; if (!e.dead) { const up = ramp(t, 0.22, 0.55); const p = p0.clone(); p.y = e.floorY + 2.4 * Math.sin(up * Math.PI * 0.5); e.body.setNextKinematicTranslation({ x: p.x, y: p.y + 0.9, z: p.z }); e.group.position.copy(p); e.group.rotation.x = -0.6 * up; }
+      },
+      pose(F) {
+        const t = F.t; if (t > 0.05 && t < 0.75) { const tip = c5WireTip(), w = (e.dead ? F.lastW : (F.lastW = e.group.position.clone().add(_c5.set(0, 1, 0)))) || tip; c5Rope({ dir: lookDir(_c5b).setY(0).normalize() }, tip, w, w, 0.3, 2, ramp(t, 0.05, 0.25), ramp(t, 0.6, 0.75), 0.06); }
+      },
+      look(F) { return e.dead ? F.lastW || null : e.group.position.clone().add(_c5.set(0, 1, 0)); },
+      end() { c5RopeOff(); },
+    });
+  },
+  // straight down into the top of the skull at arm's length; the beam goes on into the floor
+  rail: (e) => { const S = c5AirS(e); return !!c5Seq(e, { dur: 0.85, cues: [[0.25, () => { const h = c5EHead(e); const f = h.clone().setY(e.floorY + 0.02); railBeam(c5RailMz(), f); sfx.rail?.(); c5AirKill(S, "rail", h, c5Down(), 1.5); if (S.rd && c5G() === "full" && mfGore(S, "dis")) headBurst(S.rd, c5Down(), null); else c5Burst(S, h, _mvU, 1); crackDecal(f, _mvU, 1.0); hitstop(0.08); impactFrame(60); MF.flash = 0.5; flash("Halo · rail", "var(--cyan)"); }]] }); },
+  // the breacher, point blank, from straight above
+  breacher: (e) => { const S = c5AirS(e); return !!c5Seq(e, { dur: 0.85, cues: [[0.25, () => { const h = c5EHead(e); try { fireBreacher?.(); } catch {} c5AirKill(S, "breacher", h, c5Down(), 2); if (S.rd && c5G() === "full" && mfGore(S, "dis")) headBurst(S.rd, c5Down(), null); else c5Burst(S, h, _mvU, 1); hitstop(0.08); impactFrame(60); flash("Halo · breacher", "var(--amber)"); }]] }); },
+  pistol: (e) => { const S = c5AirS(e); return !!c5Seq(e, { dur: 0.85, cues: [[0.18, () => { sfx.gunshot?.(); VM.recoil = 1; emitWorldSparks(c5EHead(e), _mvU, 12, 0, 6); }], [0.32, () => { const h = c5EHead(e); sfx.gunshot?.(); VM.recoil = 1; c5AirKill(S, "shot", h, c5Down(), 0.5); if (S.rd && c5G() === "full" && mfGore(S, "dis")) headBurst(S.rd, c5Down(), null); else c5Burst(S, h, _mvU, 1); hitstop(0.06); flash("Halo · pistol", "var(--amber)"); }]] }); },
+};
+// Drop Spike: what lands with you when you slam down out of the Gyre onto someone
+const c5Ring = (at, r, t = 1.2) => { for (const o of alive()) { if (o.dead) continue; const p = enemyPos(o); if (p.distanceTo(at) < r) { stun(o, t, 6); flashEnemy(o); } } };
+const C5_DROP = {
+  lance: (e) => { const S = c5AirS(e); const p = enemyPos(e); const f = p.clone().setY(e.floorY + 0.02); c5AirKill(S, "lance", p, c5Down(), 0.5); if (S.rd) { const tb = rdPart(S.rd, "torso"); tb.body.setTranslation({ x: f.x, y: f.y + 0.25, z: f.z }, true); tb.body.setRotation(_c5q.setFromEuler(_c5e.set(-Math.PI / 2, Math.random() * 6, 0)), true); tb.body.setBodyType(RAPIER.RigidBodyType.Fixed, true); S.rd.pinned = true; c5Tear(S, "torso", 2); goreBurst(S.rd, f, _mvU, 1); r6Twitch(S, 3); } bolt(f.clone().add(_c5.set(0, 1.5, 0)), f, 0.3, 0.6); crackDecal(f, _mvU, 1.6); c5Ring(f, 3.2); MF.flash = 0.7; sfx.lanceHit?.(); sfx.lightning?.(); hitstop(0.1); impactFrame(80); shake = Math.max(shake, 0.9); flash("Drop Spike · pinned", "var(--cyan)"); return true; },
+  sword: (e) => { const S = c5AirS(e); const p = enemyPos(e); c5AirKill(S, "slash", p, c5Down(), 0.2); c5Swing(true); if (S.rd) { const sd = lookDir(new THREE.Vector3()).cross(_mvU).normalize(); c5Tear(S, "head", 2); c5Tear(S, "torso", 2); c5Cut(S, "armL", sd.clone().multiplyScalar(3).add(_c5.set(0, 1, 0))); c5Cut(S, "armR", sd.clone().multiplyScalar(-3).add(_c5.set(0, 1, 0))); } emitWorldSparks(p, _mvU, 60, 2, 9); crackDecal(p.clone().setY(e.floorY + 0.02), _mvU, 1.2); hitstop(0.1); impactFrame(70); shake = Math.max(shake, 0.9); flash("Drop Spike · split", "var(--blood)"); return true; },
+  breacher: (e) => { const S = c5AirS(e); const h = c5EHead(e); try { fireBreacher?.(); } catch {} c5AirKill(S, "breacher", h, c5Down(), 1); if (S.rd && c5G() === "full" && mfGore(S, "dis")) headBurst(S.rd, c5Down(), null); else c5Burst(S, h, _mvU, 1); const f = h.clone().setY(e.floorY + 0.02); dust(f, 6, 0x8a8494); crackDecal(f, _mvU, 1.4); c5Ring(f, 3, 1.4); hitstop(0.1); impactFrame(70); shake = Math.max(shake, 1); flash("Drop Spike · point blank", "var(--amber)"); return true; },
+  fists: (e) => { const S = c5AirS(e); const h = c5EHead(e); c5AirKill(S, "punch", h, c5Down(), 1.5); c5Swing(false); if (S.rd) { const hp = rdPart(S.rd, "head"); c5Tear(S, "head", 2); c5Tear(S, "torso", 2); if (hp && c5G() === "full") { hp.mesh.scale.y *= 0.4; hp.mesh.scale.x *= 1.3; const t = rdPart(S.rd, "torso").body.translation(); hp.body.setTranslation({ x: t.x, y: t.y + 0.22, z: t.z }, true); } goreBurst(S.rd, h, _mvU, 1); } c5Thud(); crackDecal(h.clone().setY(e.floorY + 0.02), _mvU, 1.2); hitstop(0.12); impactFrame(80); shake = Math.max(shake, 1.1); flash("Drop Spike · crushed", "var(--blood)"); return true; },
+};
+{
+  const halo0 = GYRE_HOOK.halo, drop0 = GYRE_HOOK.drop;
+  GYRE_HOOK.halo = (e, w) => { const f = C5_HALO[w]; if (f && e && !e.dead && mfOK(e)) { try { return f(e); } catch (err) { console.warn(err); } } return halo0(e, w); };
+  GYRE_HOOK.drop = (e, w) => { const f = C5_DROP[w]; if (f && e && !e.dead && mfOK(e)) { try { return f(e); } catch (err) { console.warn(err); } } return drop0(e, w); };
+}
+// the air minis are not MFV entries (the picker would start them as ground scenes); the testing ground lists them itself
+const C5_AIR = [
+  ...Object.keys(C5_HALO).map((w) => ({ id: "halo_" + w, name: w === "wire" ? "Skyhook Lasso" : "Halo · " + w, w: 1, need: { air: true }, air: "halo", weapon: w })),
+  ...Object.keys(C5_DROP).map((w) => ({ id: "drop_" + w, name: "Drop Spike · " + w, w: 1, need: { air: true }, air: "drop", weapon: w })),
+];
+// run an air mini by hand (the testing ground's picker and the tests use this)
+// the testing ground's N with the disc picked: the disc isn't a weapon you hold, so run it here
+{
+  const testN0 = mfvTestN;
+  mfvTestN = function () {
+    if (MFVT.w === "sword") player.ownsSword = true;
+    if (MFVT.w !== "disc") return testN0();
+    const pp = playerPos(); const e = alive().filter((x) => mfOK(x) && enemyPos(x).distanceTo(pp) < 9).sort((a, b) => enemyPos(a).distanceTo(pp) - enemyPos(b).distanceTo(pp))[0];
+    if (!e) { flash("No enemy within 9 m", "var(--dim)"); return true; }
+    const ep = enemyPos(e); const d = new THREE.Vector3(pp.x - ep.x, 0, pp.z - ep.z); if (d.lengthSq() < 1e-4) d.set(0, 0, 1); d.normalize();
+    const at = { x: ep.x + d.x * 1.15, y: pp.y, z: ep.z + d.z * 1.15 }; player.body.setTranslation(at, true); player.body.setLinvel({ x: 0, y: 0, z: 0 }, true); player.prev = new THREE.Vector3(at.x, at.y, at.z); yaw = Math.atan2(d.x, d.z);
+    player.ownsDisc = true; if (DISC.state !== "held") { DISC.state = "held"; discMesh.visible = false; }
+    const v = mfPick("disc", e, { env: false }); if (!v) { flash("Nothing fits here", "var(--dim)"); return true; }
+    e.stun = Math.max(e.stun || 0, 1); mfStartV(v, e, undefined, "disc"); return true;
+  };
+}
+function c5AirRun(v, e) { if (!v?.air || !e || e.dead) return false; return (v.air === "halo" ? GYRE_HOOK.halo : GYRE_HOOK.drop)(e, v.weapon); }
+
+// ---------- per sim step, and the reset ----------
+{
+  const step0 = mfStep;
+  mfStep = function (dt) { step0(dt); try { c5Step(dt); } catch (err) { console.warn(err); } };
+  const reset0 = r4Reset;
+  r4Reset = function () { reset0(); C5.thrown.length = 0; C5.core.visible = false; C5.coreT = 0; C5.disc.visible = false; };
+}
+
+// ---------- testing ground: Tab > Simulation > Air minis · pack B ----------
+// every air mini on the nearest dummy without needing the flip (the ground variants are in pack A's finisher picker)
+function c5Nearest() { const pp = playerPos(); let b = null, bd = 1e9; for (const e of alive()) { if (e.dead || !mfOK(e)) continue; const d = enemyPos(e).distanceTo(pp); if (d < bd) { bd = d; b = e; } } return b; }
+if (typeof TGM_EXT !== "undefined") TGM_EXT.push((sec, btns, row, seg) => {
+  const s = sec("Air minis · pack B");
+  row(s, "How", [], "Gyre (Space twice in the air), then F over an enemy for Halo, or Ctrl to Drop Spike onto one. These play one on the nearest dummy.");
+  btns(s, C5_AIR.map((v) => [v.name, () => tgmDo(() => { const e = c5Nearest(); if (!e) return flash("No dummy in reach", "var(--dim)"); const pp = enemyPos(e); player.body.setTranslation({ x: pp.x, y: e.floorY + 3.2, z: pp.z + 1.2 }, true); player.body.setLinvel({ x: 0, y: 0, z: 0 }, true); if (v.weapon !== "fists" && v.weapon !== "pistol" && v.weapon !== "sword") { if (ARS.owned.has(v.weapon)) { player.weapon = v.weapon; setViewModel(); } } else { player.weapon = v.weapon; setViewModel(); } setTimeout(() => c5AirRun(v, e), 120); })]));
 });
 
 // ---- end slot: mfvariants ----
@@ -19304,6 +20355,7 @@ window.__res = { RM, ROOM_DEFS, roomsInit, roomsSkipTo, roomResolve, roomSpawn, 
   step(n) { for (let i = 0; i < n && !player.dead; i++) simStep(); },
   killPhase() { for (const e of alive()) damageEnemy(e, 999, enemyPos(e), new THREE.Vector3(1, 0, 0), "punch"); },
 };
+Object.assign(window.__res, { C5, MFV, MFN, mfPick, mfStartV, GYRE, GYRE_HOOK, gyreSeq, c5AirRun, C5_AIR, MFVT, rdPart });
 </script>
 </body>
 </html>
